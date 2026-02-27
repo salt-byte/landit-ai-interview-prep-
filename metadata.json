@@ -1,0 +1,8 @@
+{
+  "name": "LandIt - AI Interview Prep",
+  "description": "A comprehensive AI-powered platform for candidates to prepare for specific target roles with personal background analysis and live mock interviews.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
