@@ -37,6 +37,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
   // --- Upload Workflow State ---
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   const [suggestedTag, setSuggestedTag] = useState<string>('Notes');
@@ -115,6 +116,7 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
     setPendingUploadFile(file);
     setSuggestedTag(inferredTag);
     setSelectedTag(inferredTag);
+    setUploadFeedback(null);
     setShowUploadModal(true);
   };
 
@@ -136,17 +138,26 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
       if (selectedTag === 'Resume') {
         const result = await uploadAndParseDocument(pendingUploadFile);
         setFiles(prev => [result.document, ...prev]);
-        const mergedProfile = mergeExtractedProfile(profile, result.extracted);
-        onUpdateProfile(mergedProfile);
-        setIsEditing(true);
-        await onSaveProfile?.(mergedProfile);
+        if (Object.keys(result.extracted).length > 0) {
+          const mergedProfile = mergeExtractedProfile(profile, result.extracted);
+          onUpdateProfile(mergedProfile);
+          setIsEditing(true);
+          await onSaveProfile?.(mergedProfile);
+        }
+        if (result.parse_error) {
+          setUploadFeedback(`Resume uploaded, but auto-parse failed: ${result.parse_error}`);
+        } else {
+          setUploadFeedback('Resume uploaded and profile auto-filled. You can still edit the fields on the right.');
+        }
       } else {
         const result = await uploadDocument(pendingUploadFile, selectedTag);
         setFiles(prev => [result, ...prev]);
+        setUploadFeedback(`${selectedTag} uploaded successfully.`);
       }
       resetUploadState();
     } catch (err) {
       console.error('Upload failed', err);
+      setUploadFeedback(err instanceof Error ? err.message : 'Upload failed.');
       setIsAnalyzing(false);
     }
   };
@@ -234,6 +245,11 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
               Upload resumes, portfolios, work samples, notes, or links. <br/>
               <span className="font-medium text-[#1F1F1F]">These will be added to your profile and used across your preparation.</span>
             </p>
+            {uploadFeedback && (
+              <p className="text-xs mt-3 px-4 leading-relaxed text-left text-[#0B57D0] bg-[#E8F0FE] border border-[#D3E3FD] rounded-xl p-3">
+                {uploadFeedback}
+              </p>
+            )}
           </div>
 
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">

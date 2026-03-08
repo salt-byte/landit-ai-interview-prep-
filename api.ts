@@ -157,7 +157,7 @@ export async function getDocuments(): Promise<UploadedFile[]> {
 
 export async function uploadAndParseDocument(
   file: File
-): Promise<{ extracted: Partial<UserProfile>; document_id: number; document: UploadedFile }> {
+): Promise<{ extracted: Partial<UserProfile>; document_id: number; document: UploadedFile; parse_error?: string | null }> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch(`${BASE_URL}/api/profile/documents/upload-and-parse`, {
@@ -172,6 +172,7 @@ export async function uploadAndParseDocument(
     extracted: RawExtractedProfile;
     document_id: number;
     document: UploadedFile;
+    parse_error?: string | null;
   };
 
   return {

@@ -269,11 +269,15 @@ async def upload_and_parse_resume(
 
     file_path, file_size = await upload_file(file, subfolder="profile")
     text = await read_text_file(file_path)
+    parse_error = None
+    extracted = {}
 
-    if not text.strip():
-        raise HTTPException(400, "Could not read file content. Please ensure it's a text-based PDF or .txt file.")
-
-    extracted = await extract_profile_from_resume(text)
+    try:
+        if not text.strip():
+            raise ValueError("Could not extract readable text from this file.")
+        extracted = await extract_profile_from_resume(text)
+    except Exception as exc:
+        parse_error = str(exc) or "Resume parsing failed."
 
     doc = Document(
         profile_id=profile.id,
@@ -296,7 +300,8 @@ async def upload_and_parse_resume(
             "type": doc.type,
             "date": doc.created_at.strftime("%Y-%m-%d"),
             "file_size": doc.file_size,
-        }
+        },
+        "parse_error": parse_error,
     }
 
 

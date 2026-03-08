@@ -11,8 +11,14 @@ client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 MODEL = "claude-sonnet-4-6"
 
 
+def _ensure_llm_available() -> None:
+    if not settings.anthropic_api_key.strip():
+        raise RuntimeError("Resume parsing is not configured on the server.")
+
+
 async def extract_profile_from_resume(resume_text: str) -> dict:
     """Layer 2: Parse raw resume text → structured profile fields."""
+    _ensure_llm_available()
     prompt = f"""Extract structured information from this resume. Return ONLY valid JSON with this exact schema:
 {{
   "name": "string",
@@ -78,6 +84,7 @@ async def extract_dimension_scores(profile_text: str) -> dict:
     Layer 3: Map user experience → 15 dimension scores (1-5) + evidence.
     Uses rubric-constrained prompt for stability.
     """
+    _ensure_llm_available()
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
     prompt = f"""You are an expert career assessor. Score the candidate on 15 competency dimensions based on their background.
 
@@ -121,6 +128,7 @@ async def extract_jd_dimension_model(jd_text: str, role_title: str, company: str
     Layer 3: Map JD → 15 dimension required scores + weights.
     Backend normalizes Σ(weights)=1 after.
     """
+    _ensure_llm_available()
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
     prompt = f"""You are an expert talent assessor. Analyze this job description and map it to 15 competency dimensions.
 
@@ -167,6 +175,7 @@ async def generate_interview_prep(
     categories: list[str],
 ) -> str:
     """Layer 5: Generate interview Q&A tailored to role + user gap."""
+    _ensure_llm_available()
     include_answers = mode == "QA"
     cat_list = ", ".join(categories)
     answer_instruction = (
@@ -211,6 +220,7 @@ async def refine_prep_with_chat(
     company: str,
 ) -> str:
     """Chat refinement for interview prep content."""
+    _ensure_llm_available()
     prompt = f"""You are an interview coach helping refine an interview prep document for {role_title} at {company}.
 
 Current prep document:
@@ -233,6 +243,7 @@ Keep existing good content, only modify what was requested."""
 
 async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
     """Extract job details from scraped page content."""
+    _ensure_llm_available()
     prompt = f"""Extract job posting details from this web page content. Return ONLY valid JSON:
 {{
   "title": "job title",
