@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings
 from pathlib import Path
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 
@@ -13,13 +14,25 @@ class Settings(BaseSettings):
     db_connect_timeout_seconds: float = 10.0
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 20
-    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000,https://aistudio.google.com"
+    allowed_origin_regex: str = r"https://.*\.vercel\.app"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"dev", "development"}:
+                return True
+        return value
+
     @property
     def origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",")]
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @property
     def normalized_database_url(self) -> str:

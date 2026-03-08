@@ -6,7 +6,7 @@ import RoleList from './components/RoleList';
 import Workspace from './components/Workspace';
 import ProfileCard from './components/ProfileCard';
 import { TargetRole, AppView, UserProfile } from './types';
-import { getProfile, updateProfile } from './api';
+import { getProfile, getRole, updateProfile } from './api';
 
 const EMPTY_PROFILE: UserProfile = {
   name: '', headline: '', bio: '',
@@ -40,9 +40,15 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSelectRole = (role: TargetRole) => {
+  const handleSelectRole = async (role: TargetRole) => {
     setSelectedRole(role);
     setView('WORKSPACE');
+    try {
+      const fullRole = await getRole(role.id);
+      setSelectedRole(fullRole);
+    } catch (e) {
+      console.error('Failed to load full role details', e);
+    }
   };
 
   const handleBackToDashboard = () => {

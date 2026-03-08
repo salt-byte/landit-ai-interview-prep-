@@ -43,7 +43,7 @@ import {
 import { TargetRole, RoleSource, WorkspaceTab } from '../types';
 import MockInterview from './MockInterview';
 import {
-  updateRole, addRoleSource, uploadRoleSource, deleteRoleSource,
+  getRole, updateRole, addRoleSource, uploadRoleSource, deleteRoleSource,
   generatePrep, getPrep, updatePrep, chatPrep,
 } from '../api';
 
@@ -73,6 +73,14 @@ const RoleContextBuilder: React.FC<{
     setSources(role.sources || []);
   }, [role]);
 
+  const refreshRole = async () => {
+    const refreshedRole = await getRole(role.id);
+    setLocalRole(refreshedRole);
+    setSources(refreshedRole.sources || []);
+    onUpdate(refreshedRole);
+    return refreshedRole;
+  };
+
   const handleChange = (field: keyof TargetRole, value: any) => {
     const updated = { ...localRole, [field]: value };
     setLocalRole(updated);
@@ -84,8 +92,8 @@ const RoleContextBuilder: React.FC<{
     if (!linkInput.trim()) return;
     setIsAnalyzing(true);
     try {
-      const newSource = await addRoleSource(role.id, linkInput.trim());
-      setSources(prev => [...prev, newSource]);
+      await addRoleSource(role.id, linkInput.trim());
+      await refreshRole();
       setLinkInput('');
     } catch (err) {
       console.error('Failed to add source', err);
@@ -99,8 +107,8 @@ const RoleContextBuilder: React.FC<{
     const file = e.target.files[0];
     setIsAnalyzing(true);
     try {
-      const newSource = await uploadRoleSource(role.id, file);
-      setSources(prev => [...prev, newSource]);
+      await uploadRoleSource(role.id, file);
+      await refreshRole();
     } catch (err) {
       console.error('Failed to upload source', err);
     } finally {
@@ -109,9 +117,13 @@ const RoleContextBuilder: React.FC<{
     }
   };
 
-  const handleDeleteSource = (id: string) => {
-    deleteRoleSource(role.id, id).catch(() => {});
-    setSources(sources.filter(s => s.id !== id));
+  const handleDeleteSource = async (id: string) => {
+    try {
+      await deleteRoleSource(role.id, id);
+      await refreshRole();
+    } catch (err) {
+      console.error('Failed to delete source', err);
+    }
   };
 
   const handleCopyLink = (text: string) => {
@@ -263,11 +275,18 @@ const RoleContextBuilder: React.FC<{
              </div>
              
              <button
-              onClick={() => {
+              onClick={async () => {
                 if (isEditing) {
                   const { id, sources: _s, ...roleData } = localRole;
-                  updateRole(id, roleData).catch(() => {});
-                  onUpdate(localRole);
+                  try {
+                    const savedRole = await updateRole(id, roleData);
+                    setLocalRole(savedRole);
+                    setSources(savedRole.sources || []);
+                    onUpdate(savedRole);
+                  } catch (err) {
+                    console.error('Failed to save role', err);
+                    return;
+                  }
                 }
                 setIsEditing(!isEditing);
               }}

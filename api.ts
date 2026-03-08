@@ -6,7 +6,25 @@ import type {
   InterviewFeedback,
 } from './types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const DEFAULT_PROD_API_URL = 'https://landit-ai-interview-prep.onrender.com';
+
+function resolveBaseUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const { hostname } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+  }
+
+  return DEFAULT_PROD_API_URL;
+}
+
+const BASE_URL = resolveBaseUrl();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -81,6 +99,10 @@ export async function getRoles(): Promise<TargetRole[]> {
   return request('/api/roles');
 }
 
+export async function getRole(id: string): Promise<TargetRole> {
+  return request(`/api/roles/${id}`);
+}
+
 export async function createRole(
   data: Omit<TargetRole, 'id' | 'sources'>
 ): Promise<TargetRole> {
@@ -107,10 +129,23 @@ export async function deleteRole(id: string): Promise<void> {
 export async function parseLink(
   url: string
 ): Promise<{ title: string; company: string; jd: string; teamInfo: string }> {
-  return request('/api/roles/parse-link', {
+  const raw = await request<{
+    title: string;
+    company: string;
+    jd: string;
+    teamInfo?: string;
+    team_info?: string;
+  }>('/api/roles/parse-link', {
     method: 'POST',
     body: JSON.stringify({ url }),
   });
+
+  return {
+    title: raw.title,
+    company: raw.company,
+    jd: raw.jd,
+    teamInfo: raw.teamInfo ?? raw.team_info ?? '',
+  };
 }
 
 export async function uploadRoleSource(

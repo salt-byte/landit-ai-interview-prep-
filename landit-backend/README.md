@@ -5,7 +5,7 @@ FastAPI 后端，对应前端 `landit---ai-interview-prep`。
 ## 快速启动
 
 ```bash
-cd /Users/dengyudie/Downloads/landit-backend
+cd /Users/zy/Downloads/landit-ai-interview-prep--main/landit-backend
 
 # 1. 创建虚拟环境
 python3 -m venv venv
@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 # 3. 配置 API Key
 cp .env.example .env
-# 编辑 .env，填入 ANTHROPIC_API_KEY
+# 编辑 .env，至少填入 ANTHROPIC_API_KEY
 
 # 4. 启动
 uvicorn main:app --reload --port 8000
@@ -82,7 +82,32 @@ uvicorn main:app --reload --port 8000
 
 在前端 `.env` 或 config 中设置：
 ```
-VITE_API_BASE_URL=http://localhost:8000/api
+VITE_API_URL=http://localhost:8000
 ```
 
-将前端中的 mock `setTimeout` 替换为真实 `fetch` 调用即可。
+前端也兼容：
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+## 部署配置
+
+### Render
+
+建议至少配置：
+```bash
+ANTHROPIC_API_KEY=...
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+ALLOWED_ORIGINS=https://aistudio.google.com,http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGIN_REGEX=https://.*\\.vercel\\.app
+DEBUG=false
+```
+
+`DATABASE_URL` 填 Supabase Postgres 连接串即可；代码会自动补 asyncpg 和 SSL。
+
+### Vercel
+
+前端环境变量：
+```bash
+VITE_API_URL=https://landit-ai-interview-prep.onrender.com
+```
