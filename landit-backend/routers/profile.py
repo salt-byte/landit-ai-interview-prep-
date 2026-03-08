@@ -1,17 +1,18 @@
 """
 Profile router — CRUD for user profile, education, experience, projects, documents.
 """
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from database import get_db
 from models.user import UserProfile, Education, Experience, Project, Document
-from schemas.user import UserProfileUpdate, UserProfileResponse, DocumentResponse
+from schemas.user import UserProfileUpdate
+from services.resume_parser import extract_profile_from_resume
 from services.storage import upload_file, detect_file_type, delete_file, read_text_file
-from services.llm import extract_profile_from_resume
-import json
-from datetime import datetime
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -264,7 +265,7 @@ async def upload_and_parse_resume(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload a resume file and auto-extract profile fields via LLM."""
+    """Upload a resume file and auto-extract profile fields via local parsing."""
     profile = await get_or_create_profile(db)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
@@ -275,7 +276,7 @@ async def upload_and_parse_resume(
     try:
         if not text.strip():
             raise ValueError("Could not extract readable text from this file.")
-        extracted = await extract_profile_from_resume(text)
+        extracted = extract_profile_from_resume(text)
     except Exception as exc:
         parse_error = str(exc) or "Resume parsing failed."
 
