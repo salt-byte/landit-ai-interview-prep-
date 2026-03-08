@@ -2,6 +2,7 @@
 File storage service. Uses local filesystem by default.
 Can be swapped to S3 by replacing upload_file/get_file_path.
 """
+import asyncio
 import uuid
 import aiofiles
 from pathlib import Path
@@ -40,8 +41,22 @@ async def read_text_file(file_path: str) -> str:
     path = Path(file_path)
     if not path.exists():
         return ""
+
+    if path.suffix.lower() == ".pdf":
+        try:
+            return await asyncio.to_thread(_read_pdf_text, path)
+        except Exception:
+            return ""
+
     async with aiofiles.open(path, "r", errors="ignore") as f:
         return await f.read()
+
+
+def _read_pdf_text(path: Path) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(path))
+    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
 
 
 async def delete_file(file_path: str) -> bool:

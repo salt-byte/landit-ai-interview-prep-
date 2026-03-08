@@ -19,12 +19,12 @@ import {
   Hash
 } from 'lucide-react';
 import { UploadedFile, UserProfile } from '../types';
-import { getDocuments, uploadDocument, deleteDocument } from '../api';
+import { getDocuments, uploadAndParseDocument, uploadDocument, deleteDocument } from '../api';
 
 interface ProfileProps {
   profile: UserProfile;
   onUpdateProfile: React.Dispatch<React.SetStateAction<UserProfile>>;
-  onSaveProfile?: (profile: UserProfile) => void;
+  onSaveProfile?: (profile: UserProfile) => void | Promise<void>;
   completionPercentage: number;
 }
 
@@ -38,9 +38,10 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [suggestedTag, setSuggestedTag] = useState<string>('Notes');
   const [selectedTag, setSelectedTag] = useState<string>('Notes');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadedDocIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     getDocuments().then(setFiles).catch(() => {});
@@ -72,48 +73,91 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
     </span>
   );
 
+  const guessSourceType = (filename: string) => {
+    const name = filename.toLowerCase();
+    if (name.includes('resume') || name.includes('cv')) return 'Resume';
+    if (name.includes('portfolio') || name.includes('case') || name.includes('project')) return 'Portfolio';
+    if (name.includes('sql') || name.includes('code') || name.includes('sample') || name.includes('script') || name.includes('.py') || name.includes('.js')) return 'Work Sample';
+    return 'Notes';
+  };
+
+  const mergeExtractedProfile = (current: UserProfile, extracted: Partial<UserProfile>): UserProfile => {
+    const mergeText = (currentValue: string, nextValue?: string) => nextValue?.trim() ? nextValue : currentValue;
+
+    return {
+      ...current,
+      name: mergeText(current.name, extracted.name),
+      headline: mergeText(current.headline, extracted.headline),
+      bio: mergeText(current.bio, extracted.bio),
+      avatar: mergeText(current.avatar, extracted.avatar),
+      targetRoles: mergeText(current.targetRoles, extracted.targetRoles),
+      location: mergeText(current.location, extracted.location),
+      educationLevel: mergeText(current.educationLevel, extracted.educationLevel),
+      yearsOfExperience: mergeText(current.yearsOfExperience, extracted.yearsOfExperience),
+      interests: mergeText(current.interests, extracted.interests),
+      skills: {
+        technical: mergeText(current.skills.technical, extracted.skills?.technical),
+        product: mergeText(current.skills.product, extracted.skills?.product),
+        communication: mergeText(current.skills.communication, extracted.skills?.communication),
+      },
+      education: extracted.education?.length ? extracted.education : current.education,
+      experience: extracted.experience?.length ? extracted.experience : current.experience,
+      projects: extracted.projects?.length ? extracted.projects : current.projects,
+    };
+  };
+
   // --- Handlers ---
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
+    const inferredTag = guessSourceType(file.name);
     setPendingFile({ name: file.name, size: (file.size / 1024 / 1024).toFixed(2) + ' MB' });
+    setPendingUploadFile(file);
+    setSuggestedTag(inferredTag);
+    setSelectedTag(inferredTag);
     setShowUploadModal(true);
+  };
+
+  const resetUploadState = () => {
+    setPendingFile(null);
+    setPendingUploadFile(null);
+    setSuggestedTag('Notes');
+    setSelectedTag('Notes');
+    setShowUploadModal(false);
+    setIsAnalyzing(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const confirmUpload = async () => {
+    if (!pendingUploadFile) return;
+
     setIsAnalyzing(true);
     try {
-      const result = await uploadDocument(file);
-      uploadedDocIdRef.current = result.id;
-      setSelectedTag(result.detected_type || 'Notes');
-      setFiles(prev => [result, ...prev]);
+      if (selectedTag === 'Resume') {
+        const result = await uploadAndParseDocument(pendingUploadFile);
+        setFiles(prev => [result.document, ...prev]);
+        const mergedProfile = mergeExtractedProfile(profile, result.extracted);
+        onUpdateProfile(mergedProfile);
+        setIsEditing(true);
+        await onSaveProfile?.(mergedProfile);
+      } else {
+        const result = await uploadDocument(pendingUploadFile, selectedTag);
+        setFiles(prev => [result, ...prev]);
+      }
+      resetUploadState();
     } catch (err) {
       console.error('Upload failed', err);
-      setShowUploadModal(false);
-      setPendingFile(null);
-    } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const confirmUpload = () => {
-    uploadedDocIdRef.current = null;
-    setPendingFile(null);
-    setShowUploadModal(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   const cancelUpload = () => {
-    if (uploadedDocIdRef.current) {
-      deleteDocument(uploadedDocIdRef.current).catch(() => {});
-      setFiles(prev => prev.filter(f => f.id !== uploadedDocIdRef.current));
-      uploadedDocIdRef.current = null;
-    }
-    setShowUploadModal(false);
-    setPendingFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    resetUploadState();
   };
 
   const deleteFile = (id: string) => {
     deleteDocument(id).catch(() => {});
-    setFiles(files.filter(f => f.id !== id));
+    setFiles(prev => prev.filter(f => f.id !== id));
   };
 
   const updateField = (field: keyof UserProfile, value: any) => {
@@ -631,7 +675,12 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
                 {!isAnalyzing && (
                   <p className="text-xs text-[#0B57D0] mt-2 flex items-center gap-1">
                     <SparklesIcon className="w-3 h-3" />
-                    AI suggests this file is a <b>{selectedTag}</b>.
+                    AI suggests <b>{suggestedTag}</b>. You can change it before upload.
+                  </p>
+                )}
+                {selectedTag === 'Resume' && (
+                  <p className="text-xs text-[#444746] mt-2">
+                    Resume uploads will be parsed and auto-fill the profile on the right. You can still edit the fields after.
                   </p>
                 )}
               </div>

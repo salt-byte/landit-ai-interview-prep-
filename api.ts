@@ -1,4 +1,7 @@
 import type {
+  Education,
+  Experience,
+  Project,
   UserProfile,
   UploadedFile,
   TargetRole,
@@ -25,6 +28,101 @@ function resolveBaseUrl(): string {
 }
 
 const BASE_URL = resolveBaseUrl();
+
+function tempId(prefix: string, index: number): string {
+  return `${prefix}-${index}`;
+}
+
+type RawExtractedProfile = {
+  name?: string;
+  headline?: string;
+  bio?: string;
+  avatar?: string;
+  target_roles?: string;
+  location?: string;
+  education_level?: string;
+  years_of_experience?: string;
+  interests?: string;
+  skills?: {
+    technical?: string;
+    product?: string;
+    communication?: string;
+  };
+  education?: Array<{
+    school?: string;
+    degree?: string;
+    major?: string;
+    year?: string;
+    key_coursework?: string;
+    academic_focus?: string;
+  }>;
+  experience?: Array<{
+    company?: string;
+    role?: string;
+    type?: string;
+    duration?: string;
+    responsibilities?: string;
+  }>;
+  projects?: Array<{
+    name?: string;
+    context?: string;
+    role?: string;
+    tools?: string;
+    outcome?: string;
+    learnings?: string;
+  }>;
+};
+
+function normalizeExtractedProfile(raw: RawExtractedProfile): Partial<UserProfile> {
+  const education: Education[] = (raw.education ?? []).map((item, index) => ({
+    id: tempId('edu', index),
+    school: item.school ?? '',
+    degree: item.degree ?? '',
+    major: item.major ?? '',
+    year: item.year ?? '',
+    keyCoursework: item.key_coursework ?? '',
+    academicFocus: item.academic_focus ?? '',
+  }));
+
+  const experience: Experience[] = (raw.experience ?? []).map((item, index) => ({
+    id: tempId('exp', index),
+    company: item.company ?? '',
+    role: item.role ?? '',
+    type: item.type ?? 'Full-time',
+    duration: item.duration ?? '',
+    responsibilities: item.responsibilities ?? '',
+  }));
+
+  const projects: Project[] = (raw.projects ?? []).map((item, index) => ({
+    id: tempId('proj', index),
+    name: item.name ?? '',
+    context: item.context ?? '',
+    role: item.role ?? '',
+    tools: item.tools ?? '',
+    outcome: item.outcome ?? '',
+    learnings: item.learnings ?? '',
+  }));
+
+  return {
+    name: raw.name ?? '',
+    headline: raw.headline ?? '',
+    bio: raw.bio ?? '',
+    avatar: raw.avatar ?? '',
+    targetRoles: raw.target_roles ?? '',
+    location: raw.location ?? '',
+    educationLevel: raw.education_level ?? '',
+    yearsOfExperience: raw.years_of_experience ?? '',
+    interests: raw.interests ?? '',
+    skills: {
+      technical: raw.skills?.technical ?? '',
+      product: raw.skills?.product ?? '',
+      communication: raw.skills?.communication ?? '',
+    },
+    education,
+    experience,
+    projects,
+  };
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -70,14 +168,27 @@ export async function uploadAndParseDocument(
     const text = await res.text();
     throw new Error(`Upload failed (${res.status}): ${text}`);
   }
-  return res.json();
+  const raw = await res.json() as {
+    extracted: RawExtractedProfile;
+    document_id: number;
+    document: UploadedFile;
+  };
+
+  return {
+    ...raw,
+    extracted: normalizeExtractedProfile(raw.extracted),
+  };
 }
 
 export async function uploadDocument(
-  file: File
+  file: File,
+  typeOverride?: string
 ): Promise<UploadedFile & { detected_type: string }> {
   const form = new FormData();
   form.append('file', file);
+  if (typeOverride) {
+    form.append('type_override', typeOverride);
+  }
   const res = await fetch(`${BASE_URL}/api/profile/documents/upload`, {
     method: 'POST',
     body: form,

@@ -1,7 +1,7 @@
 """
 Profile router — CRUD for user profile, education, experience, projects, documents.
 """
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -229,12 +229,13 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
 @router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    type_override: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     profile = await get_or_create_profile(db)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
-    detected_type = detect_file_type(file.filename or "")
+    detected_type = type_override or detect_file_type(file.filename or "")
 
     doc = Document(
         profile_id=profile.id,
@@ -284,8 +285,19 @@ async def upload_and_parse_resume(
     )
     db.add(doc)
     await db.commit()
+    await db.refresh(doc)
 
-    return {"extracted": extracted, "document_id": doc.id}
+    return {
+        "extracted": extracted,
+        "document_id": doc.id,
+        "document": {
+            "id": str(doc.id),
+            "name": doc.name,
+            "type": doc.type,
+            "date": doc.created_at.strftime("%Y-%m-%d"),
+            "file_size": doc.file_size,
+        }
+    }
 
 
 @router.delete("/documents/{doc_id}")
