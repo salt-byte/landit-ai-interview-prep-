@@ -4,6 +4,7 @@ Profile router — CRUD for user profile, education, experience, projects, docum
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from database import get_db
 from models.user import UserProfile, Education, Experience, Project, Document
 from schemas.user import UserProfileUpdate, UserProfileResponse, DocumentResponse
@@ -22,11 +23,25 @@ async def get_or_create_profile(db: AsyncSession) -> UserProfile:
         select(UserProfile).where(UserProfile.user_key == USER_KEY)
     )
     profile = result.scalar_one_or_none()
-    if not profile:
-        profile = UserProfile(user_key=USER_KEY)
-        db.add(profile)
+    if profile:
+        return profile
+
+    profile = UserProfile(user_key=USER_KEY)
+    db.add(profile)
+    try:
         await db.commit()
         await db.refresh(profile)
+        return profile
+    except IntegrityError:
+        # Another request created the single demo profile first.
+        await db.rollback()
+        result = await db.execute(
+            select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        )
+        profile = result.scalar_one_or_none()
+        if profile:
+            return profile
+        raise
     return profile
 
 
