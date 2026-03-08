@@ -75,40 +75,38 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
   // --- Handlers ---
 
-  const handleAddSource = (newFile: UploadedFile) => {
-    // 1. Add File/Link to Source List
+  const handleAddSource = (newFile: UploadedFile, extracted?: Partial<UserProfile>) => {
+    // 1. Add File to Source List
     setFiles([newFile, ...files]);
 
-    // 2. Update Profile (Mock Sync Logic)
-    const updateLogic = (prev: UserProfile) => {
-      const updated = { ...prev };
-      // Simulate adding a skill or project based on the new source
-      if (newFile.type === 'Resume' || newFile.type === 'Link') {
-        updated.skills = {
-          ...updated.skills,
-          product: updated.skills.product + ", Strategic Planning"
-        };
-      } else if (newFile.type === 'Portfolio') {
-        updated.projects = [
-          {
-            id: 'new-proj-' + Date.now(),
-            name: "New Portfolio Project",
-            context: "Extracted from uploaded portfolio",
-            role: "Lead Designer",
-            tools: "Figma, React",
-            outcome: "Launched successfully",
-            learnings: "User-centered design is key"
-          },
-          ...updated.projects
-        ];
+    // 2. Merge extracted profile data if available (from real backend parse)
+    if (extracted && Object.keys(extracted).length > 0) {
+      const updateLogic = (prev: UserProfile): UserProfile => ({
+        ...prev,
+        name: extracted.name || prev.name,
+        headline: extracted.headline || prev.headline,
+        bio: extracted.bio || prev.bio,
+        targetRoles: extracted.targetRoles || prev.targetRoles,
+        location: extracted.location || prev.location,
+        educationLevel: extracted.educationLevel || prev.educationLevel,
+        yearsOfExperience: extracted.yearsOfExperience || prev.yearsOfExperience,
+        interests: extracted.interests || prev.interests,
+        skills: extracted.skills
+          ? {
+              technical: extracted.skills.technical || prev.skills.technical,
+              product: extracted.skills.product || prev.skills.product,
+              communication: extracted.skills.communication || prev.skills.communication,
+            }
+          : prev.skills,
+        education: extracted.education && extracted.education.length > 0 ? extracted.education : prev.education,
+        experience: extracted.experience && extracted.experience.length > 0 ? extracted.experience : prev.experience,
+        projects: extracted.projects && extracted.projects.length > 0 ? extracted.projects : prev.projects,
+      });
+      if (isEditing) {
+        setTempProfile(updateLogic);
+      } else {
+        onUpdateProfile(updateLogic);
       }
-      return updated;
-    };
-
-    if (isEditing) {
-      setTempProfile(updateLogic);
-    } else {
-      onUpdateProfile(updateLogic);
     }
 
     // 3. Show Toast & Close
