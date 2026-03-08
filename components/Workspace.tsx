@@ -6,8 +6,10 @@ import {
   Lightbulb, 
   HelpCircle, 
   Video, 
+  MessageSquare,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   Edit2,
@@ -38,92 +40,103 @@ import {
   PanelLeft,
   Settings,
   List,
-  FileQuestion
+  FileQuestion,
+  X,
+  Bookmark,
+  Mic,
+  Quote,
+  Undo
 } from 'lucide-react';
-import { TargetRole, RoleSource, WorkspaceTab } from '../types';
+import { GoogleGenAI } from "@google/genai";
+import { TargetRole, WorkspaceTab, UploadedFile, AppView, SavedQuestion } from '../types';
 import MockInterview from './MockInterview';
-import {
-  getRole, updateRole, addRoleSource, uploadRoleSource, deleteRoleSource,
-  generatePrep, getPrep, updatePrep, chatPrep,
-} from '../api';
+import AddSourceModal from './AddSourceModal';
+import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
+import SelectionTooltip from './SelectionTooltip';
 
 interface WorkspaceProps {
   workspace: TargetRole;
 }
+
+// --- Mock Data: Role Context Sources ---
+const MOCK_ROLE_SOURCES = [
+  { id: 'src-1', name: 'Official_JD_Stripe.pdf', type: 'Job Description', date: '2024-03-10' },
+  { id: 'src-2', name: 'https://stripe.com/jobs/listing/123', type: 'Link', date: '2024-03-12' },
+];
 
 // --- Shared Types ---
 type EditorState = 'EMPTY' | 'PICKER' | 'SETTINGS' | 'GENERATING' | 'EDITING';
 
 
 // --- Role Context Builder Sub-Component (New Split Layout) ---
-const RoleContextBuilder: React.FC<{
-  role: TargetRole;
-  onUpdate: (role: TargetRole) => void
+export const RoleContextBuilder: React.FC<{ 
+  role: TargetRole; 
+  onUpdate: (role: TargetRole) => void 
 }> = ({ role, onUpdate }) => {
   const [localRole, setLocalRole] = useState<TargetRole>(role);
-  const [sources, setSources] = useState<RoleSource[]>(role.sources || []);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [linkInput, setLinkInput] = useState('');
+  const [sources, setSources] = useState(MOCK_ROLE_SOURCES);
   const [isEditing, setIsEditing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  
+  // --- Card Height Logic (Reused from Profile/Dashboard) ---
+  // Using h-full to fill the parent container which is already constrained by App.tsx padding
+  const cardHeightClass = "h-full min-h-[360px] mb-6";
 
   // Sync state if prop changes
   useEffect(() => {
     setLocalRole(role);
-    setSources(role.sources || []);
   }, [role]);
 
-  const refreshRole = async () => {
-    const refreshedRole = await getRole(role.id);
-    setLocalRole(refreshedRole);
-    setSources(refreshedRole.sources || []);
-    onUpdate(refreshedRole);
-    return refreshedRole;
-  };
-
   const handleChange = (field: keyof TargetRole, value: any) => {
-    const updated = { ...localRole, [field]: value };
-    setLocalRole(updated);
-    onUpdate(updated);
+    setLocalRole(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleLinkAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkInput.trim()) return;
-    setIsAnalyzing(true);
-    try {
-      await addRoleSource(role.id, linkInput.trim());
-      await refreshRole();
-      setLinkInput('');
-    } catch (err) {
-      console.error('Failed to add source', err);
-    } finally {
-      setIsAnalyzing(false);
+  const handleAddSource = (newFile: UploadedFile) => {
+    setSources([...sources, newFile]);
+    setShowAddSourceModal(false);
+    
+    // Simulate context update
+    const updateLogic = (prev: TargetRole) => ({
+        ...prev,
+        companyBackground: (prev.companyBackground || '') + `\n\n[AI Extracted from ${newFile.name}]:\nNew insights added...`
+    });
+
+    if (isEditing) {
+      setLocalRole(updateLogic);
+    } else {
+      const updated = updateLogic(localRole);
+      setLocalRole(updated);
+      onUpdate(updated);
     }
+
+    // Show Toast
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    const file = e.target.files[0];
-    setIsAnalyzing(true);
-    try {
-      await uploadRoleSource(role.id, file);
-      await refreshRole();
-    } catch (err) {
-      console.error('Failed to upload source', err);
-    } finally {
-      setIsAnalyzing(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isEditing) return;
+      
+      if (e.key === 'Escape') {
+        setLocalRole(role);
+        setIsEditing(false);
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        onUpdate(localRole);
+        setIsEditing(false);
+      }
+    };
 
-  const handleDeleteSource = async (id: string) => {
-    try {
-      await deleteRoleSource(role.id, id);
-      await refreshRole();
-    } catch (err) {
-      console.error('Failed to delete source', err);
-    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditing, localRole, role, onUpdate]);
+
+  const handleDeleteSource = (id: string) => {
+    setSources(sources.filter(s => s.id !== id));
   };
 
   const handleCopyLink = (text: string) => {
@@ -157,11 +170,13 @@ const RoleContextBuilder: React.FC<{
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[calc(100vh-140px)] animate-in fade-in duration-500">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full animate-in fade-in duration-500 pb-6">
       
       {/* LEFT: Source Inputs */}
-      <div className="lg:col-span-4 flex flex-col h-full min-h-0">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm flex flex-col h-full overflow-hidden p-6">
+      <div className="lg:col-span-4 flex flex-col min-h-0">
+        <div 
+          className={`bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] flex flex-col overflow-hidden p-5 flex-1 min-h-[360px]`}
+        >
           {/* Header */}
           <div className="mb-6 flex-shrink-0">
              <h3 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Source Inputs</h3>
@@ -169,46 +184,20 @@ const RoleContextBuilder: React.FC<{
 
           <div className="flex-1 overflow-y-auto pr-1">
             
-            {/* Input 1: File Upload */}
+            {/* Input: Add Source Button */}
             <div className="flex-shrink-0 mb-6">
-              <label 
-                className="flex items-center justify-center w-full p-6 border border-dashed border-[#C4C7C5] rounded-2xl cursor-pointer hover:bg-[#F0F4F9] hover:border-[#0B57D0] transition-all gap-3 group"
+              <button 
+                onClick={() => setShowAddSourceModal(true)}
+                className="flex flex-col items-center justify-center w-full p-6 border border-dashed border-[#C4C7C5] rounded-[14px] cursor-pointer hover:bg-[#F0F4F9] hover:border-[#0B57D0] transition-all group"
               >
-                <div className="bg-[#0B57D0] p-2 rounded-full text-white shadow-sm group-hover:scale-110 transition-transform">
-                  <Plus className="w-5 h-5" />
-                </div>
-                <div>
+                <div className="flex items-center gap-3">
+                  <div className="bg-[#0B57D0] p-2 rounded-full text-white shadow-sm group-hover:scale-110 transition-transform">
+                    <Plus className="w-5 h-5" />
+                  </div>
                   <span className="block text-sm font-bold text-[#1F1F1F] text-center">Add Source</span>
                 </div>
-                <input 
-                  type="file" 
-                  ref={fileInputRef}
-                  className="hidden" 
-                  onChange={handleFileUpload} 
-                />
-              </label>
-              <p className="text-xs text-[#444746] mt-3 text-center px-4 leading-relaxed">
-                 Upload job descriptions, internal notes, or other relevant documents.
-              </p>
-            </div>
-
-            {/* Input 2: Link Analysis (Refined) */}
-            <div className="mb-8">
-               <div className="relative">
-                 <input 
-                   value={linkInput}
-                   onChange={(e) => setLinkInput(e.target.value)}
-                   placeholder="Paste URL to analyze..."
-                   className="w-full pl-4 pr-12 py-3 bg-[#F0F4F9] border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#0B57D0] text-[#1F1F1F]"
-                 />
-                 <button 
-                   onClick={handleLinkAnalyze}
-                   disabled={!linkInput.trim() || isAnalyzing}
-                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[#1F1F1F] text-white rounded-lg hover:bg-[#444746] disabled:opacity-50 transition-colors"
-                 >
-                   {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                 </button>
-               </div>
+                <span className="text-xs text-[#444746] mt-2 text-center">Upload job descriptions, internal notes, or other relevant documents.</span>
+              </button>
             </div>
 
             {/* Sources List */}
@@ -262,42 +251,54 @@ const RoleContextBuilder: React.FC<{
       </div>
 
       {/* RIGHT: Role Context Workspace */}
-      <div className="lg:col-span-8 flex flex-col h-full min-h-0">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm flex flex-col h-full overflow-hidden">
+      <div className="lg:col-span-8 flex flex-col min-h-0">
+        <div 
+          className={`bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] flex flex-col overflow-hidden flex-1 min-h-[360px]`}
+        >
           
           {/* Header */}
-          <div className="px-8 py-6 border-b border-[#E3E3E3] bg-white flex items-center justify-between flex-shrink-0">
-             <div>
-               <div className="flex items-center gap-3">
-                 <h3 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Role Context</h3>
-               </div>
-               <p className="text-sm text-[#444746] mt-1">The more details you provide, the better AI can prepare you.</p>
-             </div>
-             
-             <button
-              onClick={async () => {
-                if (isEditing) {
-                  const { id, sources: _s, ...roleData } = localRole;
-                  try {
-                    const savedRole = await updateRole(id, roleData);
-                    setLocalRole(savedRole);
-                    setSources(savedRole.sources || []);
-                    onUpdate(savedRole);
-                  } catch (err) {
-                    console.error('Failed to save role', err);
-                    return;
-                  }
-                }
-                setIsEditing(!isEditing);
-              }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all ${
-                isEditing
-                  ? 'bg-[#1F1F1F] text-white hover:bg-[#444746] shadow-md'
-                  : 'bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3]'
-              }`}
-            >
-              {isEditing ? <><Check className="w-4 h-4" /> Save</> : <><Edit3 className="w-4 h-4" /> Edit</>}
-            </button>
+          <div className={`px-8 py-6 border-b border-[#E3E3E3] flex items-center justify-between bg-white flex-shrink-0 transition-all duration-300 ${isEditing ? 'min-h-[88px]' : 'min-h-[88px]'}`}>
+            {isEditing ? (
+              <div className="w-full flex justify-end gap-3 animate-in fade-in slide-in-from-right-4 duration-300">
+                <button
+                  onClick={() => {
+                    setLocalRole(role);
+                    setIsEditing(false);
+                  }}
+                  className="w-32 py-2.5 rounded-full text-sm font-bold bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    onUpdate(localRole);
+                    setIsEditing(false);
+                  }}
+                  className="w-32 py-2.5 rounded-full text-sm font-bold bg-[#1F1F1F] text-white hover:bg-[#444746] shadow-md transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Role Context</h3>
+                  </div>
+                  <p className="text-sm text-[#444746] mt-1">The more details you provide, the better AI can prepare you.</p>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    setLocalRole(role);
+                    setIsEditing(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3] transition-all animate-in fade-in duration-300"
+                >
+                  <Edit3 className="w-4 h-4" /> Edit
+                </button>
+              </>
+            )}
           </div>
 
           {/* Context Content */}
@@ -312,10 +313,10 @@ const RoleContextBuilder: React.FC<{
                          <label className="text-xs text-[#444746] font-semibold mb-1 block">Role Title</label>
                          {isEditing ? (
                            <input 
-                              value={localRole.title}
-                              onChange={(e) => handleChange('title', e.target.value)}
-                              className={`w-full text-lg font-bold p-2 rounded-lg border-b border-dashed outline-none bg-transparent ${getFieldStyles(localRole.title)}`}
-                              placeholder="e.g. Senior Product Manager"
+                               value={localRole.title}
+                               onChange={(e) => handleChange('title', e.target.value)}
+                               className={`w-full text-lg font-bold p-2 rounded-lg border-b border-dashed outline-none bg-transparent ${getFieldStyles(localRole.title)}`}
+                               placeholder="e.g. Senior Product Manager"
                            />
                          ) : (
                            <div className="text-xl font-bold text-[#1F1F1F]">{localRole.title}</div>
@@ -427,7 +428,6 @@ const RoleContextBuilder: React.FC<{
                              const val = e.target.value;
                              const updated = { ...localRole, interviewQuestions: val.split('\n') };
                              setLocalRole(updated);
-                             onUpdate(updated);
                         }}
                         className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.interviewQuestions?.join('\n'))}`}
                         placeholder="Add questions you expect (one per line)..."
@@ -470,55 +470,586 @@ const RoleContextBuilder: React.FC<{
         </div>
       </div>
 
+      <AddSourceModal 
+        isOpen={showAddSourceModal} 
+        onClose={() => setShowAddSourceModal(false)} 
+        onAddSource={handleAddSource} 
+      />
+
+      {/* --- TOAST --- */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 bg-[#1F1F1F] text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-5 fade-in duration-300 z-50">
+          <Check className="w-4 h-4 text-[#14AE5C]" />
+          <span className="text-sm font-medium">Source added to context.</span>
+        </div>
+      )}
+
     </div>
   );
 };
 
-// --- Interview Prep Builder Sub-Component (NEW) ---
-const InterviewPrepBuilder: React.FC<{ role: TargetRole }> = ({ role }) => {
-  const [editorState, setEditorState] = useState<EditorState>('EMPTY');
-  const [content, setContent] = useState('');
-  
-  // Settings Config
-  const [generationMode, setGenerationMode] = useState<'QUESTIONS' | 'QA'>('QA');
-  const [selectedCategories, setSelectedCategories] = useState({
-    fundamentals: true,
-    business: true,
-    case: true,
-    behavioral: true,
-    technical: true
-  });
+const sanitizeText = (text: string): string => {
+  return text
+    .replace(/^#+\s+/gm, '') // Remove H1-H6
+    .replace(/\*\*/g, '')    // Remove bold
+    .replace(/__/g, '')      // Remove bold
+    .replace(/\*/g, '')      // Remove italics/bullets
+    .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+    .replace(/>\s+/g, '')    // Remove blockquotes
+    .replace(/\[(.*?)\]\((.*?)\)/g, '$1') // Remove links
+    .trim();
+};
 
-  // State: Chat
-  const [chatHistory, setChatHistory] = useState<{sender: 'AI'|'USER', text: string}[]>([]);
+// --- Interview Prep Builder Sub-Component (NEW) ---
+export const InterviewPrepBuilder: React.FC<{ 
+  role: TargetRole | null;
+  roles: TargetRole[];
+  onSelectRole: (role: TargetRole | null) => void;
+  onNavigate: (view: AppView) => void;
+  settings: {
+    types: string[];
+    qty: number;
+  };
+  onUpdateSettings: (settings: any) => void;
+  savedQuestions?: SavedQuestion[];
+  onSaveQuestion?: (question: SavedQuestion) => void;
+  initialQuestionId?: string | null;
+}> = ({ role, roles, onSelectRole, onNavigate, settings, onUpdateSettings, savedQuestions = [], onSaveQuestion, initialQuestionId }) => {
+  const [editorState, setEditorState] = useState<EditorState>('EMPTY');
+  const [generatedQuestions, setGeneratedQuestions] = useState<{q: string, a?: string}[]>([]);
+  const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [showInfo, setShowInfo] = useState<string | null>(null);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
+  
+  // Load initial question if provided
+  useEffect(() => {
+    if (initialQuestionId && savedQuestions.length > 0) {
+      const question = savedQuestions.find(q => q.id === initialQuestionId);
+      if (question) {
+        setGeneratedQuestions([{ q: question.question, a: question.answer || '' }]);
+        setSelectedQuestionIndex(0);
+        setEditorState('EDITING');
+        
+        // Restore State
+        if (question.chatHistory) {
+          setChatHistory(question.chatHistory);
+        }
+        if (question.transcription) {
+          setTranscription(question.transcription);
+        }
+      }
+    }
+  }, [initialQuestionId, savedQuestions]);
+  const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState<'IDLE' | 'RECORDING' | 'PAUSED' | 'STOPPED'>('IDLE');
+  const [recordingTime, setRecordingTime] = useState(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [transcription, setTranscription] = useState('');
+  const recognitionRef = useRef<any>(null);
+  const [isRecordingInterface, setIsRecordingInterface] = useState(false);
+  const [savedToWorkspace, setSavedToWorkspace] = useState<boolean>(false);
+  const [isEditingQuestion, setIsEditingQuestion] = useState(false);
+  const [tempQuestionText, setTempQuestionText] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [isCoPilotAvailable, setIsCoPilotAvailable] = useState(true);
+  const [quotedText, setQuotedText] = useState<string | null>(null);
+  const [isQuoteExpanded, setIsQuoteExpanded] = useState(false);
+  const [isAIEditMode, setIsAIEditMode] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const editorRef = React.useRef<RichTextEditorHandle>(null);
+  const workspaceContainerRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [showMergePrompt, setShowMergePrompt] = useState(false);
+  const [pendingTranscription, setPendingTranscription] = useState('');
+  
+  // State: Chat (Moved up)
+  const [chatHistory, setChatHistory] = useState<{sender: 'AI'|'USER', text: string, quote?: string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // ... (rest of the component)
+
+  const handleQuote = (text: string) => {
+    if (!isCoPilotAvailable) {
+      alert("Copilot is currently unavailable. The selected text has been copied to your clipboard.");
+      navigator.clipboard.writeText(text);
+      return;
+    }
+    setQuotedText(text);
+    setIsQuoteExpanded(false);
+    setIsAIEditMode(false);
+    // Focus chat input
+    setTimeout(() => {
+      chatInputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleAIEdit = (text: string) => {
+    if (!isCoPilotAvailable) {
+      alert("Copilot is currently unavailable.");
+      return;
+    }
+    setQuotedText(text);
+    setIsQuoteExpanded(false);
+    setIsAIEditMode(true);
+    setChatInput(""); // Input box remains empty as requested
+    // Focus chat input
+    setTimeout(() => {
+      if (chatInputRef.current) {
+        chatInputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  // Voice recording logic
+  const startAudioAnalysis = (stream: MediaStream) => {
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.fftSize = 512;
+    const dataArray = new Float32Array(analyser.fftSize);
+
+    let smoothedLevel = 0;
+    let silenceDuration = 0;
+    let lastTime = performance.now();
+
+    const updateLevel = () => {
+      if (!stream.active) return;
+      analyser.getFloatTimeDomainData(dataArray);
+      
+      let sumSquares = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sumSquares += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      
+      const db = 20 * Math.log10(rms || 1e-8);
+      const threshold = -45;
+      let targetLevel = 0;
+      
+      if (db > threshold) {
+        targetLevel = Math.min(100, Math.max(0, ((db - threshold) / Math.abs(threshold)) * 100));
+        silenceDuration = 0;
+      } else {
+        const now = performance.now();
+        silenceDuration += (now - lastTime);
+        if (silenceDuration > 80) {
+          targetLevel = 0;
+        } else {
+          targetLevel = smoothedLevel;
+        }
+      }
+      
+      lastTime = performance.now();
+
+      const alpha = targetLevel > smoothedLevel ? 0.4 : 0.15;
+      smoothedLevel = alpha * targetLevel + (1 - alpha) * smoothedLevel;
+
+      setAudioLevel(smoothedLevel);
+      requestAnimationFrame(updateLevel);
+    };
+    updateLevel();
+  };
+
+  const startRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support real-time transcription.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          setTranscription(prev => prev + event.results[i][0].transcript + ' ');
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (editorRef.current) {
+        editorRef.current.setContent(transcription + interimTranscript);
+      }
+    };
+
+    recognition.onend = () => {
+      if (recordingStatus === 'RECORDING') {
+        recognition.start(); // Keep listening if we are still in recording status
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    
+    // Start timer
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingTime(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+    setRecordingStatus('STOPPED');
+  };
+
+  const handleTryAnswer = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      startAudioAnalysis(stream);
+      setIsRecordingInterface(true);
+      setRecordingStatus('RECORDING');
+      setRecordingTime(0);
+      setTranscription('');
+      startRecording();
+    } catch (error) {
+      console.error("Microphone access denied", error);
+      alert("Microphone access denied — enable in browser settings to use Try Answer.");
+    }
+  };
+
+  const applyTranscription = (text: string, mode: 'overwrite' | 'append') => {
+    setSaveStatus('saving');
+    
+    if (selectedQuestionIndex === null) return;
+    
+    const currentQ = generatedQuestions[selectedQuestionIndex];
+    const existingNotes = currentQ?.a || '';
+    
+    // Basic formatting: split by sentences and wrap in <p>
+    const formattedText = text.split('. ').filter(s => s.trim()).map(s => `<p>${s.trim()}${s.trim().endsWith('.') ? '' : '.'}</p>`).join('');
+    
+    let newNotes = formattedText;
+    if (mode === 'append' && existingNotes.trim()) {
+      newNotes = `${existingNotes}<br/><p><strong>[Transcribed Audio]</strong></p>${formattedText}`;
+    }
+
+    const updated = [...generatedQuestions];
+    updated[selectedQuestionIndex] = { ...updated[selectedQuestionIndex], a: newNotes };
+    setGeneratedQuestions(updated);
+
+    if (editorRef.current) {
+      editorRef.current.setContent(newNotes);
+    }
+
+    setIsRecordingInterface(false);
+    setShowMergePrompt(false);
+    setPendingTranscription('');
+    
+    setTimeout(() => {
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }, 1000);
+    
+    setChatHistory(prev => [...prev, { 
+      sender: 'AI', 
+      text: "I’ve transcribed your recording and added it to your notes. Would you like me to refine this answer or format it into a STAR structure?" 
+    }]);
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setAudioLevel(0);
+    
+    if (selectedQuestionIndex === null) return;
+    const currentQ = generatedQuestions[selectedQuestionIndex];
+    const existingNotes = currentQ?.a || '';
+    
+    if (existingNotes.trim() && transcription.trim()) {
+      setPendingTranscription(transcription);
+      setShowMergePrompt(true);
+    } else if (transcription.trim()) {
+      applyTranscription(transcription, 'overwrite');
+    } else {
+      setIsRecordingInterface(false);
+    }
+  };
+
+  const handleCancelMerge = () => {
+    setShowMergePrompt(false);
+    setPendingTranscription('');
+    setIsRecordingInterface(false);
+  };
+
+  const handleCancelRecording = () => {
+    stopRecording();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setAudioLevel(0);
+    setIsRecordingInterface(false);
+    setTranscription('');
+    setRecordingTime(0);
+    // Show toast
+    alert("Recording canceled. No text saved.");
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const RecordingWorkspace = () => (
+    <div className="flex-1 flex flex-col bg-[#F8F9FA] rounded-xl border border-[#E3E3E3] p-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse" aria-label="Recording status: active" />
+          <span className="text-sm font-bold text-red-600">Recording</span>
+          <span className="text-sm font-mono text-[#444746]">{formatTime(recordingTime)}</span>
+        </div>
+        <div className="flex gap-2">
+          {recordingStatus === 'RECORDING' ? (
+            <button aria-label="Pause recording" onClick={() => { setRecordingStatus('PAUSED'); if(recognitionRef.current) recognitionRef.current.stop(); }} className="px-3 py-1.5 bg-[#F0F4F9] text-[#1F1F1F] rounded-lg text-sm font-bold hover:bg-[#E3E3E3]">Pause</button>
+          ) : (
+            <button aria-label="Resume recording" onClick={() => { setRecordingStatus('RECORDING'); startRecording(); }} className="px-3 py-1.5 bg-[#0B57D0] text-white rounded-lg text-sm font-bold hover:bg-[#0B67EF]">Resume</button>
+          )}
+          <button aria-label="Finish recording" onClick={handleStopRecording} className="px-3 py-1.5 bg-[#1F1F1F] text-white rounded-lg text-sm font-bold hover:bg-[#444746]">Finish</button>
+          <button aria-label="Cancel recording" onClick={handleCancelRecording} className="px-3 py-1.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-lg text-sm font-bold hover:bg-[#F0F4F9]">Cancel</button>
+        </div>
+      </div>
+      <div className="flex-1 bg-white rounded-lg border border-[#E3E3E3] p-4 overflow-y-auto">
+        <p className="text-sm text-[#1F1F1F] leading-relaxed">{transcription || "Listening..."}</p>
+      </div>
+      <div className="mt-4 h-12 bg-[#F0F4F9] rounded-lg flex items-center justify-center border border-[#E3E3E3]">
+        {/* Simple waveform visualization matching Live Interview */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-end gap-[2px] h-5">
+            {[...Array(24)].map((_, i) => (
+              <div 
+                key={i} 
+                className="w-[2.5px] bg-[#2EBB63] rounded-full transition-all duration-75"
+                style={{ 
+                  height: `${Math.max(15, Math.min(100, audioLevel * (0.5 + Math.random() * 0.5)))}%`,
+                  opacity: recordingStatus === 'RECORDING' ? 1 : 0.3
+                }} 
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Autosave logic
+  useEffect(() => {
+    if (selectedQuestionIndex === null || selectedQuestionIndex === -1) return;
+    
+    const handler = setTimeout(() => {
+      const currentQ = generatedQuestions[selectedQuestionIndex];
+      if (currentQ?.a || transcription || chatHistory.length > 1) {
+        setSaveStatus('saving');
+        
+        // Actual Save Call
+        if (onSaveQuestion && role && (initialQuestionId || currentQ.q)) {
+           onSaveQuestion({
+             id: initialQuestionId || `saved-${Date.now()}-${selectedQuestionIndex}`,
+             roleId: role.id,
+             type: settings.types[0] || 'General',
+             question: currentQ.q,
+             answer: currentQ.a,
+             lastModified: new Date().toISOString(),
+             savedAt: new Date().toISOString(), // Should ideally keep original savedAt if editing
+             source: 'MOCK_PREP',
+             chatHistory: chatHistory,
+             transcription: transcription
+           });
+        }
+
+        setTimeout(() => {
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        }, 1000);
+      }
+    }, 2000);
+
+    return () => clearTimeout(handler);
+  }, [generatedQuestions, selectedQuestionIndex, transcription, chatHistory, onSaveQuestion, role, initialQuestionId, settings.types]);
+  
+  // --- Card Height Logic ---
+  const cardHeightClass = "h-full min-h-[360px]";
+
   // Constants
-  const CATEGORIES = [
-    { id: 'fundamentals', label: 'Role Fundamentals', description: 'Core competencies and basic role knowledge' },
-    { id: 'business', label: 'Business & Product Thinking', description: 'Strategic thinking and product sense' },
-    { id: 'case', label: 'Case & Scenario Questions', description: 'Problem solving in hypothetical situations' },
-    { id: 'behavioral', label: 'Behavioral & Leadership', description: 'Culture fit and soft skills (STAR)' },
-    { id: 'technical', label: 'Depth / Technical', description: 'Specific technical skills and tools' }
+  interface QuestionType {
+    id: string;
+    label: string;
+    description: string;
+    explanation: string;
+    example: string;
+  }
+
+  const QUESTION_TYPES: QuestionType[] = [
+    { 
+      id: 'behavioral', 
+      label: 'Behavioral & Experience', 
+      description: 'Past experiences, soft skills, and behavioral scenarios.',
+      explanation: 'Focuses on your past experiences, leadership style, and how you collaborate, make decisions, and handle challenges in real-world situations.',
+      example: '“Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?”'
+    },
+    { 
+      id: 'product', 
+      label: 'Product Design & Sense', 
+      description: 'Designing products, user empathy, and product improvement.',
+      explanation: 'Evaluates your ability to identify user problems, design intuitive solutions, and prioritize features with clear product reasoning.',
+      example: '“How would you design a new feature to improve user retention for TikTok?”'
+    },
+    { 
+      id: 'analytical', 
+      label: 'Analytical & Execution', 
+      description: 'Metrics, data analysis, problem solving, and execution.',
+      explanation: 'Tests your ability to diagnose metric changes, structure ambiguous problems, and drive data-informed execution.',
+      example: '“Daily active users dropped by 15% last month. How would you investigate and address this issue?”'
+    },
+    { 
+      id: 'strategy', 
+      label: 'Strategy & Vision', 
+      description: 'Long-term thinking, market sense, and business strategy.',
+      explanation: 'Assesses your long-term thinking, market judgment, and ability to evaluate strategic opportunities and trade-offs.',
+      example: '“Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?”'
+    }
   ];
 
-  // Load existing prep content on mount
-  useEffect(() => {
-    getPrep(role.id).then(result => {
-      if (result?.content) {
-        setContent(result.content);
-        setEditorState('EDITING');
+  const generateQuestions = async () => {
+    setEditorState('GENERATING');
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const model = "gemini-3-flash-preview";
+      
+      const prompt = `You are an expert interview coach. Generate ${settings.qty} high-quality, professional interview questions for a ${role?.title} role at ${role?.company}.
+      
+      Focus on these question types: ${settings.types.join(', ')}.
+      
+      Role Context:
+      ${role?.jd}
+      ${role?.companyBackground}
+      
+      Requirements:
+      1. Return ONLY the questions, one per line.
+      2. Do NOT include any numbering, category labels, or prefixes like "Mock Question:".
+      3. Each question should be a single, complete sentence or short paragraph.
+      4. Ensure the questions are targeted and challenging.`;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      const text = response.text || "";
+      const questions = text.split('\n')
+        .map(q => q.trim())
+        .filter(q => q.length > 0)
+        .slice(0, settings.qty)
+        .map(q => ({ q, a: undefined }));
+      
+      if (questions.length === 0) throw new Error("No questions generated");
+      
+      setGeneratedQuestions(questions);
+      setEditorState('EDITING');
+      setChatHistory(prev => [...prev, { 
+        sender: 'AI', 
+        text: `I've generated practice questions for you. AI is ready to help... (select question and generate answer)` 
+      }]);
+    } catch (error) {
+      console.error("Error generating questions:", error);
+      // Fallback mock questions
+      const mockQuestions = Array.from({ length: settings.qty }).map((_, i) => ({
+        q: `How would you handle a situation where you need to prioritize multiple conflicting tasks for a ${role?.title || 'product'} role?`,
+        a: undefined
+      }));
+      setGeneratedQuestions(mockQuestions);
+      setEditorState('EDITING');
+      setChatHistory(prev => [...prev, { 
+        sender: 'AI', 
+        text: `I've generated practice questions for you. AI is ready to help... (select question and generate answer)` 
+      }]);
+    }
+  };
+
+  const handleGenerateAnswer = async (index: number) => {
+    if (isGeneratingAnswer) return;
+    setIsGeneratingAnswer(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const model = "gemini-3-flash-preview";
+      const question = generatedQuestions[index].q;
+      
+      const prompt = `You are an expert interview coach. Provide a high-quality, professional sample answer for the following interview question for a ${role?.title} role at ${role?.company}. 
+      
+      Question: ${question}
+      
+      Role Context:
+      ${role?.jd}
+      ${role?.companyBackground}
+      
+      Requirements:
+      1. Start directly with the answer. Do NOT include any meta-commentary, framing, or analysis of the question (e.g., do not say "This is a great question" or "This question tests...").
+      2. Write as if you are the candidate speaking in the interview.
+      3. Use clear, well-structured paragraphs with proper spacing.
+      4. Be concise but impactful.
+      5. Do NOT use Markdown symbols (e.g., ###, **, -). Use standard HTML tags for formatting if needed, or just plain text with paragraphs.
+      6. Use standard English single quotes (') instead of curved quotes.`;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      const answer = sanitizeText(response.text || "I'm sorry, I couldn't generate an answer at this time.");
+      
+      const updatedQuestions = [...generatedQuestions];
+      updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
+      setGeneratedQuestions(updatedQuestions);
+      
+      // Update editor content via ref
+      if (editorRef.current) {
+        editorRef.current.setContent(answer);
       }
-    }).catch(() => {});
-  }, [role.id]);
+
+      // Add Copilot message
+      setChatHistory(prev => [...prev, { 
+        sender: 'AI', 
+        text: `I’ve generated a suggested answer. Would you like me to refine or improve it?` 
+      }]);
+    } catch (error) {
+      console.error("Error generating answer:", error);
+      // Fallback mock answer if API fails or key is missing
+      const updatedQuestions = [...generatedQuestions];
+      updatedQuestions[index] = { 
+        ...updatedQuestions[index], 
+        a: "This is a sample answer generated based on the STAR framework. Situation: Describe the context. Task: Explain your responsibility. Action: Detail the steps you took. Result: Share the positive outcome." 
+      };
+      setGeneratedQuestions(updatedQuestions);
+    } finally {
+      setIsGeneratingAnswer(false);
+    }
+  };
 
   // Initialize Chat
   useEffect(() => {
     if (chatHistory.length === 0) {
       setChatHistory([{
         sender: 'AI',
-        text: `Welcome to Interview Prep! I can help you build a bank of predicted questions and answers tailored to ${role.company}.`
+        text: "AI is ready to help... (select options and generate first)"
       }]);
     }
   }, []);
@@ -528,71 +1059,162 @@ const InterviewPrepBuilder: React.FC<{ role: TargetRole }> = ({ role }) => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
 
-  const handleGenerateClick = () => {
-    setEditorState('SETTINGS');
-  };
-
-  const handleConfirmGenerate = async () => {
-    setEditorState('GENERATING');
-    const categories = Object.entries(selectedCategories)
-      .filter(([, v]) => v)
-      .map(([k]) => k);
-    try {
-      const result = await generatePrep(role.id, { mode: generationMode, categories });
-      setContent(result.content);
-      setEditorState('EDITING');
-      setChatHistory(prev => [...prev, {
-        sender: 'AI',
-        text: `I've generated your interview prep guide. Edit directly or ask me to refine it.`
-      }]);
-    } catch (err) {
-      console.error('Failed to generate prep', err);
-      setEditorState('EMPTY');
-    }
-  };
-
-  const handleManualAdd = () => {
-    setEditorState('EDITING');
-    setContent(`# Interview Questions\n\nPaste your questions here...`);
-    setChatHistory(prev => [...prev, {
-      sender: 'AI',
-      text: `Ready for your input. Paste your existing questions on the left, and I can help you refine them.`
-    }]);
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || generatedQuestions.length === 0) return;
     const userMsg = chatInput;
+    
+    // Include quoted text in history if present
+    const historyEntry = quotedText 
+      ? { sender: 'USER' as const, text: userMsg, quote: quotedText }
+      : { sender: 'USER' as const, text: userMsg };
+
+    setChatHistory(prev => [...prev, historyEntry]);
+    setChatInput('');
+    
+    if (isAIEditMode && quotedText) {
+      setIsGeneratingAI(true);
+      
+      // Visual feedback: Highlight selection to indicate processing
+      if (editorRef.current) {
+        editorRef.current.setHighlight('#e0e0e0');
+      }
+
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const model = "gemini-3-flash-preview";
+        const prompt = `You are an expert editor. Revise the following text based on the user's instruction.
+        
+        Original Text:
+        "${quotedText}"
+        
+        User Instruction:
+        "${userMsg}"
+        
+        Requirements:
+        1. Return ONLY the revised text.
+        2. Maintain the original tone unless instructed otherwise.
+        3. Do not include any explanations or conversational filler.
+        4. IMPORTANT: Preserve the original formatting structure. If the original text was a list item, the revised text should be a list item. If it was a heading, keep it as a heading.
+        5. Do NOT use Markdown symbols (e.g., ###, **, -).
+        6. Use standard English single quotes (') instead of curved quotes.`;
+
+        const response = await ai.models.generateContent({
+          model,
+          contents: [{ parts: [{ text: prompt }] }],
+        });
+
+        const revisedText = response.text || "";
+        
+        // Directly replace selection in the editor
+        if (editorRef.current) {
+          // Unset highlight first to ensure new text isn't highlighted
+          editorRef.current.setHighlight();
+          editorRef.current.replaceSelection(revisedText);
+          
+          // Trigger auto-save indicator
+          setSaveStatus('saving');
+          setTimeout(() => {
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
+          }, 1000);
+        }
+
+        setChatHistory(prev => [...prev, { 
+          sender: 'AI', 
+          text: "I've updated the text based on your request." 
+        }]);
+      } catch (error) {
+        console.error("AI Revision failed:", error);
+        // Remove highlight if error
+        if (editorRef.current) {
+          editorRef.current.setHighlight();
+        }
+        setChatHistory(prev => [...prev, { 
+          sender: 'AI', 
+          text: "I'm sorry, I encountered an error while trying to revise the text. Please try again." 
+        }]);
+      } finally {
+        setIsGeneratingAI(false);
+        setQuotedText(null);
+        setIsAIEditMode(false);
+      }
+    } else {
+      setQuotedText(null); // Clear quote after sending
+      setTimeout(() => {
+        setChatHistory(prev => [...prev, { 
+          sender: 'AI', 
+          text: "I've analyzed your request for this specific question. I can help you refine your answer or provide more context. What would you like to do next?" 
+        }]);
+      }, 1000);
+    }
+  };
+
+  const handleQuickPrompt = (prompt: string) => {
+    if (generatedQuestions.length === 0) return;
+    const userMsg = prompt;
     setChatHistory(prev => [...prev, { sender: 'USER', text: userMsg }]);
     setChatInput('');
-    try {
-      const result = await chatPrep(role.id, userMsg, content);
-      setContent(result.content);
-      setChatHistory(prev => [...prev, { sender: 'AI', text: result.ai_message }]);
-    } catch (err) {
-      console.error('Chat failed', err);
-      setChatHistory(prev => [...prev, { sender: 'AI', text: 'Sorry, something went wrong.' }]);
-    }
+    setTimeout(() => {
+      setChatHistory(prev => [...prev, { 
+        sender: 'AI', 
+        text: "I've analyzed your request for this specific question. I can help you refine your answer or provide more context. What would you like to do next?" 
+      }]);
+    }, 1000);
   };
 
   const renderToolbar = () => {
-    if (editorState !== 'EDITING') return null;
+    if (editorState !== 'EDITING' || selectedQuestionIndex !== null) return null;
+    
     return (
-      <div className="px-6 py-4 border-b border-[#E3E3E3] flex items-center justify-between bg-[#FAFAFA]">
-         <div className="flex items-center gap-2">
-           <div className="w-3 h-3 rounded-full bg-[#E3E3E3]"></div>
-           <div className="w-3 h-3 rounded-full bg-[#E3E3E3]"></div>
-           <span className="text-xs font-medium text-[#444746] ml-2">Interview_Prep_Bank.md</span>
+      <div className="px-6 py-4 border-b border-[#E3E3E3] flex items-center justify-between bg-white flex-shrink-0">
+         <div className="flex items-center gap-4">
+           <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F0F4F9] rounded-lg text-sm font-bold text-[#1F1F1F]">
+             <Briefcase className="w-4 h-4 text-[#0B57D0]" />
+             {role?.title} @ {role?.company}
+           </div>
+           {savedToWorkspace && (
+             <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 animate-in fade-in duration-300">
+               <Check className="w-3.5 h-3.5" /> Saved to Workspace
+             </div>
+           )}
          </div>
+         
          <div className="flex items-center gap-2">
-           <button className="p-2 text-[#444746] hover:bg-[#E3E3E3] rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5">
-             <Check className="w-3.5 h-3.5" /> Auto-saved
+           <button 
+             onClick={generateQuestions}
+             className="p-2 text-[#444746] hover:bg-[#F0F4F9] rounded-lg transition-colors flex items-center gap-1.5 text-sm font-bold"
+           >
+             <RefreshCw className="w-4 h-4" /> Regenerate
            </button>
-           <div className="h-4 w-px bg-[#C4C7C5] mx-1"></div>
-           <button className="p-2 text-[#444746] hover:bg-[#E3E3E3] rounded-lg transition-colors flex items-center gap-1.5 text-sm font-bold">
-             <Download className="w-4 h-4" /> Download
+           <button 
+             onClick={() => {
+               if (onSaveQuestion && role) {
+                 generatedQuestions.forEach((q, idx) => {
+                   onSaveQuestion({
+                     id: `saved-${Date.now()}-${idx}`,
+                     roleId: role.id,
+                     type: settings.types[0] || 'General',
+                     question: q.q,
+                     answer: q.a,
+                     lastModified: new Date().toISOString(),
+                     savedAt: new Date().toISOString(),
+                     source: 'MOCK_PREP'
+                   });
+                 });
+               }
+               setSavedToWorkspace(true);
+               setTimeout(() => setSavedToWorkspace(false), 3000);
+             }}
+             className="p-2 text-[#444746] hover:bg-[#F0F4F9] rounded-lg transition-colors flex items-center gap-1.5 text-sm font-bold"
+           >
+             <Save className="w-4 h-4" /> Save All
            </button>
+           <div className="flex items-center gap-2 text-xs font-bold text-[#444746] px-2 min-w-[80px] justify-end">
+             {saveStatus === 'saving' && <><Loader2 className="w-3 h-3 animate-spin" /> Saving...</>}
+             {saveStatus === 'saved' && <><Check className="w-3 h-3" /> Saved</>}
+             {saveStatus === 'error' && <><X className="w-3 h-3 text-red-500" /> Offline — changes will sync when online</>}
+           </div>
          </div>
       </div>
     );
@@ -600,233 +1222,593 @@ const InterviewPrepBuilder: React.FC<{ role: TargetRole }> = ({ role }) => {
 
   const renderEditorContent = () => {
     switch (editorState) {
-      case 'GENERATING':
-        return (
-          <div className="h-full flex flex-col items-center justify-center">
-            <Loader2 className="w-10 h-10 text-[#0B57D0] animate-spin mb-4" />
-            <p className="text-[#1F1F1F] font-medium">AI is generating interview questions...</p>
-            <p className="text-sm text-[#444746] mt-2">Analyzing job description and common patterns</p>
-          </div>
-        );
       case 'EMPTY':
+        const isValid = role && settings.types.length > 0;
+        
         return (
-          <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
-             <div className="max-w-2xl w-full">
-                <div className="w-16 h-16 bg-[#F0F4F9] rounded-full flex items-center justify-center mx-auto mb-6"><FileQuestion className="w-8 h-8 text-[#0B57D0]" /></div>
-                <h2 className="text-2xl font-bold text-[#1F1F1F] mb-3">Interview Prep Bank</h2>
-                <p className="text-[#444746] mb-10 max-w-lg mx-auto">Build a comprehensive list of predicted questions and structure your answers for <b>{role.title}</b>.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
-                   <button onClick={handleGenerateClick} className="group bg-white p-6 rounded-2xl border border-[#E3E3E3] hover:border-[#0B57D0] hover:shadow-md transition-all relative overflow-hidden">
-                      <div className="flex items-center gap-3 mb-3"><div className="p-2 bg-[#F0F4F9] rounded-lg group-hover:scale-110 transition-transform text-[#0B57D0]"><Sparkles className="w-5 h-5" /></div><h3 className="font-bold text-[#1F1F1F]">Generate from Scratch</h3></div>
-                      <p className="text-sm text-[#444746] leading-relaxed">Generate targeted questions across 5 core categories based on the JD.</p>
-                   </button>
-                   <button onClick={handleManualAdd} className="group bg-white p-6 rounded-2xl border border-[#E3E3E3] hover:border-[#0B57D0] hover:shadow-md transition-all relative overflow-hidden">
-                      <div className="flex items-center gap-3 mb-3"><div className="p-2 bg-[#F0F4F9] rounded-lg group-hover:scale-110 transition-transform text-[#0B57D0]"><Upload className="w-5 h-5" /></div><h3 className="font-bold text-[#1F1F1F]">Build from Existing</h3></div>
-                      <p className="text-sm text-[#444746] leading-relaxed">Upload or paste your existing question bank to refine and structure it.</p>
-                   </button>
-                </div>
-             </div>
-          </div>
-        );
-      case 'SETTINGS':
-        return (
-          <div className="h-full flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in-95 duration-200">
-             <div className="max-w-lg w-full bg-white p-8 rounded-[24px] shadow-sm border border-[#E3E3E3]">
-                <div className="flex items-center gap-2 mb-6">
-                  <button onClick={() => setEditorState('EMPTY')} className="p-2 -ml-2 hover:bg-[#F0F4F9] rounded-full transition-colors"><ChevronLeft className="w-5 h-5 text-[#444746]" /></button>
-                  <h3 className="text-xl font-bold text-[#1F1F1F]">Configure Generation</h3>
-                </div>
+          <div className="h-full flex flex-col animate-in fade-in duration-500">
+            <div className="max-w-5xl mx-auto w-full p-6">
+              
+              {/* Header & Guidance Text */}
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-[#1F1F1F] mb-2">Mock Interview Prep</h2>
+                <p className="text-[17px] text-[#444746] font-medium">
+                  Define your focus to generate targeted mock questions.
+                </p>
+              </div>
 
-                <div className="mb-8">
-                  <h4 className="text-sm font-bold text-[#444746] uppercase tracking-wider mb-3">Output Mode</h4>
-                  <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-6">
+                {/* 1. Select Role */}
+                <div className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm w-full flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-[#1F1F1F]">Select a role</h3>
+                    <span className="text-[10px] text-[#0B57D0] font-bold uppercase tracking-wider bg-[#E8F0FE] px-2 py-0.5 rounded">Required</span>
+                  </div>
+                  <div className="relative flex-1 flex flex-col justify-center">
                     <button 
-                      onClick={() => setGenerationMode('QUESTIONS')}
-                      className={`p-3 rounded-xl border text-left transition-all ${generationMode === 'QUESTIONS' ? 'bg-[#F0F4F9] border-[#0B57D0] ring-1 ring-[#0B57D0]' : 'border-[#E3E3E3] hover:border-[#C4C7C5]'}`}
+                      onClick={() => setShowRoleSelector(!showRoleSelector)}
+                      className="w-full flex items-center justify-between p-3.5 bg-[#F0F4F9] border border-[#E3E3E3] rounded-xl text-sm font-medium text-[#1F1F1F] hover:border-[#0B57D0] transition-all"
                     >
-                      <span className="block font-bold text-[#1F1F1F] text-sm">Questions Only</span>
-                      <span className="text-xs text-[#444746]">Just the list</span>
+                      <div className="flex items-center gap-2 truncate pr-4">
+                        <Briefcase className="w-4 h-4 text-[#444746] flex-shrink-0" />
+                        <span className="truncate">
+                          {role ? `${role.title} — ${role.company}` : <span className="text-[#444746]">Select from My Roles or Create new</span>}
+                        </span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-[#444746] flex-shrink-0 transition-transform ${showRoleSelector ? 'rotate-180' : ''}`} />
                     </button>
-                    <button 
-                      onClick={() => setGenerationMode('QA')}
-                      className={`p-3 rounded-xl border text-left transition-all ${generationMode === 'QA' ? 'bg-[#F0F4F9] border-[#0B57D0] ring-1 ring-[#0B57D0]' : 'border-[#E3E3E3] hover:border-[#C4C7C5]'}`}
-                    >
-                      <span className="block font-bold text-[#1F1F1F] text-sm">Questions + Answers</span>
-                      <span className="text-xs text-[#444746]">With frameworks</span>
-                    </button>
+                    
+                    {showRoleSelector && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E3E3E3] rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="max-h-[240px] overflow-y-auto">
+                          {roles.length === 0 ? (
+                            <div className="p-4 text-center text-sm text-[#444746]">No roles found.</div>
+                          ) : (
+                            roles.map(r => (
+                              <button
+                                key={r.id}
+                                onClick={() => {
+                                  onSelectRole(r);
+                                  setShowRoleSelector(false);
+                                }}
+                                className={`w-full text-left px-4 py-3 text-sm hover:bg-[#F0F4F9] transition-colors flex items-center justify-between ${role?.id === r.id ? 'bg-[#E8F0FE] text-[#0B57D0] font-bold' : 'text-[#1F1F1F]'}`}
+                              >
+                                <div className="truncate pr-4">
+                                  <p className="font-bold truncate">{r.title}</p>
+                                  <p className="text-xs opacity-70 truncate">{r.company}</p>
+                                </div>
+                                {role?.id === r.id && <Check className="w-4 h-4 flex-shrink-0" />}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => {
+                            onSelectRole(null);
+                            onNavigate('ROLES');
+                          }}
+                          className="w-full p-3 border-t border-[#E3E3E3] bg-[#FAFAFA] text-[#0B57D0] text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#F0F4F9] transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> Create new role
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="mb-8">
-                  <h4 className="text-sm font-bold text-[#444746] uppercase tracking-wider mb-3">Coverage Categories</h4>
-                  <div className="space-y-2">
-                    {CATEGORIES.map(cat => (
-                      <label key={cat.id} className="flex items-start gap-3 p-3 rounded-xl border border-[#E3E3E3] hover:bg-[#FAFAFA] cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedCategories[cat.id as keyof typeof selectedCategories]}
-                          onChange={(e) => setSelectedCategories(prev => ({ ...prev, [cat.id]: e.target.checked }))}
-                          className="mt-1 w-4 h-4 text-[#0B57D0] rounded border-gray-300 focus:ring-[#0B57D0]" 
-                        />
-                        <div>
-                          <span className="block font-bold text-[#1F1F1F] text-sm">{cat.label}</span>
-                          <span className="text-xs text-[#444746]">{cat.description}</span>
-                        </div>
-                      </label>
+                {/* 2. Question Types */}
+                <div className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm w-full">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-[#1F1F1F]">Question types</h3>
+                    <span className="text-[10px] text-[#0B57D0] font-bold uppercase tracking-wider bg-[#E8F0FE] px-2 py-0.5 rounded">Select at least 1</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {QUESTION_TYPES.map(type => (
+                      <div 
+                        key={type.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all h-full ${settings.types.includes(type.id) ? 'bg-[#F0F4F9] border-[#0B57D0]' : 'bg-white border-[#E3E3E3] hover:border-[#C4C7C5]'}`}
+                      >
+                        <button
+                          onClick={() => {
+                            const newTypes = settings.types.includes(type.id) 
+                              ? settings.types.filter(t => t !== type.id)
+                              : [...settings.types, type.id];
+                            onUpdateSettings({ ...settings, types: newTypes });
+                          }}
+                          className="flex-1 flex items-center gap-3 text-left h-full"
+                        >
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${settings.types.includes(type.id) ? 'bg-[#0B57D0] border-[#0B57D0]' : 'bg-white border-[#C4C7C5]'}`}>
+                            {settings.types.includes(type.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-[#1F1F1F] truncate">{type.label}</p>
+                            <p className="text-[11px] text-[#444746] truncate">{type.description.split(',')[0]}</p>
+                          </div>
+                        </button>
+                        <button 
+                          onClick={() => setShowInfo(type.id)}
+                          className="p-1.5 text-[#444746] hover:bg-[#E3E3E3] rounded-full transition-colors flex-shrink-0"
+                        >
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
 
-                <button 
-                  onClick={handleConfirmGenerate}
-                  className="w-full py-3 bg-[#0B57D0] text-white rounded-full font-bold shadow-lg hover:bg-[#0B67EF] transition-transform active:scale-95"
-                >
-                  Generate Interview Guide
-                </button>
-             </div>
-          </div>
-        );
-      case 'EDITING':
-        return (
-          <div className="max-w-[800px] mx-auto bg-white min-h-[1000px] shadow-sm border border-[#E3E3E3] p-12 transition-all">
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onBlur={() => { if (content) updatePrep(role.id, content).catch(() => {}); }}
-              className="w-full h-full min-h-[900px] outline-none resize-none font-mono text-sm leading-relaxed text-[#1F1F1F]"
-              placeholder="Interview prep content..."
-              spellCheck={false}
-            />
-          </div>
-        );
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)] animate-in fade-in duration-500">
-      <div className="lg:col-span-8 flex flex-col h-full min-h-0">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm flex flex-col h-full overflow-hidden">
-          {renderToolbar()}
-          <div className="flex-1 overflow-y-auto p-8 bg-[#FAFAFA]">{renderEditorContent()}</div>
-        </div>
-      </div>
-      <div className="lg:col-span-4 flex flex-col h-full min-h-0">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm flex flex-col h-full overflow-hidden">
-           <div className="px-5 py-4 border-b border-[#E3E3E3] bg-white flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0B57D0]" /><h3 className="text-sm font-bold text-[#1F1F1F]">Chat</h3></div>
-           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
-             {chatHistory.map((msg, idx) => (
-               <div key={idx} className={`flex gap-3 ${msg.sender === 'USER' ? 'flex-row-reverse' : ''}`}>
-                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.sender === 'USER' ? 'bg-[#1F1F1F] text-white' : 'bg-[#E8F0FE] text-[#0B57D0]'}`}>{msg.sender === 'USER' ? <User className="w-4 h-4" /> : <Bot className="w-5 h-5" />}</div>
-                 <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed max-w-[85%] border shadow-sm ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-[#E8F0FE] border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>{msg.text}</div>
-               </div>
-             ))}
-             <div ref={chatEndRef} />
-           </div>
-           <div className="p-4 bg-white border-t border-[#E3E3E3]">
-             <form onSubmit={handleSendMessage} className="relative">
-               <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={editorState === 'EDITING' ? "Type instructions for AI..." : "AI is ready to help..."} disabled={editorState !== 'EDITING'} className="w-full pl-4 pr-12 py-3 bg-[#F0F4F9] border-none rounded-full text-sm text-[#1F1F1F] placeholder-[#444746] focus:ring-2 focus:ring-[#0B57D0] outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all" />
-               <button type="submit" disabled={!chatInput.trim() || editorState !== 'EDITING'} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-[#1F1F1F] text-white rounded-full disabled:opacity-30 hover:bg-[#444746] transition-all"><Send className="w-3.5 h-3.5" /></button>
-             </form>
-             {editorState === 'EDITING' && (
-                <div className="mt-3 flex flex-wrap gap-2 px-1">
-                  <span className="text-xs font-bold text-[#444746] self-center mr-1">Try:</span>
-                  {["Add more case questions", "Make answers concise", "Increase difficulty"].map(s => (
-                    <button key={s} onClick={() => setChatInput(s)} className="text-[10px] sm:text-xs bg-white border border-[#E3E3E3] hover:border-[#0B57D0] hover:text-[#0B57D0] text-[#444746] px-2.5 py-1 rounded-full transition-colors whitespace-nowrap">{s}</button>
-                  ))}
+                {/* 3. Generation count */}
+                <div className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm w-full flex flex-col justify-center">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-[#1F1F1F] mb-1">Count</h3>
+                      <p className="text-xs text-[#444746]">Max 10</p>
+                    </div>
+                    <div className="flex items-center bg-[#F0F4F9] rounded-xl p-1 border border-[#E3E3E3]">
+                      <button 
+                        onClick={() => onUpdateSettings({ ...settings, qty: Math.max(1, settings.qty - 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white transition-colors text-[#1F1F1F]"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <div className="px-3 flex flex-col items-center min-w-[40px]">
+                        <span className="font-bold text-base leading-none">{settings.qty}</span>
+                      </div>
+                      <button 
+                        onClick={() => onUpdateSettings({ ...settings, qty: Math.min(10, settings.qty + 1) })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white transition-colors text-[#1F1F1F]"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-             )}
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+              </div>
 
-const Workspace: React.FC<WorkspaceProps> = ({ workspace }) => {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('TARGET');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [roleData, setRoleData] = useState<TargetRole>(workspace);
-
-  // Sync props to state if workspace changes
-  useEffect(() => {
-    setRoleData(workspace);
-  }, [workspace]);
-
-  const tabs = [
-    { id: 'TARGET', label: 'Context', icon: Briefcase },
-    { id: 'INTERVIEW_QUESTIONS', label: 'Interview Prep', icon: ClipboardList },
-    { id: 'MOCK_INTERVIEW', label: 'Live Interview', icon: Video },
-  ];
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'TARGET':
-        return <RoleContextBuilder role={roleData} onUpdate={setRoleData} />;
-      case 'INTERVIEW_QUESTIONS':
-        return <InterviewPrepBuilder role={roleData} />;
-      case 'MOCK_INTERVIEW':
-        return <MockInterview workspace={roleData} />;
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center min-h-[500px] bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm">
-            <div className="w-20 h-20 bg-[#F0F4F9] rounded-full flex items-center justify-center mb-6">
-              <Lightbulb className="w-10 h-10 text-[#C4C7C5]" />
+              {/* Generate Button */}
+              <div className="flex flex-col items-center pt-8">
+                <button 
+                  onClick={generateQuestions}
+                  disabled={!isValid}
+                  className="w-full max-w-[280px] py-3.5 bg-[#0B57D0] text-white rounded-full font-bold text-base shadow-md hover:shadow-lg hover:bg-[#0B67EF] disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" /> Generate
+                </button>
+                
+                {!isValid && (
+                  <p className="text-center text-xs text-red-500 font-medium mt-3">
+                    {!role ? "Please select a role." : "Please select at least one question type."}
+                  </p>
+                )}
+              </div>
             </div>
-            <p className="text-xl font-bold text-[#1F1F1F]">{tabs.find(t => t.id === activeTab)?.label} - Tool Coming Soon</p>
-            <p className="text-base text-[#444746] mt-2">We are working on this module.</p>
+
+            {/* Info Modal */}
+            {showInfo && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl p-8 max-w-[560px] w-full shadow-2xl animate-in zoom-in-95 duration-200 relative">
+                  <button 
+                    onClick={() => setShowInfo(null)}
+                    className="absolute top-4 right-4 p-2 text-[#444746] hover:bg-[#F0F4F9] rounded-full transition-colors"
+                  >
+                    <Plus className="w-5 h-5 rotate-45" />
+                  </button>
+                  
+                  <h4 className="text-xl font-bold text-[#1F1F1F] mb-4">
+                    {QUESTION_TYPES.find(t => t.id === showInfo)?.label}
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <p className="text-sm text-[#1F1F1F] leading-relaxed">
+                      {QUESTION_TYPES.find(t => t.id === showInfo)?.explanation}
+                    </p>
+                    
+                    <div className="bg-[#F8F9FA] p-4 rounded-xl border border-[#E3E3E3]">
+                      <p className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">Example Question</p>
+                      <p className="text-sm text-[#444746] italic leading-relaxed">
+                        {QUESTION_TYPES.find(t => t.id === showInfo)?.example}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex justify-end">
+                    <button 
+                      onClick={() => setShowInfo(null)}
+                      className="px-6 py-2 bg-[#0B57D0] text-white rounded-full font-bold hover:bg-[#0B67EF] transition-all"
+                    >
+                      Got it
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
+
+      case 'GENERATING':
+        return (
+          <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+            <div className="relative mb-8">
+              <Loader2 className="w-16 h-16 text-[#0B57D0] animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-[#0B57D0] animate-pulse" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-[#1F1F1F] mb-2">Generating Questions...</h3>
+            <p className="text-[#444746] max-w-xs mx-auto">AI is analyzing your role context and crafting targeted interview questions.</p>
+          </div>
+        );
+
+      case 'EDITING':
+        if (selectedQuestionIndex !== null) {
+          const currentQuestion = generatedQuestions[selectedQuestionIndex];
+          
+          return (
+            <div ref={workspaceContainerRef} className="h-full flex flex-col animate-in fade-in slide-in-from-right-4 duration-300 selection:bg-[#FFF9C4] selection:text-[#1F1F1F] [&_*]:outline-none [&_*]:ring-0">
+              <SelectionTooltip onQuote={handleQuote} onAIEdit={handleAIEdit} containerRef={workspaceContainerRef} />
+              {/* Detail View Header - Minimalist */}
+              <div className="flex items-center justify-between mb-6 pt-1">
+                <button 
+                  onClick={() => {
+                    if (initialQuestionId) {
+                      onNavigate('QUESTION_BANK');
+                    } else {
+                      setSelectedQuestionIndex(null);
+                      setIsEditingQuestion(false);
+                    }
+                  }}
+                  className="flex items-center gap-1 text-sm font-medium text-[#444746] hover:text-[#0B57D0] transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" /> {initialQuestionId ? 'Back to Question Bank' : 'Back to list'}
+                </button>
+                
+                <div className="flex items-center gap-2">
+                  {/* Save button removed */}
+                </div>
+              </div>
+
+              {/* Detail View Content - Document Style */}
+              <div className="flex-1 flex flex-col space-y-4 max-w-3xl mx-auto w-full pb-6">
+                {/* Question Area - Document Feel */}
+                <section className="bg-[#E8F0FE] p-5 rounded-xl border border-[#D3E3FD] shadow-sm relative group flex-shrink-0 focus:outline-none">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[14px] font-medium text-[#1F1F1F] leading-relaxed flex-1 pr-4">
+                      {isEditingQuestion ? (
+                        <textarea 
+                          className="w-full p-0 text-[14px] font-medium text-[#1F1F1F] leading-relaxed bg-transparent border-none focus:ring-0 outline-none resize-none min-h-[60px]"
+                          value={tempQuestionText}
+                          onChange={(e) => setTempQuestionText(e.target.value)}
+                          autoFocus
+                        />
+                      ) : (
+                        currentQuestion.q
+                      )}
+                    </p>
+                    
+                    <div className="flex-shrink-0 flex flex-col gap-2">
+                      {!isEditingQuestion ? (
+                        <button 
+                          onClick={() => {
+                            setTempQuestionText(currentQuestion.q);
+                            setIsEditingQuestion(true);
+                          }}
+                          className="w-8 h-8 flex items-center justify-center text-[#444746] hover:text-[#0B57D0] transition-colors"
+                          title="Edit"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => {
+                              const updated = [...generatedQuestions];
+                              updated[selectedQuestionIndex] = { ...updated[selectedQuestionIndex], q: tempQuestionText };
+                              setGeneratedQuestions(updated);
+                              setIsEditingQuestion(false);
+                            }}
+                            className="px-3 py-1 bg-[#1F1F1F] text-white rounded-full text-[11px] font-bold hover:bg-[#444746] transition-all"
+                          >
+                            Save
+                          </button>
+                          <button 
+                            onClick={() => setIsEditingQuestion(false)}
+                            className="px-3 py-1 bg-white border border-[#E3E3E3] text-[#444746] rounded-full text-[11px] font-bold hover:bg-[#F0F4F9] transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </section>
+                
+                {/* Answer / Notes Area */}
+                <section className="flex-1 flex flex-col space-y-3 min-h-[400px] overflow-hidden">
+                  <div className="flex items-center justify-between px-1 flex-shrink-0">
+                    <label className="text-[10px] font-bold text-[#444746] uppercase tracking-widest opacity-60">Notes</label>
+                    {(isGeneratingAnswer || isGeneratingAI) && (
+                      <span className="flex items-center gap-2 text-[11px] font-bold text-[#0B57D0] animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" /> AI is thinking...
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 flex flex-col bg-white rounded-xl border border-[#E3E3E3] shadow-sm min-h-0 overflow-hidden relative">
+                    {isGeneratingAI && (
+                      <div className="absolute inset-0 z-10 bg-white/40 backdrop-blur-[1px] flex items-center justify-center animate-in fade-in duration-200">
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-8 h-8 text-[#0B57D0] animate-spin" />
+                          <span className="text-xs font-bold text-[#0B57D0]">AI Editing...</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {isRecordingInterface ? (
+                      <RecordingWorkspace />
+                    ) : isGeneratingAnswer && !currentQuestion.a ? (
+                      <div className="flex-1 flex flex-col items-center justify-center animate-pulse p-8">
+                        <Loader2 className="w-8 h-8 text-[#0B57D0] animate-spin mb-4" />
+                        <p className="text-sm font-medium text-[#444746]">Crafting a professional response...</p>
+                      </div>
+                    ) : currentQuestion.a ? (
+                      <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex-1 overflow-y-auto p-4">
+                          <RichTextEditor
+                            ref={editorRef}
+                            content={currentQuestion.a}
+                            onChange={(content) => {
+                              const updated = [...generatedQuestions];
+                              updated[selectedQuestionIndex] = { ...updated[selectedQuestionIndex], a: content };
+                              setGeneratedQuestions(updated);
+                            }}
+                            placeholder="Write your answer or notes here..."
+                            onAskCoPilot={handleQuote}
+                            saveStatus={saveStatus}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 overflow-y-auto">
+                        <div className="w-16 h-16 bg-[#F0F4F9] rounded-full flex items-center justify-center mb-6">
+                          <Lightbulb className="w-8 h-8 text-[#0B57D0]" />
+                        </div>
+                        <h4 className="text-lg font-bold text-[#1F1F1F] mb-2">Ready to prepare?</h4>
+                        <p className="text-sm text-[#444746] mb-8 max-w-xs">Get an AI-suggested answer or start drafting your own notes below.</p>
+                        <div className="flex flex-col items-center gap-3 w-full max-w-sm">
+                          <button 
+                            onClick={() => handleGenerateAnswer(selectedQuestionIndex)}
+                            disabled={isGeneratingAnswer}
+                            className="w-full px-6 py-3 bg-[#0B57D0] text-white rounded-full font-bold text-sm shadow-md hover:bg-[#0B67EF] transition-all flex items-center justify-center gap-2"
+                          >
+                            {isGeneratingAnswer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                            Generate Answer
+                          </button>
+                          <button 
+                            onClick={handleTryAnswer}
+                            className="w-full px-6 py-3 border border-[#E3E3E3] rounded-full font-bold text-sm transition-all flex items-center justify-center gap-2 bg-white text-[#444746] hover:bg-[#F0F4F9]"
+                          >
+                            <Mic className="w-4 h-4" />
+                            Try Answer
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="max-w-4xl mx-auto w-full bg-white rounded-xl border border-[#E3E3E3] shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {generatedQuestions.map((item, idx) => (
+              <div 
+                key={idx} 
+                onClick={() => {
+                  setSelectedQuestionIndex(idx);
+                  setChatHistory([{
+                    sender: 'AI',
+                    text: `I'm here to help you with this question. You can ask me to generate an answer, evaluate your notes, or provide tips.`
+                  }]);
+                }}
+                className={`group relative py-6 px-6 sm:px-8 transition-all cursor-pointer hover:bg-[#F8F9FA] flex items-center min-h-[130px] ${
+                  idx !== generatedQuestions.length - 1 ? 'border-b border-[#E3E3E3]' : ''
+                }`}
+              >
+                <div className="flex items-start gap-4 flex-1 pr-24 sm:pr-32">
+                  <div className="mt-1 w-6 h-6 rounded-full bg-[#F0F4F9] text-[#444746] text-xs font-bold flex items-center justify-center flex-shrink-0 group-hover:bg-[#0B57D0] group-hover:text-white transition-colors">
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[#1F1F1F] text-[17px] font-medium leading-relaxed group-hover:text-[#0B57D0] transition-colors">
+                      {item.q}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Action Buttons (Right Side) */}
+                <div className="absolute right-8 sm:right-12 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const updated = [...generatedQuestions];
+                      updated.splice(idx, 1);
+                      setGeneratedQuestions(updated);
+                      if (updated.length === 0) setEditorState('SETTINGS');
+                    }}
+                    className="w-10 h-10 flex items-center justify-center text-[#444746] hover:bg-[#FFDAD6] hover:text-[#B3261E] rounded-lg transition-colors"
+                    title="Remove"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Toggle save logic (visual only for now)
+                      const btn = e.currentTarget;
+                      const icon = btn.querySelector('svg');
+                      if (icon?.classList.contains('fill-current')) {
+                        icon.classList.remove('fill-current');
+                        btn.classList.remove('text-[#0B57D0]');
+                        btn.classList.add('text-[#444746]');
+                      } else {
+                        icon?.classList.add('fill-current');
+                        btn.classList.remove('text-[#444746]');
+                        btn.classList.add('text-[#0B57D0]');
+                      }
+                    }}
+                    className="w-10 h-10 flex items-center justify-center text-[#444746] hover:bg-[#E8F0FE] hover:text-[#0B57D0] rounded-lg transition-colors"
+                    title="Save"
+                  >
+                    <Bookmark className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                {/* Answer Hint in Bottom Right (Optional, keeping for visual feedback if answered) */}
+                {item.a && (
+                  <div className="absolute bottom-2 right-20 flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-emerald-600 bg-emerald-50 border border-emerald-100">
+                      Answered
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
+  const isSetupMode = editorState === 'EMPTY';
+
   return (
-    <div className="flex items-start h-full">
-      {/* Collapsible Sidebar Navigation - Sticky */}
-      <div 
-        className={`mr-8 py-4 transition-all duration-300 ease-in-out lg:sticky lg:top-24 flex flex-col gap-2 ${
-          isSidebarCollapsed ? 'w-20' : 'w-64'
-        }`}
-      >
-        {/* Toggle Button moved to top-left aligned with Nav items */}
-        <div className={`flex mb-2 ${isSidebarCollapsed ? 'justify-center' : 'justify-start px-2'}`}>
-          <button 
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="p-2 text-[#444746] hover:bg-[#E3E3E3] rounded-lg transition-colors"
-            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-             {isSidebarCollapsed ? (
-               <ChevronsRight className="w-5 h-5" />
-             ) : (
-               <ChevronsLeft className="w-5 h-5" />
-             )}
-          </button>
-        </div>
-
-        <div className="space-y-1">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as WorkspaceTab)}
-              title={isSidebarCollapsed ? tab.label : ''}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-full text-sm font-bold transition-all overflow-hidden whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-[#D3E3FD] text-[#041E49] shadow-sm'
-                  : 'text-[#444746] hover:bg-[#F0F4F9] hover:text-[#1F1F1F]'
-              } ${isSidebarCollapsed ? 'justify-center px-0' : ''}`}
-            >
-              <tab.icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[#041E49]' : 'text-[#444746]'}`} />
-              {!isSidebarCollapsed && <span>{tab.label}</span>}
-            </button>
-          ))}
-        </div>
+    <div className="h-full animate-in fade-in duration-500 flex flex-col min-h-0">
+      <div className={`${isSetupMode ? '' : 'bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)]'} flex flex-col overflow-hidden flex-1 ${cardHeightClass}`}>
+        {renderToolbar()}
+        
+        {selectedQuestionIndex === null ? (
+          <div className={`flex-1 overflow-y-auto ${isSetupMode ? '' : 'p-5 bg-[#FAFAFA]'}`}>
+            {renderEditorContent()}
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            {/* Left Content */}
+            <div className="flex-1 overflow-y-auto p-5 bg-white border-b lg:border-b-0 lg:border-r border-[#E3E3E3]">
+              {renderEditorContent()}
+            </div>
+            
+            {/* Right Chat (Copilot) */}
+            <div className="w-full lg:w-[35%] flex flex-col bg-[#FAFAFA]">
+              <div className="p-4 border-b border-[#E3E3E3] bg-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#0B57D0]" />
+                <h3 className="text-sm font-bold text-[#1F1F1F]">Copilot</h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {chatHistory.map((msg, idx) => (
+                  <div key={idx} className={`flex gap-3 ${msg.sender === 'USER' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.sender === 'USER' ? 'bg-[#1F1F1F] text-white' : 'bg-[#E8F0FE] text-[#0B57D0]'}`}>
+                      {msg.sender === 'USER' ? <User className="w-4 h-4" /> : <Bot className="w-5 h-5" />}
+                    </div>
+                    <div className="flex flex-col gap-2 max-w-[85%]">
+                      {msg.sender === 'USER' && (msg as any).quote && (
+                        <div className="bg-[#F2F2F2] border-l-2 border-[#0B57D0] p-2 rounded text-[10px] text-[#444746] italic line-clamp-2">
+                          "{ (msg as any).quote }"
+                        </div>
+                      )}
+                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-white border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>
+                        {msg.text}
+                      </div>
+                      {((idx === 0 && msg.sender === 'AI') || msg.text.includes("I’ve transcribed your recording")) && (
+                        <div className="flex flex-col gap-1 mt-1">
+                          {["Make it concise", "Add STAR format", "Sound more confident"].map(s => (
+                            <button key={s} onClick={() => handleQuickPrompt(s)} className="text-xs bg-[#F8F9FA] hover:bg-[#E8F0FE] text-[#444746] px-3 py-1.5 rounded-md transition-colors text-left w-fit">
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+              <div className="p-4 bg-white border-t border-[#E3E3E3]">
+                {quotedText && (
+                  <div className="mb-3 bg-[#F0F4F9] border border-[#D3E3FD] rounded-xl p-3 relative animate-in slide-in-from-bottom-2 duration-200">
+                    <div className="flex items-start gap-2 pr-6">
+                      <Quote className="w-3.5 h-3.5 text-[#0B57D0] mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs text-[#444746] leading-relaxed ${!isQuoteExpanded ? 'line-clamp-2' : ''}`}>
+                          {quotedText}
+                        </p>
+                        {quotedText.length > 100 && (
+                          <button 
+                            onClick={() => setIsQuoteExpanded(!isQuoteExpanded)}
+                            className="text-[10px] font-bold text-[#0B57D0] mt-1 hover:underline"
+                          >
+                            {isQuoteExpanded ? 'Show less' : 'Show more'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setQuotedText(null)}
+                      className="absolute top-2 right-2 p-1 text-[#444746] hover:bg-[#E3E3E3] rounded-full transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                <form onSubmit={handleSendMessage} className="relative">
+                  <input 
+                    ref={chatInputRef}
+                    type="text" 
+                    value={chatInput} 
+                    onChange={(e) => setChatInput(e.target.value)} 
+                    placeholder="Ask AI to improve your answer..." 
+                    className="w-full pl-4 pr-12 py-3 bg-[#F0F4F9] border-none rounded-full text-sm text-[#1F1F1F] placeholder-[#444746] focus:ring-2 focus:ring-[#0B57D0] outline-none transition-all" 
+                  />
+                  <button type="submit" disabled={!chatInput.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-[#1F1F1F] text-white rounded-full disabled:opacity-30 hover:bg-[#444746] transition-all">
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Workspace Content Area - Takes remaining width */}
-      <div className="flex-1 min-w-0">
-        {renderContent()}
-      </div>
+      {showMergePrompt && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-[#1F1F1F] mb-2">Existing Notes Detected</h3>
+            <p className="text-sm text-[#444746] mb-6">You already have some draft notes for this question. How would you like to add your new recording?</p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => applyTranscription(pendingTranscription, 'append')}
+                className="w-full py-3 bg-[#0B57D0] text-white rounded-xl font-bold hover:bg-[#0B67EF] transition-colors"
+              >
+                Append to existing notes
+              </button>
+              <button 
+                onClick={() => applyTranscription(pendingTranscription, 'overwrite')}
+                className="w-full py-3 bg-red-50 text-red-600 rounded-xl font-bold hover:bg-red-100 transition-colors"
+              >
+                Overwrite existing notes
+              </button>
+              <button 
+                onClick={handleCancelMerge}
+                className="w-full py-3 bg-white border border-[#E3E3E3] text-[#444746] rounded-xl font-bold hover:bg-[#F0F4F9] transition-colors"
+              >
+                Cancel and discard recording
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default Workspace;

@@ -56,12 +56,12 @@ const TargetRoleList: React.FC<TargetRoleListProps> = ({ onSelectWorkspace }) =>
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {roles.map(role => (
           <div 
             key={role.id}
             onClick={() => onSelectWorkspace(role)}
-            className="group bg-white border border-slate-200 rounded-2xl p-6 hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-50/50 transition-all cursor-pointer relative overflow-hidden"
+            className="group bg-white border border-[rgba(0,0,0,0.04)] rounded-[14px] shadow-[0_6px_18px_rgba(21,28,45,0.06)] p-5 hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-50/50 transition-all cursor-pointer relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
               <ExternalLink className="w-5 h-5 text-indigo-500" />
@@ -82,7 +82,7 @@ const TargetRoleList: React.FC<TargetRoleListProps> = ({ onSelectWorkspace }) =>
       {/* New Workspace Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-8 shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-white rounded-[14px] w-full max-w-lg p-8 shadow-2xl animate-in zoom-in duration-200">
             <h3 className="text-xl font-bold text-slate-900 mb-6">Create Role Workspace</h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>

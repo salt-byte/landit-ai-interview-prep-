@@ -6,13 +6,6 @@ export interface UploadedFile {
   date: string;
 }
 
-export interface RoleSource {
-  id: string;
-  name: string;
-  type: string;
-  date: string;
-}
-
 export interface TargetRole {
   id: string;
   title: string;
@@ -24,23 +17,68 @@ export interface TargetRole {
   companyBackground?: string;
   teamBackground?: string;
   additionalNotes?: string;
-  sources?: RoleSource[];
 }
 
-export type AppView = 'DASHBOARD' | 'PROFILE' | 'WORKSPACE';
+export type AppView = 
+  | 'DASHBOARD' 
+  | 'PROFILE' 
+  | 'ROLES' 
+  | 'MOCK_PREP' 
+  | 'LIVE_INTERVIEW'
+  | 'QUESTION_BANK'
+  | 'DOCS_REPORTS';
 
 export type WorkspaceTab = 
   | 'TARGET'
   | 'INTERVIEW_QUESTIONS'
   | 'MOCK_INTERVIEW';
 
+export interface SavedQuestion {
+  id: string;
+  roleId: string;
+  type: string; // e.g., 'Behavioral', 'Product Design'
+  question: string;
+  answer?: string;
+  lastModified: string; // ISO date string
+  savedAt: string; // ISO date string
+  source?: 'MOCK_PREP';
+  // Restoration Fields
+  chatHistory?: { sender: 'USER' | 'AI'; text: string; quote?: string }[];
+  transcription?: string;
+}
+
+export interface TranscriptItem {
+  question: string;
+  answer: string;
+  rating: 'Strong' | 'Pass' | 'Needs improvement';
+  feedback: string;
+  note?: string;
+  timestamp?: string;
+}
+
+export interface InterviewSession {
+  id: string;
+  roleId: string;
+  roleTitle: string;
+  company: string;
+  date: string; // ISO string
+  duration: number; // seconds
+  interviewer: {
+    name: string;
+    avatar: string;
+  };
+  overallRating: 'Good' | 'Excellent' | 'Needs Improvement';
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  transcript: TranscriptItem[];
+}
+
 export interface InterviewFeedback {
   score: number;
   strengths: string[];
   improvements: string[];
-  recommended_actions?: string[];
   transcript: string;
-  dimension_scores?: Record<string, number>;
 }
 
 // --- Career Profile Structures ---

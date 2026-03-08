@@ -1,48 +1,65 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, ArrowUpRight, FileText, Globe, Loader2, Link as LinkIcon, Sparkles } from 'lucide-react';
 import { TargetRole } from '../types';
-import { getRoles, createRole, parseLink } from '../api';
+
+export const INITIAL_ROLES: TargetRole[] = [
+  {
+    id: 'claire-pm-1',
+    title: 'Associate Product Manager',
+    company: 'OpenAI',
+    jd: 'Defining AI feature roadmaps, working with engineering on model optimization for consumer applications, and running rapid growth experiments.',
+    teamInfo: 'Growth & Monetization Team',
+    interviewQuestions: [
+      "How would you measure the success of ChatGPT's new voice feature?",
+      "Design an experiment to increase retention for free users."
+    ],
+    companyBackground: "Leading AI research and deployment company dedicated to ensuring AGI benefits all of humanity.",
+    teamBackground: "Focused on user acquisition, retention, and monetization strategies for consumer-facing products."
+  },
+  {
+    id: 'claire-da-1',
+    title: 'Product Growth Analyst',
+    company: 'TikTok',
+    jd: 'Using SQL and Python to analyze user conversion funnels, building Looker dashboards, and partnering with PMs on A/B testing strategies.',
+    teamInfo: 'Global Product Operations'
+  },
+  {
+    id: 'claire-pmm-1',
+    title: 'Product Marketing Manager',
+    company: 'Notion',
+    jd: 'Crafting the narrative for AI-integrated workspace tools, defining market positioning, and driving GTM strategy for new product launches.',
+    teamInfo: 'Product Marketing & Strategy'
+  }
+];
 
 interface RoleListProps {
+  roles: TargetRole[];
   onSelectRole: (role: TargetRole) => void;
+  onRoleCreate: (role: TargetRole) => void;
 }
 
-const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
-  const [roles, setRoles] = useState<TargetRole[]>([]);
+const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate }) => {
   const [showModal, setShowModal] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
-
+  
   // Form State
   const [newRole, setNewRole] = useState({ title: '', company: '', jd: '', teamInfo: '' });
-
+  
   // UI State for Modal
   const [activeTab, setActiveTab] = useState<'MANUAL' | 'LINK'>('MANUAL');
   const [linkInput, setLinkInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
-  useEffect(() => {
-    getRoles().then(setRoles).catch(() => {});
-  }, []);
-
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!newRole.title || !newRole.company || !newRole.jd) return;
-    setIsCreating(true);
-    try {
-      const role = await createRole({
-        ...newRole,
-        interviewQuestions: [],
-        companyBackground: '',
-        teamBackground: '',
-        additionalNotes: '',
-      });
-      setRoles(prev => [role, ...prev]);
-      resetModal();
-    } catch (e) {
-      console.error('Failed to create role', e);
-    } finally {
-      setIsCreating(false);
-    }
+
+    const role: TargetRole = {
+      ...newRole,
+      id: Math.random().toString(36).substr(2, 9),
+    };
+    onRoleCreate(role);
+    resetModal();
   };
 
   const resetModal = () => {
@@ -51,25 +68,27 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
     setActiveTab('MANUAL');
     setLinkInput('');
     setIsAnalyzing(false);
+    setShowPreview(false);
   };
 
-  const handleAnalyzeLink = async () => {
+  const handleAnalyzeLink = () => {
     if (!linkInput.trim()) return;
     setIsAnalyzing(true);
-    try {
-      const extracted = await parseLink(linkInput.trim());
-      setNewRole({
-        title: extracted.title,
-        company: extracted.company,
-        jd: extracted.jd,
-        teamInfo: extracted.teamInfo,
-      });
-      setActiveTab('MANUAL');
-    } catch (e) {
-      console.error('Failed to parse link', e);
-    } finally {
+    
+    // Simulate AI parsing
+    setTimeout(() => {
+      // Mock data extraction
+      const mockExtracted = {
+        title: 'Senior Product Manager',
+        company: 'TechCorp Inc.',
+        jd: 'We are seeking a driven Product Manager to lead our core enterprise initiatives. You will work closely with engineering, design, and sales to deliver high-impact features.\n\nResponsibilities:\n- Define product strategy and roadmap\n- Conduct market research\n- Analyze user feedback',
+        teamInfo: 'Enterprise Solutions Team' // Added for completeness, though not shown in form
+      };
+      
+      setNewRole(mockExtracted);
       setIsAnalyzing(false);
-    }
+      setShowPreview(true);
+    }, 1500);
   };
 
   const getRoleEmoji = (company: string) => {
@@ -95,7 +114,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
       {/* Create New Role Button */}
       <button
         onClick={() => setShowModal(true)}
-        className="w-full flex items-center justify-between p-4 bg-[#F0F4F9] border border-dashed border-[#C4C7C5] rounded-2xl hover:bg-[#E3E3E3] hover:border-[#444746] transition-all group"
+        className="w-full flex items-center justify-between p-4 bg-[#F0F4F9] border border-dashed border-[#C4C7C5] rounded-[14px] hover:bg-[#E3E3E3] hover:border-[#444746] transition-all group"
       >
         <div className="flex items-center gap-3">
           <div className="bg-white p-2 rounded-full border border-[#E3E3E3]">
@@ -111,7 +130,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
           <div 
             key={role.id}
             onClick={() => onSelectRole(role)}
-            className="group bg-white border border-[#E3E3E3] rounded-2xl p-6 cursor-pointer hover:border-[#0B57D0] hover:shadow-sm transition-all relative overflow-hidden"
+            className="group bg-white border border-[rgba(0,0,0,0.04)] rounded-[14px] shadow-[0_6px_18px_rgba(21,28,45,0.06)] p-5 cursor-pointer hover:border-[#0B57D0] hover:shadow-md transition-all relative overflow-hidden"
           >
             <div className="flex items-start justify-between">
               <div className="flex gap-4">
@@ -141,7 +160,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
       {/* MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-[#1F1F1F]/40 backdrop-blur-sm z-[60] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[24px] w-full max-w-xl shadow-xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[14px] w-full max-w-xl shadow-xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
             
             {/* Header */}
             <div className="p-8 pb-4">
@@ -150,29 +169,37 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
             </div>
 
             {/* Tabs */}
-            <div className="px-8 mb-6">
-                <div className="flex p-1 bg-[#F0F4F9] rounded-xl">
-                    <button 
-                        onClick={() => setActiveTab('MANUAL')} 
-                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'MANUAL' ? 'bg-white text-[#1F1F1F] shadow-sm' : 'text-[#444746] hover:text-[#1F1F1F]'}`}
-                    >
-                        <FileText className="w-4 h-4" />
-                        Manual Input
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('LINK')} 
-                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'LINK' ? 'bg-white text-[#1F1F1F] shadow-sm' : 'text-[#444746] hover:text-[#1F1F1F]'}`}
-                    >
-                        <Globe className="w-4 h-4" />
-                        Parse from Link
-                    </button>
-                </div>
-            </div>
+            {!showPreview && (
+              <div className="px-8 mb-6">
+                  <div className="flex p-1 bg-[#F0F4F9] rounded-xl">
+                      <button 
+                          onClick={() => setActiveTab('MANUAL')} 
+                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'MANUAL' ? 'bg-white text-[#1F1F1F] shadow-sm' : 'text-[#444746] hover:text-[#1F1F1F]'}`}
+                      >
+                          <FileText className="w-4 h-4" />
+                          Manual Input
+                      </button>
+                      <button 
+                          onClick={() => setActiveTab('LINK')} 
+                          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${activeTab === 'LINK' ? 'bg-white text-[#1F1F1F] shadow-sm' : 'text-[#444746] hover:text-[#1F1F1F]'}`}
+                      >
+                          <Globe className="w-4 h-4" />
+                          Parse from Link
+                      </button>
+                  </div>
+              </div>
+            )}
 
             {/* Scrollable Content */}
             <div className="px-8 overflow-y-auto flex-1">
-                {activeTab === 'MANUAL' ? (
+                {activeTab === 'MANUAL' || showPreview ? (
                     <div className="space-y-5 pb-2">
+                        {showPreview && (
+                          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-2 flex items-center gap-3">
+                            <Sparkles className="w-5 h-5 text-indigo-600" />
+                            <p className="text-sm text-indigo-900 font-medium">Parsed successfully! Please review and edit if needed.</p>
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-[#444746] uppercase mb-1.5 ml-1">Job Title</label>
@@ -180,7 +207,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
                                     value={newRole.title}
                                     onChange={e => setNewRole({...newRole, title: e.target.value})}
                                     className="w-full px-4 py-3 bg-[#F0F4F9] border-none rounded-xl focus:ring-2 focus:ring-[#0B57D0] outline-none text-[#1F1F1F] font-medium placeholder-[#444746]/50 transition-all" 
-                                    placeholder="e.g. Product Manager"
+                                    placeholder={showPreview && !newRole.title ? "Not detected" : "e.g. Product Manager"}
                                 />
                             </div>
                             <div>
@@ -189,7 +216,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
                                     value={newRole.company}
                                     onChange={e => setNewRole({...newRole, company: e.target.value})}
                                     className="w-full px-4 py-3 bg-[#F0F4F9] border-none rounded-xl focus:ring-2 focus:ring-[#0B57D0] outline-none text-[#1F1F1F] font-medium placeholder-[#444746]/50 transition-all" 
-                                    placeholder="e.g. Google"
+                                    placeholder={showPreview && !newRole.company ? "Not detected" : "e.g. Google"}
                                 />
                             </div>
                         </div>
@@ -200,7 +227,7 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
                                 value={newRole.jd}
                                 onChange={e => setNewRole({...newRole, jd: e.target.value})}
                                 className="w-full px-4 py-3 bg-[#F0F4F9] border-none rounded-xl focus:ring-2 focus:ring-[#0B57D0] outline-none resize-none text-[#1F1F1F] text-sm leading-relaxed placeholder-[#444746]/50 transition-all" 
-                                placeholder="Paste the job requirements here..."
+                                placeholder={showPreview && !newRole.jd ? "Not detected" : "Paste the job requirements here..."}
                             />
                         </div>
                     </div>
@@ -239,18 +266,17 @@ const RoleList: React.FC<RoleListProps> = ({ onSelectRole }) => {
             {/* Footer Buttons */}
             <div className="p-8 pt-6 flex gap-3">
                 <button 
-                    onClick={resetModal}
+                    onClick={activeTab === 'LINK' && showPreview ? () => setShowPreview(false) : resetModal}
                     className="flex-1 px-6 py-3 bg-white border border-[#E3E3E3] text-[#444746] rounded-full hover:bg-[#F0F4F9] font-bold text-sm transition-all"
                 >
                     Cancel
                 </button>
-                <button
+                <button 
                     onClick={handleCreate}
-                    disabled={!isFormValid || activeTab === 'LINK' || isCreating}
+                    disabled={!isFormValid || (activeTab === 'LINK' && !showPreview)}
                     className="flex-1 px-6 py-3 bg-[#0B57D0] text-white rounded-full hover:bg-[#0B67EF] font-bold text-sm shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {isCreating ? 'Creating...' : 'Create Workspace'}
+                    Create
                 </button>
             </div>
             

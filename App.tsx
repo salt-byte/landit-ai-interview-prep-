@@ -1,184 +1,435 @@
 
-import React, { useState, useEffect } from 'react';
-import { Layout, ArrowLeft, ChevronRight, Home, User, Bell, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  LayoutDashboard, 
+  User, 
+  Briefcase, 
+  MessageSquare, 
+  FileText, 
+  Video, 
+  ClipboardList, 
+  File,
+  ChevronRight,
+  ChevronDown
+} from 'lucide-react';
 import Profile from './components/Profile';
-import RoleList from './components/RoleList';
-import Workspace from './components/Workspace';
-import ProfileCard from './components/ProfileCard';
-import { TargetRole, AppView, UserProfile } from './types';
-import { getProfile, getRole, updateProfile } from './api';
+import RoleList, { INITIAL_ROLES } from './components/RoleList';
+import Dashboard from './components/Dashboard';
+import { RoleContextBuilder, InterviewPrepBuilder } from './components/Workspace';
+import MockInterview from './components/MockInterview';
+import QuestionBank from './components/QuestionBank';
+import InterviewReports from './components/InterviewReports';
+import { TargetRole, AppView, UserProfile, SavedQuestion } from './types';
 
-const EMPTY_PROFILE: UserProfile = {
-  name: '', headline: '', bio: '',
-  avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=256&h=256&auto=format&fit=crop',
-  targetRoles: '', location: '', educationLevel: '', yearsOfExperience: '',
-  education: [], experience: [], projects: [],
-  skills: { technical: '', product: '', communication: '' },
-  interests: '',
+// Moved from Profile.tsx to act as the single source of truth
+const INITIAL_PROFILE: UserProfile = {
+  name: "Claire Liu",
+  headline: "Product Manager & Data Analyst",
+  bio: "Bridging communication and data science to build user-centric products. Experienced in product analytics, experimentation, and AI-driven feature development.",
+  avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=256&h=256&auto=format&fit=crop",
+  
+  targetRoles: "Product Manager, Data Analyst",
+  location: "Los Angeles / San Francisco",
+  educationLevel: "Master's Degree",
+  yearsOfExperience: "", // [DEMO] Missing Field
+
+  education: [
+    {
+      id: 'edu-1',
+      school: "University of Southern California (USC)",
+      degree: "M.S.",
+      major: "Communication Data Science",
+      year: "2024 - 2026",
+      keyCoursework: "Applied Machine Learning, Data Visualization & Storytelling, Product Analytics",
+      academicFocus: "" // [DEMO] Missing Field
+    }
+  ],
+  experience: [
+    {
+      id: 'exp-1',
+      company: "AI Content Startup (SaaS)",
+      role: "Product Management Intern",
+      type: "Internship",
+      duration: "Summer 2024",
+      responsibilities: "• Led AI writing feature definitions, increasing new user activation by 12%\n• Partnered with Engineering & Design teams for rapid sprint execution\n• Analyzed feature performance using SQL and internal dashboards"
+    },
+    {
+      id: 'exp-2',
+      company: "E-commerce Platform",
+      role: "Data Analyst Intern",
+      type: "Internship",
+      duration: "Summer 2023",
+      responsibilities: "• Built conversion funnel dashboards for product and marketing teams\n• Conducted A/B test analysis to inform feature prioritization"
+    },
+    {
+      id: 'exp-missing-demo',
+      company: "", // [DEMO] Missing Company
+      role: "Research Assistant",
+      type: "Part-time",
+      duration: "2022 - 2023",
+      responsibilities: "" // [DEMO] Missing Responsibilities
+    }
+  ],
+  projects: [
+    {
+      id: 'proj-1',
+      name: "AI Writing Tool Onboarding Optimization",
+      context: "", // [DEMO] Missing Context
+      role: "Product & Data Analysis",
+      tools: "SQL, Figma, Amplitude",
+      outcome: "+12% activation",
+      learnings: "Importance of early value signaling"
+    }
+  ],
+  skills: {
+    technical: "SQL, Python, A/B Testing, Data Analysis",
+    product: "PRD Writing, Experiment Design, Metrics Definition",
+    communication: "" // [DEMO] Missing Skill Category
+  },
+  interests: "AI consumer products, Growth experimentation, Data-informed decision making"
 };
+
+const INITIAL_SAVED_QUESTIONS: SavedQuestion[] = [
+  // Role 1: Associate Product Manager — OpenAI
+  { id: 'q-openai-1', roleId: 'claire-pm-1', type: 'Behavioral & Experience', question: 'Tell me about a time you had to align multiple stakeholders with conflicting priorities.', lastModified: '2026-03-03T10:00:00Z', savedAt: '2026-03-03T10:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-2', roleId: 'claire-pm-1', type: 'Behavioral & Experience', question: 'Describe a situation where you had to make a difficult decision with limited data.', lastModified: '2026-03-02T14:30:00Z', savedAt: '2026-03-02T14:30:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-3', roleId: 'claire-pm-1', type: 'Product Design & Sense', question: 'How would you improve the user onboarding experience for ChatGPT?', lastModified: '2026-03-01T09:15:00Z', savedAt: '2026-03-01T09:15:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-4', roleId: 'claire-pm-1', type: 'Product Design & Sense', question: 'Design a feature to increase engagement for OpenAI\'s API developers.', lastModified: '2026-02-28T16:45:00Z', savedAt: '2026-02-28T16:45:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-5', roleId: 'claire-pm-1', type: 'Analytical & Execution', question: 'ChatGPT\'s daily active users dropped by 10%. How would you investigate?', lastModified: '2026-02-27T11:20:00Z', savedAt: '2026-02-27T11:20:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-6', roleId: 'claire-pm-1', type: 'Analytical & Execution', question: 'Define the key success metrics for the new Voice Mode.', lastModified: '2026-02-26T13:10:00Z', savedAt: '2026-02-26T13:10:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-7', roleId: 'claire-pm-1', type: 'Strategy & Vision', question: 'Should OpenAI launch its own search engine? Evaluate the pros and cons.', lastModified: '2026-02-25T15:50:00Z', savedAt: '2026-02-25T15:50:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-8', roleId: 'claire-pm-1', type: 'Strategy & Vision', question: 'How should OpenAI differentiate itself from competitors like Anthropic and Google?', lastModified: '2026-02-24T08:30:00Z', savedAt: '2026-02-24T08:30:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-9', roleId: 'claire-pm-1', type: 'Product Design & Sense', question: 'What is the most underrated feature of ChatGPT and how would you market it?', lastModified: '2026-02-23T12:00:00Z', savedAt: '2026-02-23T12:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-openai-10', roleId: 'claire-pm-1', type: 'Behavioral & Experience', question: 'Tell me about a time you failed to meet a deadline.', lastModified: '2026-02-22T10:45:00Z', savedAt: '2026-02-22T10:45:00Z', source: 'MOCK_PREP' },
+
+  // Role 2: Product Growth Analyst — TikTok
+  { id: 'q-tiktok-1', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'Retention for new users has decreased. How would you analyze the cause?', lastModified: '2026-02-21T09:00:00Z', savedAt: '2026-02-21T09:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-2', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'How would you measure the success of a new video editing tool on TikTok?', lastModified: '2026-02-20T11:30:00Z', savedAt: '2026-02-20T11:30:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-3', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'We want to increase ad revenue without hurting user retention. How do we balance this?', lastModified: '2026-02-19T15:15:00Z', savedAt: '2026-02-19T15:15:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-4', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'Design an A/B test for a new \'Shop\' tab layout.', lastModified: '2026-02-18T10:00:00Z', savedAt: '2026-02-18T10:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-5', roleId: 'claire-da-1', type: 'Product Design & Sense', question: 'How would you improve the \'For You\' page algorithm transparency?', lastModified: '2026-02-17T14:45:00Z', savedAt: '2026-02-17T14:45:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-6', roleId: 'claire-da-1', type: 'Product Design & Sense', question: 'Design a feature to help creators monetize their content better.', lastModified: '2026-02-16T16:20:00Z', savedAt: '2026-02-16T16:20:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-7', roleId: 'claire-da-1', type: 'Product Design & Sense', question: 'How would you improve the live streaming experience on TikTok?', lastModified: '2026-02-15T09:30:00Z', savedAt: '2026-02-15T09:30:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-8', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'What metrics would you track to evaluate the health of the creator ecosystem?', lastModified: '2026-02-14T13:00:00Z', savedAt: '2026-02-14T13:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-9', roleId: 'claire-da-1', type: 'Product Design & Sense', question: 'Should TikTok expand into long-form video? Why or why not?', lastModified: '2026-02-13T11:15:00Z', savedAt: '2026-02-13T11:15:00Z', source: 'MOCK_PREP' },
+  { id: 'q-tiktok-10', roleId: 'claire-da-1', type: 'Analytical & Execution', question: 'Calculate the lifetime value (LTV) of a TikTok user.', lastModified: '2026-02-12T15:40:00Z', savedAt: '2026-02-12T15:40:00Z', source: 'MOCK_PREP' },
+
+  // Role 3: Product Marketing Manager — Notion
+  { id: 'q-notion-1', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'How would you position Notion against Microsoft Loop and Google Workspace?', lastModified: '2026-02-11T11:00:00Z', savedAt: '2026-02-11T11:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-2', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'Draft a go-to-market strategy for Notion\'s new AI calendar feature.', lastModified: '2026-02-10T09:45:00Z', savedAt: '2026-02-10T09:45:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-3', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'How should Notion expand its user base beyond tech startups?', lastModified: '2026-02-09T13:20:00Z', savedAt: '2026-02-09T13:20:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-4', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'Evaluate the opportunity for Notion to enter the education market more aggressively.', lastModified: '2026-02-08T15:50:00Z', savedAt: '2026-02-08T15:50:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-5', roleId: 'claire-pmm-1', type: 'Behavioral & Experience', question: 'Tell me about a successful product launch you managed.', lastModified: '2026-02-07T10:10:00Z', savedAt: '2026-02-07T10:10:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-6', roleId: 'claire-pmm-1', type: 'Behavioral & Experience', question: 'Describe a time you had to pivot your marketing strategy due to market changes.', lastModified: '2026-02-06T14:30:00Z', savedAt: '2026-02-06T14:30:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-7', roleId: 'claire-pmm-1', type: 'Behavioral & Experience', question: 'How do you handle feedback from product teams that contradicts your market research?', lastModified: '2026-02-05T11:45:00Z', savedAt: '2026-02-05T11:45:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-8', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'What pricing strategy would you recommend for Notion\'s enterprise plan?', lastModified: '2026-02-04T16:00:00Z', savedAt: '2026-02-04T16:00:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-9', roleId: 'claire-pmm-1', type: 'Behavioral & Experience', question: 'Tell me about a time you had to influence a product roadmap based on customer feedback.', lastModified: '2026-02-03T09:20:00Z', savedAt: '2026-02-03T09:20:00Z', source: 'MOCK_PREP' },
+  { id: 'q-notion-10', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'Identify a partnership opportunity for Notion and explain its strategic value.', lastModified: '2026-02-02T13:40:00Z', savedAt: '2026-02-02T13:40:00Z', source: 'MOCK_PREP' },
+];
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('DASHBOARD');
   const [selectedRole, setSelectedRole] = useState<TargetRole | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
-  const [completionPercentage, setCompletionPercentage] = useState(0);
-
-  useEffect(() => {
-    getProfile().then(({ completion_percentage, ...profile }) => {
-      setUserProfile(profile as UserProfile);
-      setCompletionPercentage(completion_percentage);
-    }).catch(() => {});
-  }, []);
-
-  const handleSaveProfile = async (updated: UserProfile) => {
-    try {
-      const { completion_percentage, ...saved } = await updateProfile(updated);
-      setUserProfile(saved as UserProfile);
-      setCompletionPercentage(completion_percentage);
-    } catch (e) {
-      console.error('Failed to save profile', e);
-    }
-  };
-
-  const handleSelectRole = async (role: TargetRole) => {
-    setSelectedRole(role);
-    setView('WORKSPACE');
-    try {
-      const fullRole = await getRole(role.id);
-      setSelectedRole(fullRole);
-    } catch (e) {
-      console.error('Failed to load full role details', e);
-    }
-  };
-
-  const handleBackToDashboard = () => {
-    setView('DASHBOARD');
-  };
-
-  const handleGoToProfile = () => {
-    setView('PROFILE');
-  };
+  const [roles, setRoles] = useState<TargetRole[]>(INITIAL_ROLES);
   
-  const handleGoToWorkspace = () => {
-    if (selectedRole) {
-      setView('WORKSPACE');
+  // Lifted Mock Prep State
+  const [mockPrepSettings, setMockPrepSettings] = useState({
+    types: [] as string[],
+    qty: 3
+  });
+  
+  // Lifted State
+  const [userProfile, setUserProfile] = useState<UserProfile>(INITIAL_PROFILE);
+  const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>(INITIAL_SAVED_QUESTIONS);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+
+  // Completion Logic - Hardcoded to 75% for Demo purposes as requested
+  const completionPercentage = 75;
+
+  const handleSelectRole = (role: TargetRole) => {
+    setSelectedRole(role);
+    setView('ROLES'); // Go to Context view of the role
+  };
+
+  const handleRoleCreate = (newRole: TargetRole) => {
+    setRoles([newRole, ...roles]);
+  };
+
+  const handleSaveQuestion = (question: SavedQuestion) => {
+    setSavedQuestions(prev => {
+      // Check if question already exists (by content or id)
+      // Since ID is generated with timestamp, it might be unique.
+      // But if we save all, we might duplicate.
+      // Let's check if a question with same content exists for this role.
+      const exists = prev.some(q => q.question === question.question && q.roleId === question.roleId);
+      if (exists) return prev;
+      return [question, ...prev];
+    });
+  };
+
+  const handleSelectSavedQuestion = (question: SavedQuestion) => {
+    const role = roles.find(r => r.id === question.roleId);
+    if (role) {
+      setSelectedRole(role);
+      setSelectedQuestionId(question.id);
+      // We need to set mockPrepSettings types to include this question's type so it doesn't look weird?
+      // Or just let InterviewPrepBuilder handle it.
+      setView('MOCK_PREP');
     }
   };
+
+  const renderContent = () => {
+    switch (view) {
+      case 'DASHBOARD':
+        return (
+          <Dashboard 
+            userProfile={userProfile}
+            roles={roles}
+            onNavigate={setView}
+            onSelectRole={handleSelectRole}
+          />
+        );
+      case 'PROFILE':
+        return (
+          <Profile 
+            profile={userProfile} 
+            onUpdateProfile={setUserProfile} 
+            completionPercentage={completionPercentage}
+          />
+        );
+      case 'ROLES':
+        if (!selectedRole) {
+          return (
+            <RoleList 
+              roles={roles} 
+              onSelectRole={handleSelectRole} 
+              onRoleCreate={handleRoleCreate} 
+            />
+          );
+        }
+        return (
+          <div className="h-full flex flex-col">
+            <div className="mb-6 flex items-center justify-between">
+               <div>
+                 <button onClick={() => setSelectedRole(null)} className="text-sm text-[#444746] hover:text-[#0B57D0] mb-1 flex items-center gap-1">
+                   <ChevronRight className="w-4 h-4 rotate-180" /> Back to Role List
+                 </button>
+               </div>
+            </div>
+            <RoleContextBuilder role={selectedRole} onUpdate={setSelectedRole} />
+          </div>
+        );
+      case 'MOCK_PREP':
+        return (
+          <InterviewPrepBuilder 
+            role={selectedRole} 
+            roles={roles} 
+            onSelectRole={setSelectedRole} 
+            onNavigate={setView}
+            settings={mockPrepSettings}
+            onUpdateSettings={setMockPrepSettings}
+            savedQuestions={savedQuestions}
+            onSaveQuestion={handleSaveQuestion}
+            initialQuestionId={selectedQuestionId}
+          />
+        );
+      case 'LIVE_INTERVIEW':
+        return (
+          <MockInterview 
+            workspace={selectedRole} 
+            roles={roles} 
+            onSelectRole={setSelectedRole}
+            onSaveSession={(questions) => {
+              setSavedQuestions(prev => [...questions, ...prev]);
+            }}
+          />
+        );
+      case 'QUESTION_BANK':
+        return (
+          <QuestionBank 
+            roles={roles} 
+            savedQuestions={savedQuestions} 
+            onSelectQuestion={handleSelectSavedQuestion} 
+          />
+        );
+      case 'DOCS_REPORTS':
+        return (
+          <InterviewReports 
+            roles={roles} 
+            onNavigate={setView}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const NavItem = ({ 
+    id, 
+    label, 
+    icon: Icon, 
+    isActive, 
+    onClick, 
+    hasSubItems = false,
+    isExpanded = false
+  }: { 
+    id: AppView, 
+    label: string, 
+    icon: any, 
+    isActive: boolean, 
+    onClick: () => void,
+    hasSubItems?: boolean,
+    isExpanded?: boolean
+  }) => (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+        isActive 
+          ? 'bg-[#D3E3FD] text-[#041E49]' 
+          : 'text-[#444746] hover:bg-[#F0F4F9] hover:text-[#1F1F1F]'
+      }`}
+    >
+      <Icon className={`w-5 h-5 ${isActive ? 'text-[#041E49]' : 'text-[#444746]'}`} />
+      <span className="flex-1 text-left">{label}</span>
+      {hasSubItems && (
+        <ChevronDown className={`w-4 h-4 text-[#444746] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      )}
+    </button>
+  );
+
+  const SubNavItem = ({ 
+    id, 
+    label, 
+    isActive, 
+    onClick 
+  }: { 
+    id: AppView, 
+    label: string, 
+    isActive: boolean, 
+    onClick: () => void 
+  }) => (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 rounded-lg text-sm transition-all ${
+        isActive 
+          ? 'text-[#0B57D0] font-bold bg-[#F0F4F9]' 
+          : 'text-[#444746] hover:text-[#1F1F1F] hover:bg-[#F0F4F9]/50'
+      }`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40"></span>
+      <span className="flex-1 text-left">{label}</span>
+    </button>
+  );
 
   return (
-    <div className="min-h-screen bg-[#F0F4F9] flex flex-col font-sans text-[#1F1F1F]">
-      {/* Global Header (Level 1 Navigation) - Blended Background */}
-      <header className="bg-[#F0F4F9] sticky top-0 z-50 h-20 transition-colors duration-200">
-        <div className="max-w-[1600px] mx-auto px-6 h-full flex items-center justify-between relative">
-          
-          {/* Left: Brand */}
-          <div className="flex items-center">
-            {/* Logo */}
-            <div 
-              className="flex items-center gap-3 cursor-pointer group" 
-              onClick={handleBackToDashboard}
-            >
-              <div className="w-10 h-10 bg-[#1F1F1F] rounded-xl flex items-center justify-center shadow-lg shadow-gray-400/20 group-hover:scale-105 transition-transform">
-                <span className="font-bold text-white text-xl font-sans">L</span>
-              </div>
-              <span className="text-xl font-bold text-[#1F1F1F] tracking-tight">LandIt</span>
+    <div className="flex h-screen bg-[#F0F4F9] font-sans text-[#1F1F1F] overflow-hidden">
+      {/* GLOBAL SIDEBAR - Fixed */}
+      <aside className="w-64 bg-white border-r border-[#E3E3E3] flex flex-col flex-shrink-0 z-50">
+        {/* Brand */}
+        <div className="h-20 flex items-center px-6 border-b border-[#E3E3E3]/50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center shadow-sm">
+              <span className="font-bold text-white text-lg">L</span>
             </div>
-          </div>
-
-          {/* Center: Global Nav Links - Active State Logic */}
-          <nav className="hidden md:flex items-center gap-6 text-sm absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <button 
-              onClick={handleGoToWorkspace}
-              disabled={!selectedRole}
-              className={`transition-colors ${
-                view === 'WORKSPACE' 
-                  ? 'text-[#1F1F1F] font-bold' 
-                  : 'text-[#444746] font-medium hover:text-[#1F1F1F]'
-              } ${!selectedRole ? 'opacity-40 cursor-not-allowed hover:text-[#444746]' : ''}`}
-            >
-              My Role
-            </button>
-            <span className="text-[#E3E3E3] cursor-default">|</span>
-            <button 
-              onClick={handleBackToDashboard}
-              className={`transition-colors ${
-                view === 'DASHBOARD' 
-                  ? 'text-[#1F1F1F] font-bold' 
-                  : 'text-[#444746] font-medium hover:text-[#1F1F1F]'
-              }`}
-            >
-              Home
-            </button>
-            <span className="text-[#E3E3E3] cursor-default">|</span>
-            <button 
-              onClick={handleGoToProfile}
-              className={`transition-colors ${
-                view === 'PROFILE' 
-                  ? 'text-[#1F1F1F] font-bold' 
-                  : 'text-[#444746] font-medium hover:text-[#1F1F1F]'
-              }`}
-            >
-              My Profile
-            </button>
-          </nav>
-
-          {/* Right: User Identity & Actions */}
-          <div className="flex items-center gap-4">
-             <button className="p-2.5 text-[#444746] hover:bg-white/50 rounded-full transition-colors relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2.5 right-3 w-2 h-2 bg-[#B3261E] rounded-full border border-[#F0F4F9]"></span>
-             </button>
-
-             <div 
-                onClick={handleGoToProfile}
-                className="flex items-center gap-3 pl-2 cursor-pointer hover:bg-white/50 p-1.5 rounded-full pr-3 transition-colors group"
-              >
-                 <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white shadow-sm group-hover:border-[#0B57D0] transition-colors relative">
-                    <img src={userProfile.avatar} alt="User" className="w-full h-full object-cover" />
-                 </div>
-                 <div className="hidden sm:block text-left">
-                    <p className="text-sm font-bold text-[#1F1F1F]">{userProfile.name}</p>
-                 </div>
-             </div>
+            <span className="text-lg font-bold text-[#1F1F1F] tracking-tight">LandIt</span>
           </div>
         </div>
-      </header>
 
-      {/* Primary View Container (Canvas) */}
-      <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 pb-8">
-        {view === 'WORKSPACE' && selectedRole ? (
-          <div className="animate-in fade-in duration-300 h-full pt-4">
-            <Workspace workspace={selectedRole} />
-          </div>
-        ) : view === 'PROFILE' ? (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 h-full pt-4">
-            <Profile
-              profile={userProfile}
-              onUpdateProfile={setUserProfile}
-              onSaveProfile={handleSaveProfile}
-              completionPercentage={completionPercentage}
-            />
-          </div>
-        ) : (
-          /* UNIFIED DASHBOARD */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-in fade-in duration-500 pt-8">
-            
-            {/* Left Column: Roles */}
-            <div className="lg:col-span-8 space-y-8">
-              <RoleList onSelectRole={handleSelectRole} />
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
+          <NavItem 
+            id="DASHBOARD" 
+            label="Dashboard" 
+            icon={LayoutDashboard} 
+            isActive={view === 'DASHBOARD'} 
+            onClick={() => setView('DASHBOARD')} 
+          />
+          <NavItem 
+            id="PROFILE" 
+            label="My Profile" 
+            icon={User} 
+            isActive={view === 'PROFILE'} 
+            onClick={() => setView('PROFILE')} 
+          />
+          <NavItem 
+            id="ROLES" 
+            label="My Roles" 
+            icon={Briefcase} 
+            isActive={view === 'ROLES'} 
+            onClick={() => {
+              setSelectedRole(null);
+              setView('ROLES');
+            }} 
+          />
+
+          {/* Interviews Group */}
+          <div className="pt-4 pb-1">
+            <div className="px-4 py-2 flex items-center justify-between text-[#444746]">
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <span className="text-sm font-medium">Interviews</span>
+              </div>
             </div>
-
-            {/* Right Column: Profile Summary */}
-            <div className="lg:col-span-4 lg:sticky lg:top-24">
-              <ProfileCard 
-                profile={userProfile} 
-                onEdit={() => setView('PROFILE')} 
-                completionPercentage={completionPercentage}
+            <div className="space-y-0.5 mt-1">
+              <SubNavItem 
+                id="MOCK_PREP" 
+                label="Mock Prep" 
+                isActive={view === 'MOCK_PREP'} 
+                onClick={() => setView('MOCK_PREP')} 
+              />
+              <SubNavItem 
+                id="LIVE_INTERVIEW" 
+                label="Live Interview" 
+                isActive={view === 'LIVE_INTERVIEW'} 
+                onClick={() => setView('LIVE_INTERVIEW')} 
               />
             </div>
-
           </div>
-        )}
+
+          {/* Docs Group */}
+          <div className="pt-2">
+            <div className="px-4 py-2 flex items-center justify-between text-[#444746]">
+              <div className="flex items-center gap-3">
+                <File className="w-5 h-5" />
+                <span className="text-sm font-medium">My Docs</span>
+              </div>
+            </div>
+            <div className="space-y-0.5 mt-1">
+              <SubNavItem 
+                id="QUESTION_BANK" 
+                label="Question Bank" 
+                isActive={view === 'QUESTION_BANK'} 
+                onClick={() => setView('QUESTION_BANK')} 
+              />
+              <SubNavItem 
+                id="DOCS_REPORTS" 
+                label="Interview Reports" 
+                isActive={view === 'DOCS_REPORTS'} 
+                onClick={() => setView('DOCS_REPORTS')} 
+              />
+            </div>
+          </div>
+        </nav>
+
+        {/* User Footer */}
+        <div className="p-4 border-t border-[#E3E3E3]">
+          <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#F0F4F9] cursor-pointer transition-colors">
+            <div className="w-9 h-9 rounded-full overflow-hidden border border-[#E3E3E3]">
+              <img src={userProfile.avatar} alt="User" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[#1F1F1F] truncate">{userProfile.name}</p>
+              <p className="text-xs text-[#444746] truncate">Free Plan</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto bg-[#F0F4F9] p-6">
+        <div className="max-w-6xl mx-auto h-full">
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

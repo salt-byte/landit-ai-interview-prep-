@@ -1,5 +1,4 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -9,8 +8,6 @@ import {
   Plus, 
   X,
   Download,
-  Loader2,
-  ChevronDown,
   Link as LinkIcon,
   MapPin,
   Briefcase,
@@ -19,41 +16,43 @@ import {
   Hash
 } from 'lucide-react';
 import { UploadedFile, UserProfile } from '../types';
-import { getDocuments, uploadAndParseDocument, uploadDocument, deleteDocument } from '../api';
+import AddSourceModal from './AddSourceModal';
 
 interface ProfileProps {
   profile: UserProfile;
   onUpdateProfile: React.Dispatch<React.SetStateAction<UserProfile>>;
-  onSaveProfile?: (profile: UserProfile) => void | Promise<void>;
   completionPercentage: number;
 }
 
-const SOURCE_TAGS = ['Resume', 'Portfolio', 'Work Sample', 'Notes'];
+// --- Mock Data (Files only) ---
+const INITIAL_FILES: UploadedFile[] = [
+  { id: '1', name: 'Claire_Liu_Resume_USC_PM.pdf', type: 'Resume', date: '2025-01-15' },
+  { id: '2', name: 'AI_Product_Case_Study.pdf', type: 'Portfolio', date: '2025-02-10' },
+  { id: '3', name: 'Data_Analysis_Sample.sql', type: 'Work Sample', date: '2025-02-12' },
+];
 
-const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfile, completionPercentage }) => {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfile, completionPercentage }) => {
+  const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);
   const [isEditing, setIsEditing] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
-  // --- Upload Workflow State ---
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
-  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
-  const [suggestedTag, setSuggestedTag] = useState<string>('Notes');
-  const [selectedTag, setSelectedTag] = useState<string>('Notes');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // --- Edit State ---
+  const [tempProfile, setTempProfile] = useState<UserProfile>(globalProfile);
+  const profile = isEditing ? tempProfile : globalProfile;
 
-  useEffect(() => {
-    getDocuments().then(setFiles).catch(() => {});
-  }, []);
+  // --- Add Source Modal State ---
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
 
   // --- Color Logic for Completion ---
-  let progressColor = 'bg-red-500';
+  let progressColor = 'bg-[#B3261E]'; // Red
+  let progressTextColor = 'text-[#B3261E]';
+  
   if (completionPercentage >= 80) {
-    progressColor = 'bg-emerald-500';
+    progressColor = 'bg-[#14AE5C]'; // Green
+    progressTextColor = 'text-[#14AE5C]';
   } else if (completionPercentage >= 60) {
-    progressColor = 'bg-orange-500';
+    progressColor = 'bg-[#FA7B17]'; // Orange
+    progressTextColor = 'text-[#FA7B17]';
   }
 
   // --- Helpers ---
@@ -74,113 +73,64 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
     </span>
   );
 
-  const guessSourceType = (filename: string) => {
-    const name = filename.toLowerCase();
-    if (name.includes('resume') || name.includes('cv')) return 'Resume';
-    if (name.includes('portfolio') || name.includes('case') || name.includes('project')) return 'Portfolio';
-    if (name.includes('sql') || name.includes('code') || name.includes('sample') || name.includes('script') || name.includes('.py') || name.includes('.js')) return 'Work Sample';
-    return 'Notes';
-  };
-
-  const mergeExtractedProfile = (current: UserProfile, extracted: Partial<UserProfile>): UserProfile => {
-    const mergeText = (currentValue: string, nextValue?: string) => nextValue?.trim() ? nextValue : currentValue;
-
-    return {
-      ...current,
-      name: mergeText(current.name, extracted.name),
-      headline: mergeText(current.headline, extracted.headline),
-      bio: mergeText(current.bio, extracted.bio),
-      avatar: mergeText(current.avatar, extracted.avatar),
-      targetRoles: mergeText(current.targetRoles, extracted.targetRoles),
-      location: mergeText(current.location, extracted.location),
-      educationLevel: mergeText(current.educationLevel, extracted.educationLevel),
-      yearsOfExperience: mergeText(current.yearsOfExperience, extracted.yearsOfExperience),
-      interests: mergeText(current.interests, extracted.interests),
-      skills: {
-        technical: mergeText(current.skills.technical, extracted.skills?.technical),
-        product: mergeText(current.skills.product, extracted.skills?.product),
-        communication: mergeText(current.skills.communication, extracted.skills?.communication),
-      },
-      education: extracted.education?.length ? extracted.education : current.education,
-      experience: extracted.experience?.length ? extracted.experience : current.experience,
-      projects: extracted.projects?.length ? extracted.projects : current.projects,
-    };
-  };
-
   // --- Handlers ---
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.length) return;
-    const file = e.target.files[0];
-    const inferredTag = guessSourceType(file.name);
-    setPendingFile({ name: file.name, size: (file.size / 1024 / 1024).toFixed(2) + ' MB' });
-    setPendingUploadFile(file);
-    setSuggestedTag(inferredTag);
-    setSelectedTag(inferredTag);
-    setUploadFeedback(null);
-    setShowUploadModal(true);
-  };
 
-  const resetUploadState = () => {
-    setPendingFile(null);
-    setPendingUploadFile(null);
-    setSuggestedTag('Notes');
-    setSelectedTag('Notes');
-    setShowUploadModal(false);
-    setIsAnalyzing(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  const handleAddSource = (newFile: UploadedFile) => {
+    // 1. Add File/Link to Source List
+    setFiles([newFile, ...files]);
 
-  const confirmUpload = async () => {
-    if (!pendingUploadFile) return;
-
-    setIsAnalyzing(true);
-    try {
-      if (selectedTag === 'Resume') {
-        const result = await uploadAndParseDocument(pendingUploadFile);
-        setFiles(prev => [result.document, ...prev]);
-        if (Object.keys(result.extracted).length > 0) {
-          const mergedProfile = mergeExtractedProfile(profile, result.extracted);
-          onUpdateProfile(mergedProfile);
-          setIsEditing(true);
-          await onSaveProfile?.(mergedProfile);
-        }
-        if (result.parse_error) {
-          setUploadFeedback(`Resume uploaded, but auto-parse failed: ${result.parse_error}`);
-        } else {
-          setUploadFeedback('Resume uploaded and profile auto-filled. You can still edit the fields on the right.');
-        }
-      } else {
-        const result = await uploadDocument(pendingUploadFile, selectedTag);
-        setFiles(prev => [result, ...prev]);
-        setUploadFeedback(`${selectedTag} uploaded successfully.`);
+    // 2. Update Profile (Mock Sync Logic)
+    const updateLogic = (prev: UserProfile) => {
+      const updated = { ...prev };
+      // Simulate adding a skill or project based on the new source
+      if (newFile.type === 'Resume' || newFile.type === 'Link') {
+        updated.skills = {
+          ...updated.skills,
+          product: updated.skills.product + ", Strategic Planning"
+        };
+      } else if (newFile.type === 'Portfolio') {
+        updated.projects = [
+          {
+            id: 'new-proj-' + Date.now(),
+            name: "New Portfolio Project",
+            context: "Extracted from uploaded portfolio",
+            role: "Lead Designer",
+            tools: "Figma, React",
+            outcome: "Launched successfully",
+            learnings: "User-centered design is key"
+          },
+          ...updated.projects
+        ];
       }
-      resetUploadState();
-    } catch (err) {
-      console.error('Upload failed', err);
-      setUploadFeedback(err instanceof Error ? err.message : 'Upload failed.');
-      setIsAnalyzing(false);
-    }
-  };
+      return updated;
+    };
 
-  const cancelUpload = () => {
-    resetUploadState();
+    if (isEditing) {
+      setTempProfile(updateLogic);
+    } else {
+      onUpdateProfile(updateLogic);
+    }
+
+    // 3. Show Toast & Close
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+    setShowAddSourceModal(false);
   };
 
   const deleteFile = (id: string) => {
-    deleteDocument(id).catch(() => {});
-    setFiles(prev => prev.filter(f => f.id !== id));
+    setFiles(files.filter(f => f.id !== id));
   };
 
   const updateField = (field: keyof UserProfile, value: any) => {
-    onUpdateProfile(prev => ({ ...prev, [field]: value }));
+    setTempProfile(prev => ({ ...prev, [field]: value }));
   };
   
   const updateSkill = (category: keyof UserProfile['skills'], value: string) => {
-    onUpdateProfile(prev => ({ ...prev, skills: { ...prev.skills, [category]: value } }));
+    setTempProfile(prev => ({ ...prev, skills: { ...prev.skills, [category]: value } }));
   };
 
   const updateArrayItem = (arrayName: 'education' | 'experience' | 'projects', index: number, field: string, value: string) => {
-    onUpdateProfile(prev => {
+    setTempProfile(prev => {
       const newArray = [...prev[arrayName]] as any[];
       newArray[index] = { ...newArray[index], [field]: value };
       return { ...prev, [arrayName]: newArray };
@@ -194,11 +144,11 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
     else if (arrayName === 'experience') newItem = { id, company: '', role: '', type: 'Full-time', duration: '', responsibilities: '' };
     else newItem = { id, name: '', context: '', role: '', tools: '', outcome: '' };
 
-    onUpdateProfile(prev => ({ ...prev, [arrayName]: [...prev[arrayName], newItem] }));
+    setTempProfile(prev => ({ ...prev, [arrayName]: [...prev[arrayName], newItem] }));
   };
 
   const removeItem = (arrayName: 'education' | 'experience' | 'projects', index: number) => {
-    onUpdateProfile(prev => {
+    setTempProfile(prev => {
       const newArray = [...prev[arrayName]];
       newArray.splice(index, 1);
       return { ...prev, [arrayName]: newArray };
@@ -210,53 +160,43 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
     if (t.includes('resume')) return 'bg-amber-50 text-amber-700 border border-amber-100';
     if (t.includes('portfolio')) return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
     if (t.includes('work sample')) return 'bg-blue-50 text-blue-700 border border-blue-100';
+    if (t.includes('link')) return 'bg-purple-50 text-purple-700 border border-purple-100';
     return 'bg-gray-50 text-gray-600 border border-gray-200';
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative h-full">
       
       {/* --- LEFT: Sources Panel --- */}
-      <div className="lg:col-span-4 flex flex-col">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] p-6 shadow-sm h-[82vh] flex flex-col">
+      <div className="lg:col-span-4 flex flex-col bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] p-5 overflow-hidden h-full min-h-[360px]">
           <div className="flex items-center justify-between mb-6 flex-shrink-0">
             <h2 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Source Materials</h2>
             <span className="text-xs font-bold text-[#444746] bg-[#F0F4F9] px-2.5 py-1 rounded-full">{files.length}</span>
           </div>
 
           <div className="mb-6 flex-shrink-0">
-            <label 
-              className="flex items-center justify-center w-full p-6 border border-dashed border-[#C4C7C5] rounded-2xl cursor-pointer hover:bg-[#F0F4F9] hover:border-[#0B57D0] transition-all gap-3 group"
+            <button 
+              onClick={() => setShowAddSourceModal(true)}
+              className="flex flex-col items-center justify-center w-full p-6 border border-dashed border-[#C4C7C5] rounded-[14px] cursor-pointer hover:bg-[#F0F4F9] hover:border-[#0B57D0] transition-all group"
             >
-              <div className="bg-[#0B57D0] p-2 rounded-full text-white shadow-sm group-hover:scale-110 transition-transform">
-                <Plus className="w-5 h-5" />
-              </div>
-              <div>
+              <div className="flex items-center gap-3">
+                <div className="bg-[#0B57D0] p-2 rounded-full text-white shadow-sm group-hover:scale-110 transition-transform">
+                  <Plus className="w-5 h-5" />
+                </div>
                 <span className="block text-sm font-bold text-[#1F1F1F] text-center">Add Source</span>
               </div>
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                className="hidden" 
-                onChange={handleFileSelect} 
-              />
-            </label>
+              <span className="text-xs text-[#444746] mt-2 text-center">Upload resumes, portfolios, work samples, notes, or links.</span>
+            </button>
             <p className="text-xs text-[#444746] mt-3 text-center px-4 leading-relaxed">
-              Upload resumes, portfolios, work samples, notes, or links. <br/>
               <span className="font-medium text-[#1F1F1F]">These will be added to your profile and used across your preparation.</span>
             </p>
-            {uploadFeedback && (
-              <p className="text-xs mt-3 px-4 leading-relaxed text-left text-[#0B57D0] bg-[#E8F0FE] border border-[#D3E3FD] rounded-xl p-3">
-                {uploadFeedback}
-              </p>
-            )}
           </div>
 
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">
              {files.map(file => (
                 <div key={file.id} className="flex items-start gap-3 p-3 rounded-xl border border-[#E3E3E3] hover:bg-[#F0F4F9] hover:border-[#C4C7C5] group transition-all bg-white relative">
                   <div className="bg-[#F0F4F9] p-2.5 rounded-lg text-[#0B57D0] mt-0.5">
-                    {file.name.includes('http') ? <LinkIcon className="w-5 h-5"/> : <FileText className="w-5 h-5" />}
+                    {file.type === 'Link' || file.name.includes('http') ? <LinkIcon className="w-5 h-5"/> : <FileText className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 min-w-0 pr-6">
                     <p className="text-sm font-semibold text-[#1F1F1F] truncate leading-tight mb-1.5">{file.name}</p>
@@ -285,44 +225,60 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
                 </div>
               ))}
           </div>
-        </div>
       </div>
 
       {/* --- RIGHT: Career Profile --- */}
-      <div className="lg:col-span-8 flex flex-col">
-        <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm overflow-hidden h-[82vh] flex flex-col">
+      <div className="lg:col-span-8 flex flex-col bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] overflow-hidden h-full min-h-[360px]">
           
           {/* Document Header */}
-          <div className="px-8 py-6 border-b border-[#E3E3E3] flex items-center justify-between bg-white flex-shrink-0">
-            <div>
-              <div className="flex items-center gap-3">
-                 <h2 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Career Profile</h2>
-                 <div className="flex items-center gap-2 bg-[#F0F4F9] px-3 py-1 rounded-full">
-                   <div className="w-16 h-1.5 bg-[#E3E3E3] rounded-full overflow-hidden">
-                     <div className={`h-full ${progressColor}`} style={{width: `${completionPercentage}%`}}></div>
-                   </div>
-                   <span className="text-xs font-bold text-[#1F1F1F]">{completionPercentage}% Complete</span>
-                 </div>
+          <div className="px-8 py-6 border-b border-[#E3E3E3] flex items-center justify-between bg-white flex-shrink-0 min-h-[88px]">
+            {isEditing ? (
+              <div className="w-full flex justify-end gap-3">
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="w-32 py-2.5 rounded-full text-sm font-bold bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3] transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    onUpdateProfile(tempProfile);
+                    setIsEditing(false);
+                  }}
+                  className="w-32 py-2.5 rounded-full text-sm font-bold bg-[#1F1F1F] text-white hover:bg-[#444746] shadow-md transition-all"
+                >
+                  Done
+                </button>
               </div>
-              <p className="text-sm text-[#444746] mt-1">The more you add, the better AI can prepare on your behalf.</p>
-            </div>
-            <button
-              onClick={() => {
-                if (isEditing) onSaveProfile?.(profile);
-                setIsEditing(!isEditing);
-              }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all ${
-                isEditing 
-                  ? 'bg-[#1F1F1F] text-white hover:bg-[#444746] shadow-md' 
-                  : 'bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3]'
-              }`}
-            >
-              {isEditing ? <><Check className="w-4 h-4" /> Done Editing</> : <><Edit3 className="w-4 h-4" /> Edit Profile</>}
-            </button>
+            ) : (
+              <>
+                <div>
+                  <div className="flex items-center gap-3">
+                     <h2 className="text-2xl font-bold text-[#1F1F1F] tracking-tight">Career Profile</h2>
+                     <div className="flex items-center gap-2 bg-[#F0F4F9] px-3 py-1 rounded-full">
+                       <div className="w-16 h-1.5 bg-[#E3E3E3] rounded-full overflow-hidden">
+                         <div className={`h-full ${progressColor}`} style={{width: `${completionPercentage}%`}}></div>
+                       </div>
+                       <span className={`text-xs font-bold ${progressTextColor}`}>{completionPercentage}% Complete</span>
+                     </div>
+                  </div>
+                  <p className="text-sm text-[#444746] mt-1">The more you add, the better AI can prepare on your behalf.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setTempProfile(globalProfile);
+                    setIsEditing(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold bg-[#F0F4F9] text-[#1F1F1F] hover:bg-[#E3E3E3] transition-all"
+                >
+                  <Edit3 className="w-4 h-4" /> Edit Profile
+                </button>
+              </>
+            )}
           </div>
 
           {/* Document Content */}
-          <div className="px-10 pt-10 pb-32 flex-1 overflow-y-auto">
+          <div className="px-10 pt-10 pb-10 flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto space-y-12">
               
               {/* 0. Header (Avatar, Name, Headline, Bio) */}
@@ -643,82 +599,20 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdateProfile, onSaveProfi
 
             </div>
           </div>
-        </div>
       </div>
 
-      {/* --- CONFIRMATION MODAL --- */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-[#1F1F1F]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[20px] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-[#E3E3E3]">
-              <h3 className="text-lg font-bold text-[#1F1F1F]">Confirm Source Material</h3>
-            </div>
-            
-            <div className="p-8 space-y-6">
-              {/* File Info */}
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#F0F4F9] rounded-xl flex items-center justify-center flex-shrink-0">
-                   {isAnalyzing ? (
-                     <Loader2 className="w-6 h-6 text-[#0B57D0] animate-spin" />
-                   ) : (
-                     <FileText className="w-6 h-6 text-[#0B57D0]" />
-                   )}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-[#1F1F1F] truncate">{pendingFile?.name}</p>
-                  <p className="text-xs text-[#444746]">{pendingFile?.size}</p>
-                </div>
-              </div>
+      {/* --- ADD SOURCE MODAL --- */}
+      <AddSourceModal 
+        isOpen={showAddSourceModal} 
+        onClose={() => setShowAddSourceModal(false)} 
+        onAddSource={handleAddSource} 
+      />
 
-              {/* Tag Selector */}
-              <div>
-                <label className="block text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">
-                  Content Type
-                </label>
-                <div className="relative">
-                  <select 
-                    value={selectedTag} 
-                    onChange={(e) => setSelectedTag(e.target.value)}
-                    disabled={isAnalyzing}
-                    className="w-full p-3 bg-[#F0F4F9] border border-transparent rounded-xl text-[#1F1F1F] font-medium appearance-none outline-none focus:ring-2 focus:ring-[#0B57D0]"
-                  >
-                    {SOURCE_TAGS.map(tag => (
-                      <option key={tag} value={tag}>{tag}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#444746] pointer-events-none" />
-                </div>
-                {!isAnalyzing && (
-                  <p className="text-xs text-[#0B57D0] mt-2 flex items-center gap-1">
-                    <SparklesIcon className="w-3 h-3" />
-                    AI suggests <b>{suggestedTag}</b>. You can change it before upload.
-                  </p>
-                )}
-                {selectedTag === 'Resume' && (
-                  <p className="text-xs text-[#444746] mt-2">
-                    Resume uploads will be parsed and auto-fill the profile on the right. You can still edit the fields after.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="p-6 bg-[#FAFAFA] border-t border-[#E3E3E3] flex justify-end gap-3">
-              <button 
-                onClick={cancelUpload}
-                className="px-5 py-2.5 rounded-full font-bold text-sm text-[#444746] hover:bg-[#E3E3E3] transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={confirmUpload}
-                disabled={isAnalyzing}
-                className="px-6 py-2.5 rounded-full bg-[#1F1F1F] text-white font-bold text-sm hover:bg-[#444746] transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isAnalyzing ? 'Analyzing...' : 'Confirm & Add'}
-                {!isAnalyzing && <Check className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+      {/* --- TOAST --- */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 bg-[#1F1F1F] text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-5 fade-in duration-300 z-50">
+          <Check className="w-4 h-4 text-[#14AE5C]" />
+          <span className="text-sm font-medium">Profile updated.</span>
         </div>
       )}
 
