@@ -1,16 +1,18 @@
 """
 Profile router — CRUD for user profile, education, experience, projects, documents.
 """
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from database import get_db
 from models.user import UserProfile, Education, Experience, Project, Document
-from schemas.user import UserProfileUpdate, UserProfileResponse, DocumentResponse
+from schemas.user import UserProfileUpdate
+from services.resume_parser import extract_profile_from_resume
 from services.storage import upload_file, detect_file_type, delete_file, read_text_file
-from services.llm import extract_profile_from_resume
-import json
-from datetime import datetime
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -22,11 +24,25 @@ async def get_or_create_profile(db: AsyncSession) -> UserProfile:
         select(UserProfile).where(UserProfile.user_key == USER_KEY)
     )
     profile = result.scalar_one_or_none()
-    if not profile:
-        profile = UserProfile(user_key=USER_KEY)
-        db.add(profile)
+    if profile:
+        return profile
+
+    profile = UserProfile(user_key=USER_KEY)
+    db.add(profile)
+    try:
         await db.commit()
         await db.refresh(profile)
+        return profile
+    except IntegrityError:
+        # Another request created the single demo profile first.
+        await db.rollback()
+        result = await db.execute(
+            select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        )
+        profile = result.scalar_one_or_none()
+        if profile:
+            return profile
+        raise
     return profile
 
 
@@ -214,12 +230,13 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
 @router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    type_override: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     profile = await get_or_create_profile(db)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
-    detected_type = detect_file_type(file.filename or "")
+    detected_type = type_override or detect_file_type(file.filename or "")
 
     doc = Document(
         profile_id=profile.id,
@@ -248,16 +265,20 @@ async def upload_and_parse_resume(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload a resume file and auto-extract profile fields via LLM."""
+    """Upload a resume file and auto-extract profile fields via local parsing."""
     profile = await get_or_create_profile(db)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
     text = await read_text_file(file_path)
+    parse_error = None
+    extracted = {}
 
-    if not text.strip():
-        raise HTTPException(400, "Could not read file content. Please ensure it's a text-based PDF or .txt file.")
-
-    extracted = await extract_profile_from_resume(text)
+    try:
+        if not text.strip():
+            raise ValueError("Could not extract readable text from this file.")
+        extracted = extract_profile_from_resume(text)
+    except Exception as exc:
+        parse_error = str(exc) or "Resume parsing failed."
 
     doc = Document(
         profile_id=profile.id,
@@ -269,8 +290,20 @@ async def upload_and_parse_resume(
     )
     db.add(doc)
     await db.commit()
+    await db.refresh(doc)
 
-    return {"extracted": extracted, "document_id": doc.id}
+    return {
+        "extracted": extracted,
+        "document_id": doc.id,
+        "document": {
+            "id": str(doc.id),
+            "name": doc.name,
+            "type": doc.type,
+            "date": doc.created_at.strftime("%Y-%m-%d"),
+            "file_size": doc.file_size,
+        },
+        "parse_error": parse_error,
+    }
 
 
 @router.delete("/documents/{doc_id}")
