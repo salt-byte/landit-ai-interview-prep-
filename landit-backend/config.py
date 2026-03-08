@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./landit.db"
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 20
-    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    allowed_origins: str = "*"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

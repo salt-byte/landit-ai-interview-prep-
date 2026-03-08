@@ -37,11 +37,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend dev server
+# CORS
+_origins = settings.origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.origins_list,
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials="*" not in _origins,
+    allow_origin_regex=r".*" if "*" in _origins else None,
     allow_methods=["*"],
     allow_headers=["*"],
 )
