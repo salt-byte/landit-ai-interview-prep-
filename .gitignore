@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python backend
+landit-backend/.env
+landit-backend/venv/
+landit-backend/__pycache__/
+landit-backend/*.db
+landit-backend/uploads/
