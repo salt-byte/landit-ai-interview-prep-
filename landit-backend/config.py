@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pathlib import Path
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 
 class Settings(BaseSettings):
@@ -7,6 +8,9 @@ class Settings(BaseSettings):
     app_secret_key: str = "landit-dev-secret-change-in-prod"
     debug: bool = True
     database_url: str = "sqlite+aiosqlite:///./landit.db"
+    db_init_retries: int = 5
+    db_init_retry_delay_seconds: float = 2.0
+    db_connect_timeout_seconds: float = 10.0
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 20
     allowed_origins: str = "*"
@@ -16,6 +20,26 @@ class Settings(BaseSettings):
     @property
     def origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
+
+    @property
+    def normalized_database_url(self) -> str:
+        """Normalize DB URL for SQLAlchemy async engine usage."""
+        url = self.database_url.strip()
+        if url.startswith("postgres://"):
+            url = "postgresql+asyncpg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+
+        if not url.startswith("postgresql+asyncpg://"):
+            return url
+
+        parsed = urlparse(url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if "ssl" not in query and "sslmode" not in query:
+            query["ssl"] = "require"
+
+        normalized_query = urlencode(query, doseq=True)
+        return urlunparse(parsed._replace(query=normalized_query))
 
     @property
     def upload_path(self) -> Path:
