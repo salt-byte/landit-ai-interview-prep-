@@ -6,6 +6,7 @@ Falls back to pure-Python heuristics if the API key is absent or the call fails.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -163,7 +164,8 @@ def _normalize_glm_output(data: dict) -> dict:
 
 def extract_profile_from_resume(resume_text: str) -> dict:
     """
-    GLM-4-Flash first; falls back to heuristic parser if GLM is unavailable or fails.
+    Sync version: GLM-4-Flash first, heuristic fallback.
+    Use extract_profile_from_resume_async in async contexts to avoid blocking.
     """
     try:
         result = extract_profile_with_glm(resume_text)
@@ -172,6 +174,14 @@ def extract_profile_from_resume(resume_text: str) -> dict:
     except Exception as e:
         logger.warning("GLM parsing failed (%s), falling back to heuristic parser", e)
         return _heuristic_extract(resume_text)
+
+
+async def extract_profile_from_resume_async(resume_text: str) -> dict:
+    """
+    Async version: runs GLM call in a thread pool so it doesn't block the event loop.
+    Use this from FastAPI async route handlers.
+    """
+    return await asyncio.to_thread(extract_profile_from_resume, resume_text)
 
 
 # ── Heuristic fallback ────────────────────────────────────────────────────────

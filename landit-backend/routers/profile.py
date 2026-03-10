@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models.user import UserProfile, Education, Experience, Project, Document
 from schemas.user import UserProfileUpdate
-from services.resume_parser import extract_profile_from_resume
+from services.resume_parser import extract_profile_from_resume_async
 from services.storage import upload_file, detect_file_type, delete_file, read_text_file
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -276,7 +276,7 @@ async def upload_and_parse_resume(
     try:
         if not text.strip():
             raise ValueError("Could not extract readable text from this file.")
-        extracted = extract_profile_from_resume(text)
+        extracted = await extract_profile_from_resume_async(text)
     except Exception as exc:
         parse_error = str(exc) or "Resume parsing failed."
 
