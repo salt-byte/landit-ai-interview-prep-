@@ -75,32 +75,62 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
   // --- Handlers ---
 
-  const handleAddSource = (newFile: UploadedFile, extracted?: Partial<UserProfile>) => {
+  const handleAddSource = (newFile: UploadedFile, extracted?: any) => {
     // 1. Add File to Source List
     setFiles([newFile, ...files]);
 
-    // 2. Merge extracted profile data if available (from real backend parse)
+    // 2. Merge extracted profile data — backend returns snake_case, map to camelCase
     if (extracted && Object.keys(extracted).length > 0) {
+      const e = extracted;
       const updateLogic = (prev: UserProfile): UserProfile => ({
         ...prev,
-        name: extracted.name || prev.name,
-        headline: extracted.headline || prev.headline,
-        bio: extracted.bio || prev.bio,
-        targetRoles: extracted.targetRoles || prev.targetRoles,
-        location: extracted.location || prev.location,
-        educationLevel: extracted.educationLevel || prev.educationLevel,
-        yearsOfExperience: extracted.yearsOfExperience || prev.yearsOfExperience,
-        interests: extracted.interests || prev.interests,
-        skills: extracted.skills
+        name: e.name || prev.name,
+        headline: e.headline || prev.headline,
+        bio: e.bio || prev.bio,
+        targetRoles: e.target_roles || e.targetRoles || prev.targetRoles,
+        location: e.location || prev.location,
+        educationLevel: e.education_level || e.educationLevel || prev.educationLevel,
+        yearsOfExperience: e.years_of_experience || e.yearsOfExperience || prev.yearsOfExperience,
+        interests: e.interests || prev.interests,
+        skills: e.skills
           ? {
-              technical: extracted.skills.technical || prev.skills.technical,
-              product: extracted.skills.product || prev.skills.product,
-              communication: extracted.skills.communication || prev.skills.communication,
+              technical: e.skills.technical || prev.skills.technical,
+              product: e.skills.product || prev.skills.product,
+              communication: e.skills.communication || prev.skills.communication,
             }
           : prev.skills,
-        education: extracted.education && extracted.education.length > 0 ? extracted.education : prev.education,
-        experience: extracted.experience && extracted.experience.length > 0 ? extracted.experience : prev.experience,
-        projects: extracted.projects && extracted.projects.length > 0 ? extracted.projects : prev.projects,
+        education: e.education?.length > 0
+          ? e.education.map((edu: any, i: number) => ({
+              id: `parsed-edu-${i}`,
+              school: edu.school || '',
+              degree: edu.degree || '',
+              major: edu.major || '',
+              year: edu.year || '',
+              keyCoursework: edu.key_coursework || edu.keyCoursework || '',
+              academicFocus: edu.academic_focus || edu.academicFocus || '',
+            }))
+          : prev.education,
+        experience: e.experience?.length > 0
+          ? e.experience.map((exp: any, i: number) => ({
+              id: `parsed-exp-${i}`,
+              company: exp.company || '',
+              role: exp.role || '',
+              type: exp.type || 'Full-time',
+              duration: exp.duration || '',
+              responsibilities: exp.responsibilities || '',
+            }))
+          : prev.experience,
+        projects: e.projects?.length > 0
+          ? e.projects.map((p: any, i: number) => ({
+              id: `parsed-proj-${i}`,
+              name: p.name || '',
+              context: p.context || '',
+              role: p.role || '',
+              tools: p.tools || '',
+              outcome: p.outcome || '',
+              learnings: p.learnings || '',
+            }))
+          : prev.projects,
       });
       if (isEditing) {
         setTempProfile(updateLogic);
