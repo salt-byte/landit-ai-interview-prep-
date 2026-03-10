@@ -9,26 +9,61 @@ from datetime import datetime
 
 
 SECTION_ALIASES = {
+    # summary
     "summary": "summary",
     "professional summary": "summary",
     "profile": "summary",
     "about": "summary",
+    "about me": "summary",
+    "objective": "summary",
+    "career objective": "summary",
+    "overview": "summary",
+    # skills
     "skills": "skills",
     "technical skills": "skills",
     "core competencies": "skills",
     "competencies": "skills",
+    "skills & tools": "skills",
+    "tools & technologies": "skills",
+    "technologies": "skills",
+    "technical expertise": "skills",
+    # education
     "education": "education",
     "academic background": "education",
+    "academic history": "education",
+    "educational background": "education",
+    # experience
     "experience": "experience",
     "work experience": "experience",
     "professional experience": "experience",
     "employment": "experience",
+    "employment history": "experience",
+    "work history": "experience",
+    "research experience": "experience",
+    "internship experience": "experience",
+    "internships": "experience",
+    "research": "experience",
+    "industry experience": "experience",
+    "relevant experience": "experience",
+    "leadership experience": "experience",
+    "volunteer experience": "experience",
+    "teaching experience": "experience",
+    # projects
     "projects": "projects",
     "project experience": "projects",
     "selected projects": "projects",
+    "key projects": "projects",
+    "personal projects": "projects",
+    "academic projects": "projects",
+    # interests / extras
     "interests": "interests",
     "activities": "interests",
     "leadership": "interests",
+    "awards": "interests",
+    "honors": "interests",
+    "certifications": "interests",
+    "publications": "interests",
+    "languages": "interests",
 }
 
 DEGREE_PATTERNS = [
@@ -159,23 +194,66 @@ def _is_contact_line(line: str) -> bool:
 
 
 def _looks_like_location(line: str) -> bool:
-    if not line:
+    """Only match short lines that are clearly a location."""
+    if not line or len(line) > 60:
         return False
     if re.search(r"\b(remote|relocate|relocation)\b", line, re.I):
         return True
-    if re.search(r"\b[A-Z][a-z]+(?: [A-Z][a-z]+)*,\s?[A-Z]{2}\b", line):
+    # "City, ST" or "City, Country"
+    if re.fullmatch(r"[A-Za-z\s]+,\s*[A-Za-z]{2,}", line.strip()):
         return True
-    if re.search(r"\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/[A-Z][a-z]+(?: [A-Z][a-z]+)*\b", line):
+    # "City / City" or "City, Country (Remote)"
+    if re.search(r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*,\s?[A-Z]{2}\b", line) and len(line) < 50:
         return True
     return False
+
+
+def _extract_name(first_line: str) -> tuple[str, str]:
+    """
+    Split a header line into (name, leftover_headline).
+    Handles cases like 'Yudie Deng AI Product Manager' or 'Jane Smith | Software Engineer'.
+    """
+    if not first_line:
+        return "", ""
+
+    # Split on common separators first
+    for sep in [" | ", " — ", " - ", " / "]:
+        if sep in first_line:
+            parts = first_line.split(sep, 1)
+            return parts[0].strip(), parts[1].strip()
+
+    # Try to split name (2-3 capitalized words) from title
+    words = first_line.split()
+    name_words = []
+    for w in words:
+        # A name word: capitalized, alphabetic, short
+        if w[0].isupper() and w.replace("-", "").isalpha() and len(w) <= 20:
+            name_words.append(w)
+            if len(name_words) == 3:
+                break
+        else:
+            break
+
+    if 2 <= len(name_words) <= 3:
+        name = " ".join(name_words)
+        leftover = first_line[len(name):].strip(" ,|-")
+        return name, leftover
+
+    # Fallback: take the whole line as name (short lines only)
+    if len(words) <= 4:
+        return first_line, ""
+    return " ".join(words[:3]), " ".join(words[3:])
 
 
 def _parse_header(sections: dict[str, list[str]]) -> dict[str, str]:
     header_lines = [line for line in sections.get("header", []) if line]
     non_contact = [line for line in header_lines if not _is_contact_line(line)]
 
-    name = non_contact[0] if non_contact else ""
-    headline = ""
+    if not non_contact:
+        return {"name": "", "headline": "", "location": "", "bio": ""}
+
+    name, name_leftover = _extract_name(non_contact[0])
+    headline = name_leftover
     bio_parts: list[str] = []
     location = ""
 
@@ -183,9 +261,12 @@ def _parse_header(sections: dict[str, list[str]]) -> dict[str, str]:
         if not location and _looks_like_location(line):
             location = line
             continue
-        if not headline and len(line) <= 90:
+        if not headline and len(line) <= 120:
             headline = line
             continue
+        # Stop absorbing into bio once we hit long experience-like lines
+        if len(line) > 150 or re.search(r"\b(present|current|\d{4})\b", line, re.I):
+            break
         bio_parts.append(line)
 
     return {
