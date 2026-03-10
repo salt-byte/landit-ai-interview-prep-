@@ -75,68 +75,40 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
   // --- Handlers ---
 
-  const handleAddSource = (newFile: UploadedFile, extracted?: any) => {
-    // 1. Add File to Source List
+  const handleAddSource = (newFile: UploadedFile) => {
+    // 1. Add File/Link to Source List
     setFiles([newFile, ...files]);
 
-    // 2. Merge extracted profile data — backend returns snake_case, map to camelCase
-    if (extracted && Object.keys(extracted).length > 0) {
-      const e = extracted;
-      const updateLogic = (prev: UserProfile): UserProfile => ({
-        ...prev,
-        name: e.name || prev.name,
-        headline: e.headline || prev.headline,
-        bio: e.bio || prev.bio,
-        targetRoles: e.target_roles || e.targetRoles || prev.targetRoles,
-        location: e.location || prev.location,
-        educationLevel: e.education_level || e.educationLevel || prev.educationLevel,
-        yearsOfExperience: e.years_of_experience || e.yearsOfExperience || prev.yearsOfExperience,
-        interests: e.interests || prev.interests,
-        skills: e.skills
-          ? {
-              technical: e.skills.technical || prev.skills.technical,
-              product: e.skills.product || prev.skills.product,
-              communication: e.skills.communication || prev.skills.communication,
-            }
-          : prev.skills,
-        education: e.education?.length > 0
-          ? e.education.map((edu: any, i: number) => ({
-              id: `parsed-edu-${i}`,
-              school: edu.school || '',
-              degree: edu.degree || '',
-              major: edu.major || '',
-              year: edu.year || '',
-              keyCoursework: edu.key_coursework || edu.keyCoursework || '',
-              academicFocus: edu.academic_focus || edu.academicFocus || '',
-            }))
-          : prev.education,
-        experience: e.experience?.length > 0
-          ? e.experience.map((exp: any, i: number) => ({
-              id: `parsed-exp-${i}`,
-              company: exp.company || '',
-              role: exp.role || '',
-              type: exp.type || 'Full-time',
-              duration: exp.duration || '',
-              responsibilities: exp.responsibilities || '',
-            }))
-          : prev.experience,
-        projects: e.projects?.length > 0
-          ? e.projects.map((p: any, i: number) => ({
-              id: `parsed-proj-${i}`,
-              name: p.name || '',
-              context: p.context || '',
-              role: p.role || '',
-              tools: p.tools || '',
-              outcome: p.outcome || '',
-              learnings: p.learnings || '',
-            }))
-          : prev.projects,
-      });
-      if (isEditing) {
-        setTempProfile(updateLogic);
-      } else {
-        onUpdateProfile(updateLogic);
+    // 2. Update Profile (Mock Sync Logic)
+    const updateLogic = (prev: UserProfile) => {
+      const updated = { ...prev };
+      // Simulate adding a skill or project based on the new source
+      if (newFile.type === 'Resume' || newFile.type === 'Link') {
+        updated.skills = {
+          ...updated.skills,
+          product: updated.skills.product + ", Strategic Planning"
+        };
+      } else if (newFile.type === 'Portfolio') {
+        updated.projects = [
+          {
+            id: 'new-proj-' + Date.now(),
+            name: "New Portfolio Project",
+            context: "Extracted from uploaded portfolio",
+            role: "Lead Designer",
+            tools: "Figma, React",
+            outcome: "Launched successfully",
+            learnings: "User-centered design is key"
+          },
+          ...updated.projects
+        ];
       }
+      return updated;
+    };
+
+    if (isEditing) {
+      setTempProfile(updateLogic);
+    } else {
+      onUpdateProfile(updateLogic);
     }
 
     // 3. Show Toast & Close
@@ -432,8 +404,12 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                            </div>
                         ) : (
                            <div>
-                             <h4 className="font-bold text-[#1F1F1F] text-base">{edu.school || <MissingIndicator/>}</h4>
-                             <p className="text-sm text-[#1F1F1F]">{edu.degree || <MissingIndicator/>} • {edu.major || <MissingIndicator/>}</p>
+                             <h4 className="font-bold text-[#1F1F1F] text-base">{edu.school || '—'}</h4>
+                             {(edu.degree || edu.major) && (
+                               <p className="text-sm text-[#1F1F1F]">
+                                 {[edu.degree, edu.major].filter(Boolean).join(' · ')}
+                               </p>
+                             )}
                            </div>
                         )}
                         
@@ -449,16 +425,16 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                         <div>
                             {isEditing ? (
                                 <input value={edu.academicFocus || ''} onChange={e => updateArrayItem('education', index, 'academicFocus', e.target.value)} className={`w-full text-xs text-[#444746] border-b border-dashed outline-none bg-transparent ${getFieldStyles(edu.academicFocus)}`} placeholder="Academic Focus (e.g. NLP Research)" />
-                            ) : (
-                                <p className="text-xs text-[#444746]"><span className="font-semibold">Focus:</span> {isMissing(edu.academicFocus) ? <MissingIndicator text="Missing Focus"/> : edu.academicFocus}</p>
-                            )}
+                            ) : edu.academicFocus ? (
+                                <p className="text-xs text-[#444746]"><span className="font-semibold">Focus:</span> {edu.academicFocus}</p>
+                            ) : null}
                         </div>
 
                         {isEditing ? (
                            <textarea value={edu.keyCoursework} onChange={e => updateArrayItem('education', index, 'keyCoursework', e.target.value)} rows={2} className={`w-full text-sm text-[#444746] border-b border-dashed outline-none bg-transparent resize-none ${getFieldStyles(edu.keyCoursework)}`} placeholder="Key Coursework" />
-                        ) : (
-                           <p className="text-sm text-[#444746] leading-relaxed"><span className="font-semibold text-[#1F1F1F]">Key Coursework:</span> {isMissing(edu.keyCoursework) ? <MissingIndicator/> : edu.keyCoursework}</p>
-                        )}
+                        ) : edu.keyCoursework ? (
+                           <p className="text-sm text-[#444746] leading-relaxed"><span className="font-semibold text-[#1F1F1F]">Key Coursework:</span> {edu.keyCoursework}</p>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -488,11 +464,10 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                            </div>
                         ) : (
                            <div>
-                              <h4 className="font-bold text-[#1F1F1F] text-lg">{exp.company || <MissingIndicator text="Missing Company"/>}</h4>
+                              <h4 className="font-bold text-[#1F1F1F] text-lg">{exp.company || '—'}</h4>
                               <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-sm font-medium text-[#1F1F1F]">{exp.role || <MissingIndicator/>}</span>
-                                <span className="w-1 h-1 bg-[#C4C7C5] rounded-full"></span>
-                                <span className="text-xs text-[#444746] bg-[#F0F4F9] px-1.5 py-0.5 rounded">{exp.type || '-'}</span>
+                                {exp.role && <span className="text-sm font-medium text-[#1F1F1F]">{exp.role}</span>}
+                                {exp.type && <><span className="w-1 h-1 bg-[#C4C7C5] rounded-full"></span><span className="text-xs text-[#444746] bg-[#F0F4F9] px-1.5 py-0.5 rounded">{exp.type}</span></>}
                               </div>
                            </div>
                         )}
@@ -506,12 +481,21 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
                       <div className="mt-3">
                          {isEditing ? (
-                            <textarea value={exp.responsibilities} onChange={e => updateArrayItem('experience', index, 'responsibilities', e.target.value)} rows={5} className={`w-full text-sm text-[#444746] border-b border-dashed outline-none bg-transparent resize-none leading-relaxed ${getFieldStyles(exp.responsibilities)}`} placeholder="Responsibilities (bullet points)" />
-                         ) : (
-                            <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap pl-1">
-                               {isMissing(exp.responsibilities) ? <MissingIndicator text="Missing Responsibilities"/> : exp.responsibilities}
-                            </div>
-                         )}
+                            <textarea value={exp.responsibilities} onChange={e => updateArrayItem('experience', index, 'responsibilities', e.target.value)} rows={5} className={`w-full text-sm text-[#444746] border-b border-dashed outline-none bg-transparent resize-none leading-relaxed ${getFieldStyles(exp.responsibilities)}`} placeholder="Responsibilities (one bullet per line)" />
+                         ) : exp.responsibilities ? (
+                            <ul className="space-y-1 pl-1">
+                              {exp.responsibilities
+                                .split('\n')
+                                .map(line => line.replace(/^[•\-\*]\s*/, '').trim())
+                                .filter(Boolean)
+                                .map((bullet, i) => (
+                                  <li key={i} className="flex gap-2 text-sm text-[#444746] leading-relaxed">
+                                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#C4C7C5] flex-shrink-0" />
+                                    <span>{bullet}</span>
+                                  </li>
+                                ))}
+                            </ul>
+                         ) : null}
                       </div>
                     </div>
                   ))}
