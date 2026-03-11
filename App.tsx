@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  User, 
-  Briefcase, 
-  MessageSquare, 
-  FileText, 
-  Video, 
-  ClipboardList, 
+import {
+  LayoutDashboard,
+  User,
+  Briefcase,
+  MessageSquare,
+  FileText,
+  Video,
+  ClipboardList,
   File,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  LogOut
 } from 'lucide-react';
 import Profile from './components/Profile';
 import RoleList, { INITIAL_ROLES } from './components/RoleList';
@@ -19,6 +20,7 @@ import { RoleContextBuilder, InterviewPrepBuilder } from './components/Workspace
 import MockInterview from './components/MockInterview';
 import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
+import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion } from './types';
 
 // Moved from Profile.tsx to act as the single source of truth
@@ -127,20 +129,54 @@ const INITIAL_SAVED_QUESTIONS: SavedQuestion[] = [
   { id: 'q-notion-10', roleId: 'claire-pmm-1', type: 'Strategy & Vision', question: 'Identify a partnership opportunity for Notion and explain its strategic value.', lastModified: '2026-02-02T13:40:00Z', savedAt: '2026-02-02T13:40:00Z', source: 'MOCK_PREP' },
 ];
 
+// Empty state for signed-in users (fresh start)
+const EMPTY_PROFILE: UserProfile = {
+  name: "", headline: "", bio: "",
+  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop",
+  targetRoles: "", location: "", educationLevel: "", yearsOfExperience: "",
+  education: [], experience: [], projects: [],
+  skills: { technical: "", product: "", communication: "" },
+  interests: "",
+};
+
 const App: React.FC = () => {
+  // ── Auth state ──────────────────────────────────────────────────────────────
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'GUEST' | 'USER'>('LOGIN');
+
+  const handleGuest = () => {
+    setUserProfile(INITIAL_PROFILE);
+    setRoles(INITIAL_ROLES);
+    setSavedQuestions(INITIAL_SAVED_QUESTIONS);
+    setAuthMode('GUEST');
+  };
+
+  const handleSignIn = (_email: string, _password: string) => {
+    setUserProfile(EMPTY_PROFILE);
+    setRoles([]);
+    setSavedQuestions([]);
+    setAuthMode('USER');
+  };
+
+  const handleLogout = () => {
+    setAuthMode('LOGIN');
+    setView('DASHBOARD');
+    setSelectedRole(null);
+  };
+
+  // ── App state ───────────────────────────────────────────────────────────────
   const [view, setView] = useState<AppView>('DASHBOARD');
   const [selectedRole, setSelectedRole] = useState<TargetRole | null>(null);
-  const [roles, setRoles] = useState<TargetRole[]>(INITIAL_ROLES);
-  
+  const [roles, setRoles] = useState<TargetRole[]>([]);
+
   // Lifted Mock Prep State
   const [mockPrepSettings, setMockPrepSettings] = useState({
     types: [] as string[],
     qty: 3
   });
-  
+
   // Lifted State
-  const [userProfile, setUserProfile] = useState<UserProfile>(INITIAL_PROFILE);
-  const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>(INITIAL_SAVED_QUESTIONS);
+  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
+  const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([]);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
 
   // Completion Logic - Hardcoded to 75% for Demo purposes as requested
@@ -321,6 +357,11 @@ const App: React.FC = () => {
     </button>
   );
 
+  // Show login page until user authenticates
+  if (authMode === 'LOGIN') {
+    return <Login onGuest={handleGuest} onSignIn={handleSignIn} />;
+  }
+
   return (
     <div className="flex h-screen bg-[#F0F4F9] font-sans text-[#1F1F1F] overflow-hidden">
       {/* GLOBAL SIDEBAR - Fixed */}
@@ -413,14 +454,31 @@ const App: React.FC = () => {
 
         {/* User Footer */}
         <div className="p-4 border-t border-[#E3E3E3]">
-          <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#F0F4F9] cursor-pointer transition-colors">
-            <div className="w-9 h-9 rounded-full overflow-hidden border border-[#E3E3E3]">
-              <img src={userProfile.avatar} alt="User" className="w-full h-full object-cover" />
+          <div className="flex items-center gap-3 p-2 rounded-xl">
+            <div className="w-9 h-9 rounded-full overflow-hidden border border-[#E3E3E3] flex-shrink-0">
+              {userProfile.avatar
+                ? <img src={userProfile.avatar} alt="User" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-[#E3E3E3] flex items-center justify-center"><User className="w-4 h-4 text-[#444746]" /></div>
+              }
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[#1F1F1F] truncate">{userProfile.name}</p>
-              <p className="text-xs text-[#444746] truncate">Free Plan</p>
+              <p className="text-sm font-bold text-[#1F1F1F] truncate">
+                {authMode === 'GUEST' ? 'Guest' : (userProfile.name || 'My Account')}
+              </p>
+              <p className="text-xs text-[#444746] truncate flex items-center gap-1">
+                {authMode === 'GUEST'
+                  ? <span className="text-[10px] font-bold text-[#E8710A] bg-orange-50 px-1.5 py-0.5 rounded">DEMO MODE</span>
+                  : 'Free Plan'
+                }
+              </p>
             </div>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="p-1.5 text-[#C4C7C5] hover:text-[#B3261E] hover:bg-[#FFDAD6] rounded-lg transition-colors flex-shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
