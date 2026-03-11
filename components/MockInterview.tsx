@@ -43,6 +43,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { TargetRole, InterviewFeedback } from '../types';
+import { createInterviewSession, createInterviewWS, getInterviewFeedback } from '../api';
 
 interface MockInterviewProps {
   workspace: TargetRole | null;
@@ -303,6 +304,14 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const streamRef = useRef<MediaStream | null>(null);
   const [audioLevel, setAudioLevel] = useState(0); // 0-100 for visualizer
 
+  // Backend WebSocket State
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [useLocalMode, setUseLocalMode] = useState(false);
+  const [realFeedback, setRealFeedback] = useState<InterviewFeedback | null>(null);
+  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
+  const [wsStartSent, setWsStartSent] = useState(false);
+
   // Interviewer State
   const [matchedInterviewer, setMatchedInterviewer] = useState<any>(null);
   const [editingTranscript, setEditingTranscript] = useState<number | null>(null);
@@ -350,11 +359,14 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   }, [matchedInterviewer]);
 
 
-  // Cleanup stream on unmount
+  // Cleanup stream + WS on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
   }, []);
@@ -460,16 +472,51 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     setTimeout(initMedia, 100);
   };
 
-  const handleStartInterview = () => {
+  const handleStartInterview = async () => {
     setStep('INTERVIEW');
     setIsRecording(true);
-    // Re-attach stream to new video element if needed, usually React ref callback handles this, 
-    // but we can ensure it here.
     setTimeout(() => {
-        if (videoRef.current && streamRef.current) {
-            videoRef.current.srcObject = streamRef.current;
-        }
+      if (videoRef.current && streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+      }
     }, 100);
+
+    // Try to connect to backend WebSocket
+    try {
+      const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
+      const session = await createInterviewSession({
+        role_id: roleId,
+        interviewer_id: matchedInterviewer?.id || 'alex',
+      });
+      setSessionId(session.id);
+      setWsStartSent(false);
+
+      const ws = createInterviewWS(session.id);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'question') {
+          setDisplayedQuestion(msg.content);
+          setCurrentQuestionIndex(msg.index ?? 0);
+          speak(msg.content);
+        } else if (msg.type === 'feedback_ready') {
+          setIsRecording(false);
+          setIsFinishing(true);
+          loadRealFeedback(session.id);
+        }
+      };
+
+      ws.onerror = () => {
+        setUseLocalMode(true);
+      };
+
+      ws.onclose = () => {
+        // If closed unexpectedly during interview, switch to local mode
+      };
+    } catch {
+      setUseLocalMode(true);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -541,6 +588,20 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+
+  // Defined here so setIsFinishing is already in scope (avoids TDZ in bundled output)
+  const loadRealFeedback = async (sid: number) => {
+    setIsLoadingFeedback(true);
+    try {
+      const fb = await getInterviewFeedback(sid);
+      setRealFeedback(fb);
+    } catch {
+      // Fall back to mock feedback
+    }
+    setIsLoadingFeedback(false);
+    setIsFinishing(false);
+    setStep('FEEDBACK');
+  };
 
   useEffect(() => {
     if (step === 'FEEDBACK') {
@@ -653,16 +714,16 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       if (followUpCount > 0) return; // Follow-ups are handled in handleEndQuestion
 
       if (currentQuestionIndex === 0 && openingStep < 3) {
-        // Opening Sequence
+        // Opening Sequence (local, runs regardless of WS mode)
         const openingSentences = [
           `Hi, I'm ${matchedInterviewer.name}, ${matchedInterviewer.title} at ${matchedInterviewer.company}.`,
           "Thanks for joining today.",
           "Let's begin with a quick introduction before moving into deeper questions."
         ];
-        
+
         const textToSpeak = openingSentences[openingStep];
         setDisplayedQuestion(textToSpeak);
-        
+
         setTimeout(() => {
           speak(textToSpeak, () => {
             setOpeningStep(prev => prev + 1);
@@ -671,29 +732,36 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         return;
       }
 
-      // Normal Question Mode
-      const question = activeQuestions[currentQuestionIndex];
-      let textToSpeak = question;
-      let textToDisplay = question;
-
-      if (currentQuestionIndex > 0) {
-        const transitions = [
-          "That makes sense. Let's move on to another area. ",
-          "I'd like to shift gears slightly. ",
-          "Thank you for sharing that. ",
-          "Got it. Next question. "
-        ];
-        const transition = transitions[Math.floor(Math.random() * transitions.length)];
-        textToSpeak = transition + question;
+      // After opening sequence completes — check if WS is ready
+      if (!useLocalMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !wsStartSent) {
+        // Send start signal to backend; questions will come via ws.onmessage
+        setWsStartSent(true);
+        wsRef.current.send(JSON.stringify({ type: 'start' }));
+        return;
       }
 
-      setDisplayedQuestion(textToDisplay);
+      // Local Question Mode (fallback or local mode)
+      if (useLocalMode) {
+        const question = activeQuestions[currentQuestionIndex];
+        let textToSpeak = question;
+        let textToDisplay = question;
 
-      // Speak Question
-      // Small delay to allow UI to settle
-      setTimeout(() => speak(textToSpeak), 500);
+        if (currentQuestionIndex > 0) {
+          const transitions = [
+            "That makes sense. Let's move on to another area. ",
+            "I'd like to shift gears slightly. ",
+            "Thank you for sharing that. ",
+            "Got it. Next question. "
+          ];
+          const transition = transitions[Math.floor(Math.random() * transitions.length)];
+          textToSpeak = transition + question;
+        }
+
+        setDisplayedQuestion(textToDisplay);
+        setTimeout(() => speak(textToSpeak), 500);
+      }
     }
-  }, [currentQuestionIndex, step, matchedInterviewer, activeQuestions, openingStep]);
+  }, [currentQuestionIndex, step, matchedInterviewer, activeQuestions, openingStep, useLocalMode, wsStartSent]);
 
   // Pause/Resume Logic
   const togglePause = () => {
