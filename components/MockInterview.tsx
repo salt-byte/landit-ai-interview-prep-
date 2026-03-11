@@ -318,6 +318,31 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [editedTranscripts, setEditedTranscripts] = useState<{[key: number]: string}>({});
   const [questionNotes, setQuestionNotes] = useState<{[key: number]: string}>({});
   const [expandedNotes, setExpandedNotes] = useState<{[key: number]: boolean}>({});
+  const [savedNotes, setSavedNotes] = useState<{[key: number]: boolean}>({});
+
+  // Live Interview State (moved here to avoid TDZ in production bundles)
+  const [transcript, setTranscript] = useState('');
+  const [interviewerState, setInterviewerState] = useState<'SPEAKING' | 'LISTENING' | 'IDLE'>('IDLE');
+  const [isPaused, setIsPaused] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [followUpCount, setFollowUpCount] = useState(0);
+  const [displayedQuestion, setDisplayedQuestion] = useState("");
+  const [openingStep, setOpeningStep] = useState(0);
+
+  // Subtitle Dragging State
+  const [subtitlePos, setSubtitlePos] = useState({ x: 0, y: 0 });
+  const [isDraggingSubtitle, setIsDraggingSubtitle] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+
+  // Feedback State
+  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(0);
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved'>('saving');
+  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const matchInterviewer = (types: string[], role: TargetRole | null) => {
     // Logic:
@@ -534,22 +559,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     }
   };
 
-  // --- State for Live Interview ---
-  const [transcript, setTranscript] = useState('');
-  const [interviewerState, setInterviewerState] = useState<'SPEAKING' | 'LISTENING' | 'IDLE'>('IDLE');
-  const [isPaused, setIsPaused] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const [followUpCount, setFollowUpCount] = useState(0);
-  const [displayedQuestion, setDisplayedQuestion] = useState("");
-  const [openingStep, setOpeningStep] = useState(0);
-
-  // --- Subtitle Dragging State ---
-  const [subtitlePos, setSubtitlePos] = useState({ x: 0, y: 0 });
-  const [isDraggingSubtitle, setIsDraggingSubtitle] = useState(false);
-  const dragStartRef = useRef({ x: 0, y: 0 });
-  const isDraggingRef = useRef(false);
+  // --- Subtitle Dragging ---
 
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
@@ -582,14 +592,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     };
   };
 
-  // --- State for Feedback (Interview Report) ---
-  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(0);
-  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved'>('saving');
-  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [isFinishing, setIsFinishing] = useState(false);
-
-  // Defined here so setIsFinishing is already in scope (avoids TDZ in bundled output)
+  // --- Feedback (Interview Report) ---
   const loadRealFeedback = async (sid: number) => {
     setIsLoadingFeedback(true);
     try {
@@ -1432,8 +1435,6 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         duration: Math.floor(Math.random() * 60) + 30, // Mock duration 30-90s
       };
     };
-
-    const [savedNotes, setSavedNotes] = useState<{[key: number]: boolean}>({});
 
     const handleSaveNote = (index: number) => {
       // In a real app, this would save to the backend
