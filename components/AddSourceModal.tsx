@@ -9,38 +9,36 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { UploadedFile, UserProfile } from '../types';
-import { uploadAndParseDocument } from '../api';
+import { uploadAndParseDocument, uploadDocument } from '../api';
 
 interface AddSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSource: (file: UploadedFile, extracted?: Partial<UserProfile>) => void;
+  onAddSource: (file: UploadedFile) => void;
+  onProfileExtracted?: (extracted: Partial<UserProfile>) => void;
 }
 
 const SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Notes', 'Job Description', 'Other'];
 
-const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource }) => {
+const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted }) => {
   const [step, setStep] = useState<'SELECT' | 'UPLOAD' | 'LINK' | 'PREVIEW'>('SELECT');
   const [selectedFileType, setSelectedFileType] = useState<string>('Resume');
   const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
-  const [actualFile, setActualFile] = useState<File | null>(null);
+  const [pendingFileObj, setPendingFileObj] = useState<File | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
-  
+
   // Parsing/Upload State
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'PARSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [parsedContent, setParsedContent] = useState('');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
-      setActualFile(file);
-      setPendingFile({
-        name: file.name,
-        size: (file.size / 1024 / 1024).toFixed(2) + ' MB'
-      });
-      
+      setPendingFile({ name: file.name, size: (file.size / 1024 / 1024).toFixed(2) + ' MB' });
+      setPendingFileObj(file);
+
       // Auto-suggest type
       const lowerName = file.name.toLowerCase();
       if (lowerName.includes('resume') || lowerName.includes('cv')) setSelectedFileType('Resume');
@@ -53,28 +51,24 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
 
   // Flow A: Upload File — calls real backend API
   const handleUploadFile = async () => {
-    if (!actualFile) return;
-
+    if (!pendingFile || !pendingFileObj) return;
     setUploadStatus('UPLOADING');
     try {
-      setUploadStatus('PARSING');
-      const result = await uploadAndParseDocument(actualFile);
-
-      setUploadStatus('SUCCESS');
-
-      const newFile: UploadedFile = {
-        id: String(result.document_id),
-        name: actualFile.name,
-        type: selectedFileType,
-        date: new Date().toISOString().split('T')[0],
-      };
-
-      setTimeout(() => {
-        onAddSource(newFile, result.extracted);
-        handleClose();
-      }, 800);
-    } catch (err) {
-      console.error('Upload failed:', err);
+      if (selectedFileType === 'Resume') {
+        setUploadStatus('PARSING');
+        const result = await uploadAndParseDocument(pendingFileObj);
+        setUploadStatus('SUCCESS');
+        onAddSource(result.document);
+        if (result.extracted && onProfileExtracted) {
+          onProfileExtracted(result.extracted);
+        }
+      } else {
+        const result = await uploadDocument(pendingFileObj);
+        setUploadStatus('SUCCESS');
+        onAddSource({ id: String(result.id ?? Date.now()), name: result.name, type: result.type, date: result.date });
+      }
+      setTimeout(handleClose, 800);
+    } catch {
       setUploadStatus('ERROR');
     }
   };
@@ -107,7 +101,6 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   const handleClose = () => {
     setStep('SELECT');
     setPendingFile(null);
-    setActualFile(null);
     setLinkUrl('');
     setParsedContent('');
     setUploadStatus('IDLE');
@@ -196,34 +189,23 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
                      <div className="w-16 h-16 bg-[#E6F4EA] rounded-full flex items-center justify-center text-[#137333] mb-2 animate-in zoom-in duration-300">
                        <Check className="w-8 h-8" />
                      </div>
-                   ) : uploadStatus === 'ERROR' ? (
-                     <div className="w-16 h-16 bg-[#FCE8E6] rounded-full flex items-center justify-center text-[#B3261E] mb-2">
-                       <AlertCircle className="w-8 h-8" />
-                     </div>
                    ) : (
                      <div className="relative">
                        <Loader2 className="w-12 h-12 text-[#0B57D0] animate-spin" />
                      </div>
                    )}
-
+                   
                    <div className="text-center">
                      <h4 className="text-lg font-bold text-[#1F1F1F] mb-1">
                        {uploadStatus === 'UPLOADING' && 'Uploading...'}
                        {uploadStatus === 'PARSING' && 'Parsing file...'}
                        {uploadStatus === 'SUCCESS' && 'Done!'}
-                       {uploadStatus === 'ERROR' && 'Upload failed'}
                      </h4>
                      <p className="text-sm text-[#444746]">
                        {uploadStatus === 'UPLOADING' && 'Please wait while we upload your document.'}
                        {uploadStatus === 'PARSING' && 'Extracting text and insights...'}
                        {uploadStatus === 'SUCCESS' && 'File uploaded and added to your profile.'}
-                       {uploadStatus === 'ERROR' && 'Could not reach the server. Please try again.'}
                      </p>
-                     {uploadStatus === 'ERROR' && (
-                       <button onClick={() => setUploadStatus('IDLE')} className="mt-3 text-sm font-bold text-[#0B57D0] hover:underline">
-                         Try again
-                       </button>
-                     )}
                    </div>
                 </div>
               )}

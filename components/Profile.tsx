@@ -76,45 +76,33 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
   // --- Handlers ---
 
   const handleAddSource = (newFile: UploadedFile) => {
-    // 1. Add File/Link to Source List
-    setFiles([newFile, ...files]);
-
-    // 2. Update Profile (Mock Sync Logic)
-    const updateLogic = (prev: UserProfile) => {
-      const updated = { ...prev };
-      // Simulate adding a skill or project based on the new source
-      if (newFile.type === 'Resume' || newFile.type === 'Link') {
-        updated.skills = {
-          ...updated.skills,
-          product: updated.skills.product + ", Strategic Planning"
-        };
-      } else if (newFile.type === 'Portfolio') {
-        updated.projects = [
-          {
-            id: 'new-proj-' + Date.now(),
-            name: "New Portfolio Project",
-            context: "Extracted from uploaded portfolio",
-            role: "Lead Designer",
-            tools: "Figma, React",
-            outcome: "Launched successfully",
-            learnings: "User-centered design is key"
-          },
-          ...updated.projects
-        ];
-      }
-      return updated;
-    };
-
-    if (isEditing) {
-      setTempProfile(updateLogic);
-    } else {
-      onUpdateProfile(updateLogic);
-    }
-
-    // 3. Show Toast & Close
+    setFiles(prev => [newFile, ...prev]);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
     setShowAddSourceModal(false);
+  };
+
+  const handleProfileExtracted = (extracted: Partial<UserProfile>) => {
+    const merge = (prev: UserProfile): UserProfile => ({
+      ...prev,
+      ...(extracted.name ? { name: extracted.name } : {}),
+      ...(extracted.headline ? { headline: extracted.headline } : {}),
+      ...(extracted.bio ? { bio: extracted.bio } : {}),
+      ...(extracted.targetRoles ? { targetRoles: extracted.targetRoles } : {}),
+      ...(extracted.location ? { location: extracted.location } : {}),
+      ...(extracted.educationLevel ? { educationLevel: extracted.educationLevel } : {}),
+      ...(extracted.yearsOfExperience ? { yearsOfExperience: extracted.yearsOfExperience } : {}),
+      ...(extracted.interests ? { interests: extracted.interests } : {}),
+      ...(extracted.skills ? { skills: { ...prev.skills, ...extracted.skills } } : {}),
+      ...(extracted.education?.length ? { education: extracted.education } : {}),
+      ...(extracted.experience?.length ? { experience: extracted.experience } : {}),
+      ...(extracted.projects?.length ? { projects: extracted.projects } : {}),
+    });
+    if (isEditing) {
+      setTempProfile(merge);
+    } else {
+      onUpdateProfile(merge);
+    }
   };
 
   const deleteFile = (id: string) => {
@@ -614,10 +602,11 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
       </div>
 
       {/* --- ADD SOURCE MODAL --- */}
-      <AddSourceModal 
-        isOpen={showAddSourceModal} 
-        onClose={() => setShowAddSourceModal(false)} 
-        onAddSource={handleAddSource} 
+      <AddSourceModal
+        isOpen={showAddSourceModal}
+        onClose={() => setShowAddSourceModal(false)}
+        onAddSource={handleAddSource}
+        onProfileExtracted={handleProfileExtracted}
       />
 
       {/* --- TOAST --- */}
