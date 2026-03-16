@@ -1,0 +1,1698 @@
+
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Video, 
+  Mic, 
+  StopCircle, 
+  RefreshCw, 
+  Star, 
+  ArrowRight, 
+  Play, 
+  Camera, 
+  Sparkles, 
+  MicOff, 
+  CheckCircle2, 
+  Lightbulb, 
+  Volume2, 
+  Monitor, 
+  AlertCircle, 
+  Briefcase, 
+  ChevronDown,
+  Check,
+  Plus,
+  X,
+  Info,
+  ChevronRight,
+  ChevronLeft,
+  Quote,
+  Calendar,
+  Clock,
+  Download,
+  Share2,
+  Trash2,
+  Search,
+  Filter,
+  ChevronUp,
+  Edit3,
+  PlayCircle,
+  FastForward,
+  Settings,
+  FileText,
+  Lock,
+  User,
+  MoreHorizontal
+} from 'lucide-react';
+import { TargetRole, InterviewFeedback } from '../types';
+import { createInterviewSession, createInterviewWS, getInterviewFeedback } from '../api';
+
+interface MockInterviewProps {
+  workspace: TargetRole | null;
+  roles: TargetRole[];
+  onSelectRole: (role: TargetRole | null) => void;
+  onSaveSession?: (questions: any[]) => void;
+  onNavigate?: (view: 'DASHBOARD' | 'WORKSPACE' | 'MOCK_INTERVIEW') => void;
+}
+
+interface QuestionType {
+  id: string;
+  label: string;
+  description: string;
+  explanation: string;
+  example: string;
+}
+
+const QUESTION_TYPES: QuestionType[] = [
+  { 
+    id: 'behavioral', 
+    label: 'Behavioral & Experience', 
+    description: 'Past experiences, soft skills, and behavioral scenarios.',
+    explanation: 'Focuses on your past experiences, leadership style, and how you collaborate, make decisions, and handle challenges in real-world situations.',
+    example: '“Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?”'
+  },
+  { 
+    id: 'product', 
+    label: 'Product Design & Sense', 
+    description: 'Designing products, user empathy, and product improvement.',
+    explanation: 'Evaluates your ability to identify user problems, design intuitive solutions, and prioritize features with clear product reasoning.',
+    example: '“How would you design a new feature to improve user retention for TikTok?”'
+  },
+  { 
+    id: 'analytical', 
+    label: 'Analytical & Execution', 
+    description: 'Metrics, data analysis, problem solving, and execution.',
+    explanation: 'Tests your ability to diagnose metric changes, structure ambiguous problems, and drive data-informed execution.',
+    example: '“Daily active users dropped by 15% last month. How would you investigate and address this issue?”'
+  },
+  { 
+    id: 'strategy', 
+    label: 'Strategy & Vision', 
+    description: 'Long-term thinking, market sense, and business strategy.',
+    explanation: 'Assesses your long-term thinking, market judgment, and ability to evaluate strategic opportunities and trade-offs.',
+    example: '“Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?”'
+  }
+];
+
+// --- Interviewer Personas Pool ---
+const INTERVIEWERS_POOL = [
+  {
+    id: 'alex',
+    name: 'Alex Morgan',
+    title: 'Senior Product Director',
+    company: 'OpenAI',
+    background: 'Product Strategy & Leadership',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200&h=200',
+  },
+  {
+    id: 'emma',
+    name: 'Emma Wilson',
+    title: 'Hiring Manager',
+    company: 'Google',
+    background: 'Product Execution & Team Growth',
+    avatar: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&q=80&w=200&h=200',
+  },
+  {
+    id: 'victor',
+    name: 'Victor Hale',
+    title: 'VP of Strategy',
+    company: 'Meta',
+    background: 'Strategy & Growth Background',
+    avatar: 'https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=200&h=200',
+  },
+  {
+    id: 'adrian',
+    name: 'Dr. Adrian Park',
+    title: 'Head of Engineering',
+    company: 'Anthropic',
+    background: 'AI / Engineering Background',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200&h=200',
+  }
+];
+
+// --- Expanded Mock Questions (10 Questions per persona) ---
+const QUESTIONS_DB: Record<string, string[]> = {
+  alex: [
+    "Tell me about a time you had to handle a complex project with tight deadlines.",
+    "How do you approach learning new technologies when starting a new role?",
+    "Describe a conflict you had with a teammate and how you resolved it.",
+    "What is your process for breaking down a large, ambiguous problem?",
+    "Give me an example of a time you failed. What did you learn?",
+    "How do you prioritize features when resources are limited?",
+    "Explain a complex technical concept to someone without a technical background.",
+    "Describe a time you demonstrated leadership without formal authority.",
+    "How do you handle constructive criticism?",
+    "Where do you see yourself in 3-5 years?"
+  ],
+  victor: [
+    "Walk me through the ROI of your last major project.",
+    "I'm not convinced this solution scales. Defend your architecture choice.",
+    "What's the biggest risk in your proposed strategy, and how do you mitigate it?",
+    "Tell me about a time you disagreed with a senior stakeholder. What happened?",
+    "If we cut your timeline in half, what features would you drop and why?",
+    "Give me the data that supports your decision-making process.",
+    "Why should we hire you over someone with more experience?",
+    "Describe a situation where you had to make a tough decision with incomplete information.",
+    "How do you handle high-pressure situations?",
+    "What is your philosophy on 'done is better than perfect'?"
+  ],
+  emma: [
+    "Tell me about a time you supported a struggling team member.",
+    "How do you foster an inclusive environment in your team?",
+    "Describe a time you received difficult feedback. How did you react?",
+    "How do you handle disagreements within a cross-functional team?",
+    "What motivates you to do your best work?",
+    "Tell me about a time you had to adapt to a significant change at work.",
+    "How do you ensure everyone's voice is heard in a meeting?",
+    "Describe a time you went above and beyond for a customer or user.",
+    "How do you balance individual goals with team objectives?",
+    "What kind of culture helps you thrive?"
+  ],
+  adrian: [
+    "Deep dive into the most technically challenging bug you've solved.",
+    "Explain the trade-offs between SQL and NoSQL for this specific use case.",
+    "How would you design a system to handle 1 million concurrent users?",
+    "Walk me through your database schema design for a social media feed.",
+    "How do you optimize for latency in a distributed system?",
+    "Describe your experience with CI/CD pipelines.",
+    "What metrics do you track to ensure system health?",
+    "How do you approach testing in a microservices architecture?",
+    "Explain how you would secure a public-facing API.",
+    "What is the most innovative technical solution you've implemented?"
+  ],
+  sophia: [
+    "Tell me about a time you showed high emotional intelligence.",
+    "Describe a situation where you had to influence others.",
+    "How do you handle stress and burnout?",
+    "Tell me about a time you had to deliver bad news.",
+    "How do you build trust with a new team?",
+    "Describe a time you took initiative outside of your defined role.",
+    "How do you handle ambiguity?",
+    "What are your core values?",
+    "Tell me about a time you mentored someone.",
+    "How do you define success?"
+  ]
+};
+
+const MOCK_FEEDBACK: InterviewFeedback = {
+  score: 85,
+  strengths: [
+    "Clear articulation of technical concepts",
+    "Strong structure in behavioral answers (STAR method)",
+    "Confidence and good pace of speech"
+  ],
+  improvements: [
+    "Could provide more specific metrics for project outcomes",
+    "Eye contact with the camera was slightly inconsistent",
+    "Consider elaborating more on 'Lessons Learned'"
+  ],
+  transcript: `AI: Hello! Ready to start? Let's begin with your background.
+Candidate: Hi! Yes, I'm ready. I have over 6 years of experience in full-stack engineering...
+AI: Great. Tell me about a time you faced a major technical hurdle.
+Candidate: One example was during the migration of our legacy monolith to microservices. We faced a lot of data consistency issues...
+AI: How did you resolve those?
+Candidate: We implemented a distributed transaction manager and used saga patterns...`
+};
+
+// --- New Interviewer Personas ---
+interface Interviewer {
+  id: string;
+  name: string;
+  title: string; // Added title
+  role: string;
+  description: string;
+  focus: string[];
+  avatar: string;
+  color: string; // Used for text accents
+  bg: string;    // Used for badges/backgrounds
+}
+
+const INTERVIEWERS: Interviewer[] = [
+  {
+    id: 'alex',
+    name: 'Alex Morgan',
+    title: 'Senior Product Manager',
+    role: 'Balanced Interviewer',
+    description: 'A well-rounded hiring manager who balances business depth, structured thinking, and behavioral insight. Ideal for general practice.',
+    focus: ['Business understanding', 'Structured thinking', 'Metrics awareness', 'Behavioral questions (STAR)', 'Communication clarity'],
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200&h=200',
+    color: 'text-indigo-600',
+    bg: 'bg-indigo-50'
+  },
+  {
+    id: 'victor',
+    name: 'Victor Hale',
+    title: 'Director of Product',
+    role: 'Pressure Executive',
+    description: 'Direct and challenging. Expects concise, high-level strategic answers and logical rigor. He will interrupt if you ramble and demand data to back up claims.',
+    focus: ['Logical rigor', 'Defending ideas', 'Handling pushback'],
+    avatar: 'https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=200&h=200',
+    color: 'text-slate-700',
+    bg: 'bg-slate-100'
+  },
+  {
+    id: 'emma',
+    name: 'Emma Chen',
+    title: 'Hiring Manager',
+    role: 'Supportive Manager',
+    description: 'Focuses on team dynamics, collaboration, and your potential for growth within the org. She wants to see how you mentor others and handle conflict.',
+    focus: ['Communication', 'Collaboration', 'Growth mindset'],
+    avatar: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&q=80&w=200&h=200',
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50'
+  },
+  {
+    id: 'adrian',
+    name: 'Dr. Adrian Park',
+    title: 'Data & Growth Lead',
+    role: 'Domain Expert',
+    description: 'Drills down into technical details, specific metrics, and analytical depth. Expects you to know your numbers and the "why" behind technical decisions.',
+    focus: ['Metrics', 'Analysis depth', 'Case questions'],
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200&h=200',
+    color: 'text-blue-600',
+    bg: 'bg-blue-50'
+  },
+  {
+    id: 'sophia',
+    name: 'Sophia Ramirez',
+    title: 'Team Lead',
+    role: 'Behavioral Interviewer',
+    description: 'Assesses cultural fit, leadership qualities, and self-awareness using behavioral questions. She looks for emotional intelligence and learning agility.',
+    focus: ['STAR answers', 'Leadership', 'Cultural fit'],
+    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200&h=200',
+    color: 'text-purple-600',
+    bg: 'bg-purple-50'
+  }
+];
+
+const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelectRole, onSaveSession, onNavigate }) => {
+  const [step, setStep] = useState<'SETTINGS' | 'INTERVIEWER_INTRO' | 'DEVICE_CHECK' | 'INTERVIEW' | 'FEEDBACK'>('SETTINGS');
+  const [settings, setSettings] = useState({
+    types: [] as string[],
+    qty: 10 // Fixed at 10 for Live Interview
+  });
+  const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [showInfo, setShowInfo] = useState<string | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [timer, setTimer] = useState(0);
+  const [permError, setPermError] = useState<string | null>(null);
+  
+  // Session Data State
+  const [sessionResults, setSessionResults] = useState<{question: string, answer: string, chat: any[]}[]>([]);
+  
+  // Media State
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0); // 0-100 for visualizer
+
+  // Backend WebSocket State
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const [useLocalMode, setUseLocalMode] = useState(false);
+  const [realFeedback, setRealFeedback] = useState<InterviewFeedback | null>(null);
+  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
+  const [wsStartSent, setWsStartSent] = useState(false);
+
+  // Interviewer State
+  const [matchedInterviewer, setMatchedInterviewer] = useState<any>(null);
+  const [editingTranscript, setEditingTranscript] = useState<number | null>(null);
+  const [editedTranscripts, setEditedTranscripts] = useState<{[key: number]: string}>({});
+  const [questionNotes, setQuestionNotes] = useState<{[key: number]: string}>({});
+  const [expandedNotes, setExpandedNotes] = useState<{[key: number]: boolean}>({});
+  const [savedNotes, setSavedNotes] = useState<{[key: number]: boolean}>({});
+
+  // Live Interview State (moved here to avoid TDZ in production bundles)
+  const [transcript, setTranscript] = useState('');
+  const [interviewerState, setInterviewerState] = useState<'SPEAKING' | 'LISTENING' | 'IDLE'>('IDLE');
+  const [isPaused, setIsPaused] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [followUpCount, setFollowUpCount] = useState(0);
+  const [displayedQuestion, setDisplayedQuestion] = useState("");
+  const [openingStep, setOpeningStep] = useState(0);
+
+  // Subtitle Dragging State
+  const [subtitlePos, setSubtitlePos] = useState({ x: 0, y: 0 });
+  const [isDraggingSubtitle, setIsDraggingSubtitle] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+
+  // Feedback State
+  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(0);
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved'>('saving');
+  const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
+
+  const matchInterviewer = (types: string[], role: TargetRole | null) => {
+    // Logic:
+    // Strategy -> Victor (Director/VP)
+    // Analytical -> Adrian (Data/Growth Lead)
+    // Product -> Alex (Senior PM)
+    // Behavioral -> Emma (Hiring Manager)
+    
+    let interviewerId = 'emma'; // Default
+    
+    if (types.includes('strategy')) interviewerId = 'victor';
+    else if (types.includes('analytical')) interviewerId = 'adrian';
+    else if (types.includes('product')) interviewerId = 'alex';
+    else if (types.includes('behavioral')) interviewerId = 'emma';
+    
+    const interviewer = INTERVIEWERS.find(i => i.id === interviewerId) || INTERVIEWERS[0];
+    const company = role?.company || 'the company';
+
+    return {
+      ...interviewer,
+      company: company,
+      intro: `Hi, I’m ${interviewer.name.split(' ')[0]}, a ${interviewer.title} at ${company}. I’ll be leading today’s interview.`
+    };
+  };
+
+  useEffect(() => {
+    if (step === 'INTERVIEWER_INTRO' && !matchedInterviewer) {
+      setMatchedInterviewer(matchInterviewer(settings.types, workspace));
+    }
+  }, [step, workspace, settings.types, matchedInterviewer]);
+
+  const activeQuestions = React.useMemo(() => {
+    if (!matchedInterviewer) return [];
+    const base = QUESTIONS_DB[matchedInterviewer.id] || QUESTIONS_DB['alex'];
+    return [
+      "Please introduce yourself and walk me through your background.",
+      ...base.slice(0, 9)
+    ];
+  }, [matchedInterviewer]);
+
+
+  // Cleanup stream + WS on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  // Timer logic
+  useEffect(() => {
+    let interval: any;
+    // Timer runs if we are in INTERVIEW step, not paused, not showing exit confirmation, and not finishing
+    if (step === 'INTERVIEW' && !isPaused && !showExitConfirm && !isFinishing) {
+      interval = setInterval(() => setTimer(t => t + 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, isPaused, showExitConfirm, isFinishing]);
+
+  // Audio Visualizer Logic
+  const startAudioAnalysis = (stream: MediaStream) => {
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.fftSize = 512;
+    const dataArray = new Float32Array(analyser.fftSize);
+
+    let smoothedLevel = 0;
+    let silenceDuration = 0;
+    let lastTime = performance.now();
+
+    const updateLevel = () => {
+      if (!stream.active) return;
+      analyser.getFloatTimeDomainData(dataArray);
+      
+      let sumSquares = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sumSquares += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      
+      // Convert RMS to dBFS
+      const db = 20 * Math.log10(rms || 1e-8);
+      
+      // Thresholding (e.g., -45 dBFS)
+      const threshold = -45;
+      let targetLevel = 0;
+      
+      if (db > threshold) {
+        // Map db from [threshold, 0] to [0, 100]
+        targetLevel = Math.min(100, Math.max(0, ((db - threshold) / Math.abs(threshold)) * 100));
+        silenceDuration = 0;
+      } else {
+        const now = performance.now();
+        silenceDuration += (now - lastTime);
+        if (silenceDuration > 80) { // 80ms hold time
+          targetLevel = 0;
+        } else {
+          targetLevel = smoothedLevel; // Hold previous level
+        }
+      }
+      
+      lastTime = performance.now();
+
+      // Exponential Moving Average (EMA)
+      // Faster attack (fade-in), slower release (fade-out)
+      const alpha = targetLevel > smoothedLevel ? 0.4 : 0.15;
+      smoothedLevel = alpha * targetLevel + (1 - alpha) * smoothedLevel;
+
+      setAudioLevel(smoothedLevel);
+      requestAnimationFrame(updateLevel);
+    };
+    updateLevel();
+  };
+
+  const initMedia = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Media devices API not supported');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      startAudioAnalysis(stream);
+      setPermError(null);
+    } catch (err: any) {
+      // Handle specific error cases without logging as error
+      let errorMessage = "Unable to access camera/microphone.";
+      
+      if (err.name === 'NotFoundError' || err.message?.includes('Requested device not found')) {
+        errorMessage = "No camera or microphone found. You can continue without them.";
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = "Camera/Microphone access denied. Please allow access in your browser settings.";
+      } else {
+        console.warn("Camera access error:", err); // Log as warning for other errors
+      }
+      
+      setPermError(errorMessage);
+    }
+  };
+
+  const handleStartDeviceCheck = () => {
+    setStep('DEVICE_CHECK');
+    // Delay slightly to allow render
+    setTimeout(initMedia, 100);
+  };
+
+  const handleStartInterview = async () => {
+    setStep('INTERVIEW');
+    setIsRecording(true);
+    setTimeout(() => {
+      if (videoRef.current && streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+      }
+    }, 100);
+
+    // Try to connect to backend WebSocket
+    try {
+      const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
+      const session = await createInterviewSession({
+        role_id: roleId,
+        interviewer_id: matchedInterviewer?.id || 'alex',
+      });
+      setSessionId(session.id);
+      setWsStartSent(false);
+
+      const ws = createInterviewWS(session.id);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'question') {
+          setDisplayedQuestion(msg.content);
+          setCurrentQuestionIndex(msg.index ?? 0);
+          speak(msg.content);
+        } else if (msg.type === 'feedback_ready') {
+          setIsRecording(false);
+          setIsFinishing(true);
+          loadRealFeedback(session.id);
+        }
+      };
+
+      ws.onerror = () => {
+        setUseLocalMode(true);
+      };
+
+      ws.onclose = () => {
+        // If closed unexpectedly during interview, switch to local mode
+      };
+    } catch {
+      setUseLocalMode(true);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const nextQuestion = () => {
+    if (currentQuestionIndex < activeQuestions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    } else {
+      setIsRecording(false);
+      setStep('FEEDBACK');
+    }
+  };
+
+  // --- Subtitle Dragging ---
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      setSubtitlePos({
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y
+      });
+    };
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDraggingSubtitle(false);
+      }
+    };
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, []);
+
+  const handleSubtitleMouseDown = (e: React.MouseEvent) => {
+    isDraggingRef.current = true;
+    setIsDraggingSubtitle(true);
+    dragStartRef.current = {
+      x: e.clientX - subtitlePos.x,
+      y: e.clientY - subtitlePos.y
+    };
+  };
+
+  // --- Feedback (Interview Report) ---
+  const loadRealFeedback = async (sid: number) => {
+    setIsLoadingFeedback(true);
+    try {
+      const fb = await getInterviewFeedback(sid);
+      setRealFeedback(fb);
+    } catch {
+      // Fall back to mock feedback
+    }
+    setIsLoadingFeedback(false);
+    setIsFinishing(false);
+    setStep('FEEDBACK');
+  };
+
+  useEffect(() => {
+    if (step === 'FEEDBACK') {
+      setSaveStatus('saving');
+      // Simulate auto-save
+      const timer = setTimeout(() => {
+        setSaveStatus('saved');
+        setLastSavedTime(new Date());
+        if (onSaveSession) {
+          onSaveSession(sessionResults);
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [step, sessionResults, onSaveSession]);
+
+  const handleEditTranscript = (index: number, newText: string) => {
+    setEditedTranscripts(prev => ({ ...prev, [index]: newText }));
+    setSaveStatus('saving');
+    setTimeout(() => {
+      setSaveStatus('saved');
+      setLastSavedTime(new Date());
+    }, 1000);
+  };
+
+  // TTS Function
+  const speak = (text: string, onEndCallback?: () => void) => {
+    if (synthesisRef.current.speaking) {
+      synthesisRef.current.cancel();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    currentUtteranceRef.current = utterance;
+    
+    // Select voice based on gender (heuristic)
+    const voices = synthesisRef.current.getVoices();
+    const isFemale = ['emma', 'sophia'].includes(matchedInterviewer?.id || '');
+    
+    // Try to find premium/natural voices first
+    const preferredVoice = voices.find(v => 
+      v.lang.includes('en') && 
+      (isFemale 
+        ? (v.name.includes('Premium') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Female'))
+        : (v.name.includes('Premium') || v.name.includes('Google UK English Male') || v.name.includes('Daniel') || v.name.includes('Male'))
+      )
+    );
+    
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.rate = 0.95; // Slightly slower for natural feel
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => setInterviewerState('SPEAKING');
+    utterance.onend = () => {
+      setInterviewerState('LISTENING');
+      if (onEndCallback) {
+        onEndCallback();
+      } else {
+        startListening();
+      }
+    };
+
+    setInterviewerState('SPEAKING');
+    synthesisRef.current.speak(utterance);
+  };
+
+  // ASR Function
+  const startListening = () => {
+    if (isPaused) return;
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          setTranscript(prev => prev + event.results[i][0].transcript + ' ');
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+    };
+
+    recognition.onend = () => {
+      if (interviewerState === 'LISTENING' && !isPaused) {
+        recognition.start();
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setIsRecording(true);
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  // Handle Question Change & Opening Sequence
+  useEffect(() => {
+    if (step === 'INTERVIEW' && matchedInterviewer && activeQuestions.length > 0) {
+      if (followUpCount > 0) return; // Follow-ups are handled in handleEndQuestion
+
+      if (currentQuestionIndex === 0 && openingStep < 3) {
+        // Opening Sequence (local, runs regardless of WS mode)
+        const openingSentences = [
+          `Hi, I'm ${matchedInterviewer.name}, ${matchedInterviewer.title} at ${matchedInterviewer.company}.`,
+          "Thanks for joining today.",
+          "Let's begin with a quick introduction before moving into deeper questions."
+        ];
+
+        const textToSpeak = openingSentences[openingStep];
+        setDisplayedQuestion(textToSpeak);
+
+        setTimeout(() => {
+          speak(textToSpeak, () => {
+            setOpeningStep(prev => prev + 1);
+          });
+        }, 500);
+        return;
+      }
+
+      // After opening sequence completes — check if WS is ready
+      if (!useLocalMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !wsStartSent) {
+        // Send start signal to backend; questions will come via ws.onmessage
+        setWsStartSent(true);
+        wsRef.current.send(JSON.stringify({ type: 'start' }));
+        return;
+      }
+
+      // Local Question Mode (fallback or local mode)
+      if (useLocalMode) {
+        const question = activeQuestions[currentQuestionIndex];
+        let textToSpeak = question;
+        let textToDisplay = question;
+
+        if (currentQuestionIndex > 0) {
+          const transitions = [
+            "That makes sense. Let's move on to another area. ",
+            "I'd like to shift gears slightly. ",
+            "Thank you for sharing that. ",
+            "Got it. Next question. "
+          ];
+          const transition = transitions[Math.floor(Math.random() * transitions.length)];
+          textToSpeak = transition + question;
+        }
+
+        setDisplayedQuestion(textToDisplay);
+        setTimeout(() => speak(textToSpeak), 500);
+      }
+    }
+  }, [currentQuestionIndex, step, matchedInterviewer, activeQuestions, openingStep, useLocalMode, wsStartSent]);
+
+  // Pause/Resume Logic
+  const togglePause = () => {
+    if (isPaused) {
+      setIsPaused(false);
+      startListening();
+    } else {
+      setIsPaused(true);
+      stopListening();
+      if (synthesisRef.current.speaking) {
+        synthesisRef.current.pause();
+      }
+    }
+  };
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (step === 'INTERVIEW' && e.code === 'Space') {
+        e.preventDefault();
+        togglePause();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [step, isPaused, interviewerState]);
+
+  const handleEndQuestion = () => {
+    stopListening();
+    synthesisRef.current.cancel();
+    
+    const currentAnswerText = transcript;
+    
+    // Evaluate for follow-up
+    let needsFollowUp = false;
+    let followUpText = "";
+
+    if (currentAnswerText.trim().length > 0 && followUpCount < 2) {
+      if (currentAnswerText.length < 50) {
+        needsFollowUp = true;
+        followUpText = "Could you elaborate a bit more on that? I'd love to hear more details.";
+      } else if (!/(for example|instance|specifically|such as)/i.test(currentAnswerText)) {
+        needsFollowUp = true;
+        followUpText = "Can you give me a specific example of when you did this?";
+      } else if (!/\d|%|metrics|measured|impact/i.test(currentAnswerText)) {
+        needsFollowUp = true;
+        followUpText = "How did you measure the impact of your actions? Do you have any specific metrics or results to share?";
+      } else if (Math.random() > 0.7) { // 30% chance for a deep dive if everything else is fine
+        needsFollowUp = true;
+        followUpText = "What were the main trade-offs you faced in that situation, and what would you do differently today?";
+      }
+    }
+
+    // Capture current Q&A data
+    const currentQuestionText = displayedQuestion;
+    
+    // Construct chat history for this specific question
+    const currentChat = [
+      { 
+        sender: 'AI', 
+        text: currentQuestionText, 
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+      },
+      ...(currentAnswerText.trim() ? [{
+        sender: 'USER',
+        text: currentAnswerText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }] : [])
+    ];
+
+    const newResult = {
+      question: currentQuestionText,
+      answer: currentAnswerText,
+      chat: currentChat
+    };
+
+    const updatedResults = [...sessionResults, newResult];
+    setSessionResults(updatedResults);
+
+    setTranscript('');
+
+    if (needsFollowUp) {
+      setFollowUpCount(c => c + 1);
+      setDisplayedQuestion(followUpText);
+      setTimeout(() => speak(followUpText), 500);
+      return; // Do not advance main question index
+    }
+
+    // If no follow-up, advance to next main question
+    setFollowUpCount(0);
+
+    if (currentQuestionIndex < activeQuestions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    } else {
+      // End of Interview
+      setIsFinishing(true);
+      setIsRecording(false);
+      
+      const closingText = "Thank you. That concludes our interview. We appreciate your time today.";
+      setDisplayedQuestion(closingText);
+      speak(closingText, () => {
+        setStep('FEEDBACK');
+        setIsFinishing(false);
+        // Save to Global State
+        if (onSaveSession && workspace) {
+          const savedQuestions = updatedResults.map((res, idx) => ({
+            id: `live-${Date.now()}-${idx}`,
+            roleId: workspace.id,
+            type: settings.types[0] || 'General',
+            question: res.question,
+            answer: res.answer,
+            chatHistory: res.chat,
+            transcription: res.answer,
+            lastModified: new Date().toISOString(),
+            savedAt: new Date().toISOString(),
+            source: 'LIVE_INTERVIEW'
+          }));
+          onSaveSession(savedQuestions);
+        }
+      });
+    }
+  };
+
+  // --- RENDER: SETTINGS ---
+  if (step === 'SETTINGS') {
+    const isValid = workspace && settings.types.length > 0;
+
+    return (
+      <div className="h-full flex flex-col animate-in fade-in duration-500">
+        <div className="max-w-5xl mx-auto w-full p-6">
+          
+          {/* Header & Guidance Text */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-[#1F1F1F] mb-2">Live Interview Prep</h2>
+            <p className="text-[17px] text-[#444746] font-medium">
+              Select your role and focus areas to start a simulated live interview.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {/* 1. Select Role */}
+            <div className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm w-full flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-[#1F1F1F]">Select a role</h3>
+                <span className="text-[10px] text-[#0B57D0] font-bold uppercase tracking-wider bg-[#E8F0FE] px-2 py-0.5 rounded">Required</span>
+              </div>
+              <div className="relative flex-1 flex flex-col justify-center">
+                <button 
+                  onClick={() => setShowRoleSelector(!showRoleSelector)}
+                  className="w-full flex items-center justify-between p-3.5 bg-[#F0F4F9] border border-[#E3E3E3] rounded-xl text-sm font-medium text-[#1F1F1F] hover:border-[#0B57D0] transition-all"
+                >
+                  <div className="flex items-center gap-2 truncate pr-4">
+                    <Briefcase className="w-4 h-4 text-[#444746] flex-shrink-0" />
+                    <span className="truncate">
+                      {workspace ? `${workspace.title} — ${workspace.company}` : <span className="text-[#444746]">Select from My Roles or Create new</span>}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-[#444746] flex-shrink-0 transition-transform ${showRoleSelector ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showRoleSelector && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E3E3E3] rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="max-h-[240px] overflow-y-auto">
+                      {roles.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-[#444746]">No roles found.</div>
+                      ) : (
+                        roles.map(r => (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              onSelectRole(r);
+                              setShowRoleSelector(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-sm hover:bg-[#F0F4F9] transition-colors flex items-center justify-between ${workspace?.id === r.id ? 'bg-[#E8F0FE] text-[#0B57D0] font-bold' : 'text-[#1F1F1F]'}`}
+                          >
+                            <div className="truncate pr-4">
+                              <p className="font-bold truncate">{r.title}</p>
+                              <p className="text-xs opacity-70 truncate">{r.company}</p>
+                            </div>
+                            {workspace?.id === r.id && <Check className="w-4 h-4 flex-shrink-0" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => {
+                        onSelectRole(null);
+                        // In a real app, this would navigate to the roles page
+                      }}
+                      className="w-full p-3 border-t border-[#E3E3E3] bg-[#FAFAFA] text-[#0B57D0] text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#F0F4F9] transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Create new role
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Question Types */}
+            <div className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-[#1F1F1F]">Question types</h3>
+                <span className="text-[10px] text-[#0B57D0] font-bold uppercase tracking-wider bg-[#E8F0FE] px-2 py-0.5 rounded">Select at least 1</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {QUESTION_TYPES.map(type => (
+                  <div 
+                    key={type.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all h-full ${settings.types.includes(type.id) ? 'bg-[#F0F4F9] border-[#0B57D0]' : 'bg-white border-[#E3E3E3] hover:border-[#C4C7C5]'}`}
+                  >
+                    <button
+                      onClick={() => {
+                        const newTypes = settings.types.includes(type.id) 
+                          ? settings.types.filter(t => t !== type.id)
+                          : [...settings.types, type.id];
+                        setSettings({ ...settings, types: newTypes });
+                      }}
+                      className="flex-1 flex items-center gap-3 text-left h-full"
+                    >
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${settings.types.includes(type.id) ? 'bg-[#0B57D0] border-[#0B57D0]' : 'bg-white border-[#C4C7C5]'}`}>
+                        {settings.types.includes(type.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-[#1F1F1F] truncate">{type.label}</p>
+                        <p className="text-[11px] text-[#444746] truncate">{type.description.split(',')[0]}</p>
+                      </div>
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowInfo(showInfo === type.id ? null : type.id);
+                      }}
+                      className="p-1.5 text-[#444746] hover:bg-[#E3E3E3] rounded-full transition-colors flex-shrink-0"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <div className="flex flex-col items-center pt-8">
+            <button 
+              onClick={() => {
+                if (isValid) {
+                  setMatchedInterviewer(null); // Force re-match
+                  setStep('INTERVIEWER_INTRO');
+                }
+              }}
+              disabled={!isValid}
+              className={`
+                w-full max-w-[280px] py-3.5 rounded-full font-bold text-base flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-[0.98]
+                ${isValid 
+                  ? 'bg-[#0B57D0] text-white hover:bg-[#0B67EF]' 
+                  : 'bg-[#E3E3E3] text-[#444746] cursor-not-allowed opacity-50'
+                }
+              `}
+            >
+              <Sparkles className="w-4 h-4" />
+              Start Live Interview
+            </button>
+          </div>
+        </div>
+
+        {/* Info Modal */}
+        {showInfo && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-[#1F1F1F]">{QUESTION_TYPES.find(t => t.id === showInfo)?.label}</h3>
+                <button onClick={() => setShowInfo(null)} className="p-2 hover:bg-[#F0F4F9] rounded-full transition-colors">
+                  <X className="w-5 h-5 text-[#444746]" />
+                </button>
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-xs font-bold text-[#0B57D0] uppercase tracking-wider mb-2">What it tests</h4>
+                  <p className="text-sm text-[#444746] leading-relaxed">
+                    {QUESTION_TYPES.find(t => t.id === showInfo)?.explanation}
+                  </p>
+                </div>
+                <div className="p-4 bg-[#F0F4F9] rounded-2xl border border-[#D3E3FD]">
+                  <h4 className="text-xs font-bold text-[#1F1F1F] uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <Quote className="w-3 h-3" /> Sample Question
+                  </h4>
+                  <p className="text-sm text-[#1F1F1F] font-medium italic leading-relaxed">
+                    {QUESTION_TYPES.find(t => t.id === showInfo)?.example}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowInfo(null)}
+                className="w-full mt-8 py-3 bg-[#1F1F1F] text-white rounded-full font-bold text-sm hover:bg-[#444746] transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- RENDER: INTERVIEWER INTRO ---
+  if (step === 'INTERVIEWER_INTRO' && matchedInterviewer) {
+    const typeLabels = settings.types.map(t => {
+      const type = QUESTION_TYPES.find(qt => qt.id === t);
+      return type ? type.label.toLowerCase().replace(' & ', ' and ') : '';
+    }).filter(Boolean);
+    
+    const focusText = typeLabels.length > 1 
+      ? typeLabels.slice(0, -1).join(', ') + ' and ' + typeLabels.slice(-1)
+      : typeLabels[0];
+
+    return (
+      <div className="h-full flex items-center justify-center p-8 animate-in fade-in duration-500">
+        <div className="max-w-5xl w-full bg-white rounded-[32px] border border-[#E3E3E3] shadow-xl overflow-hidden flex flex-col md:flex-row min-h-[500px]">
+          {/* Left: Interviewer Profile */}
+          <div className="md:w-2/5 bg-[#F8F9FA] p-10 flex flex-col items-center justify-center text-center border-r border-[#E3E3E3]">
+            <div className="relative mb-6">
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+                 <span className="text-[10px] font-bold text-[#444746] uppercase tracking-widest mb-1">Interviewer</span>
+                 <div className="w-px h-2 bg-[#E3E3E3]"></div>
+              </div>
+              <img 
+                src={matchedInterviewer.avatar} 
+                alt={matchedInterviewer.name}
+                className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg relative z-0"
+              />
+            </div>
+            <h3 className="text-2xl font-bold text-[#1F1F1F] mb-1">{matchedInterviewer.name}</h3>
+            <p className="text-[#444746] font-medium text-sm mb-0.5">{matchedInterviewer.title}</p>
+            <p className="text-sm text-[#444746] opacity-70 mb-6">{matchedInterviewer.company}</p>
+            <p className="text-sm text-[#444746] leading-relaxed italic">
+              "{matchedInterviewer.description}"
+            </p>
+          </div>
+
+          {/* Right: Introduction & Instructions */}
+          <div className="md:w-3/5 p-12 flex flex-col justify-center">
+            <div className="space-y-8 mb-10">
+              <p className="text-xl text-[#1F1F1F] font-medium leading-relaxed">
+                {matchedInterviewer.intro}
+              </p>
+              <p className="text-lg text-[#444746] leading-relaxed">
+                We’ll spend time discussing {focusText} questions. I’m interested in understanding how you think, structure problems, and communicate trade-offs.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setStep('SETTINGS')}
+                className="flex-1 py-4 border border-[#E3E3E3] text-[#444746] rounded-full font-bold hover:bg-[#F0F4F9] transition-all flex items-center justify-center gap-2"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                Back
+              </button>
+              <button 
+                onClick={() => {
+                  setStep('DEVICE_CHECK');
+                  setTimeout(initMedia, 100);
+                }}
+                className="flex-[2] py-4 bg-[#0B57D0] text-white rounded-full font-bold shadow-lg hover:bg-[#0B67EF] transition-all flex items-center justify-center gap-2"
+              >
+                Confirm & Continue
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER: DEVICE CHECK ---
+  if (step === 'DEVICE_CHECK') {
+     return (
+        <div className="h-full flex items-center justify-center p-8 animate-in fade-in duration-500">
+           <div className="max-w-4xl w-full bg-white rounded-[32px] border border-[#E3E3E3] shadow-xl overflow-hidden flex flex-col md:flex-row">
+              {/* Left: Preview */}
+              <div className="md:w-1/2 bg-black relative aspect-square md:aspect-auto min-h-[400px]">
+                 {permError ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-6 text-center">
+                       <MicOff className="w-12 h-12 text-red-500 mb-4" />
+                       <h3 className="text-lg font-bold mb-2">
+                         {permError.includes('denied') ? 'Access Denied' : 'Device Not Found'}
+                       </h3>
+                       <p className="text-sm opacity-80 mb-6">{permError}</p>
+                       <button onClick={initMedia} className="bg-white text-black px-6 py-2 rounded-full font-bold hover:bg-gray-200 transition-colors">Retry Access</button>
+                    </div>
+                 ) : (
+                    <video ref={videoRef} autoPlay muted className="w-full h-full object-cover" />
+                 )}
+                 <div className="absolute bottom-6 left-6 right-6">
+                    <div className="flex items-center justify-between text-white mb-2">
+                       <span className="text-xs font-bold uppercase flex items-center gap-2"><Mic className="w-3 h-3" /> Mic Check</span>
+                       <span className="text-xs font-mono">{Math.round(audioLevel)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                       <div className="h-full bg-green-400 transition-all duration-75 ease-out" style={{ width: `${audioLevel}%` }}></div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Right: Checklist */}
+              <div className="md:w-1/2 p-10 flex flex-col justify-center">
+                 <h2 className="text-3xl font-bold text-[#1F1F1F] mb-6">Before You Start</h2>
+                 <div className="space-y-6 mb-10">
+                    <div className="flex items-start gap-4">
+                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${streamRef.current ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                          {streamRef.current ? <CheckCircle2 className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                       </div>
+                       <div>
+                          <h4 className="font-bold text-[#1F1F1F]">Camera Check</h4>
+                          <p className="text-sm text-[#444746]">Ensure you are in a well-lit environment and clearly visible.</p>
+                       </div>
+                    </div>
+                    <div className="flex items-start gap-4">
+                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${audioLevel > 5 ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                          {audioLevel > 5 ? <Volume2 className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                       </div>
+                       <div>
+                          <h4 className="font-bold text-[#1F1F1F]">Audio Test</h4>
+                          <p className="text-sm text-[#444746]">Speak to test your microphone. The bar on the left should move.</p>
+                       </div>
+                    </div>
+                 </div>
+                 
+                 <div className="mt-auto space-y-3">
+                    <button 
+                       onClick={handleStartInterview}
+                       className="w-full py-4 bg-[#0B57D0] text-white rounded-full font-bold shadow-lg hover:bg-[#0B67EF] transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                    >
+                       <Camera className="w-5 h-5" />
+                       {streamRef.current ? 'Start Interview' : 'Continue Without Media'}
+                    </button>
+                    <button onClick={() => setStep('SETTINGS')} className="w-full py-3 text-[#444746] font-medium hover:text-[#1F1F1F]">Back to Selection</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+     );
+  }
+
+
+
+  // --- RENDER: INTERVIEW (IMMERSIVE VIDEO CONFERENCE) ---
+  if (step === 'INTERVIEW') {
+    return (
+      <div className="relative h-full w-full bg-[#111] rounded-[24px] overflow-hidden animate-in fade-in duration-500 flex flex-col">
+        {/* Main Video (Candidate) */}
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          muted 
+          className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" 
+        />
+
+        {/* Top Center: Recording Status & User Mic */}
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
+          <div className="flex items-center gap-3 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-sm transition-all duration-300">
+            {/* Recording Dot: Always red if recording and not paused */}
+            <div className={`w-2 h-2 rounded-full ${isRecording && !isPaused ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-white/50'}`} />
+            
+            <div className="flex items-center gap-[3px] h-4">
+              {[...Array(16)].map((_, i) => {
+                // Create a more natural waveform effect
+                // Center bars are taller, edges are shorter
+                const centerDist = Math.abs(i - 7.5) / 7.5; // 0 at center, 1 at edges
+                const baseHeight = 20 * (1 - centerDist * 0.5); // Base height curve
+                
+                // Dynamic height calculation
+                let height = baseHeight;
+                if (isRecording && !isPaused && audioLevel > 5) {
+                   // Amplify movement when talking
+                   const noise = Math.random() * 0.5 + 0.5;
+                   const signal = (audioLevel / 100) * 2.5; // Amplify signal
+                   height = Math.min(100, Math.max(10, baseHeight + (signal * 80 * noise)));
+                } else {
+                   // Idle breathing
+                   height = Math.max(10, baseHeight + Math.sin(Date.now() / 200 + i) * 5);
+                }
+
+                return (
+                  <div 
+                    key={i} 
+                    className="w-[3px] bg-[#2EBB63] rounded-full transition-all duration-75 ease-out"
+                    style={{ 
+                      height: `${height}%`,
+                      opacity: isRecording && !isPaused ? 0.9 : 0.4
+                    }} 
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Top Right: Interviewer PiP & Status */}
+        <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-3">
+          <div className="relative w-48 sm:w-64 aspect-video bg-[#1F1F1F] rounded-lg overflow-hidden shadow-lg">
+            <img 
+              src={matchedInterviewer?.avatar} 
+              alt={matchedInterviewer?.name}
+              className="w-full h-full object-cover"
+            />
+            {/* Interviewer Name & Mic Status */}
+            <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between bg-black/40 backdrop-blur-md px-2.5 py-1.5 rounded-lg">
+              <span className="text-xs font-medium text-white truncate pr-2">{matchedInterviewer?.name}</span>
+              <div className="flex items-center gap-1">
+                {interviewerState === 'SPEAKING' ? (
+                  <div className="flex items-end gap-[2px] h-3">
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full animate-[bounce_1s_infinite] h-full"></div>
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full animate-[bounce_1s_infinite_0.2s] h-2/3"></div>
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full animate-[bounce_1s_infinite_0.4s] h-full"></div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-[2px] h-3 opacity-30">
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full h-1/3"></div>
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full h-1/3"></div>
+                    <div className="w-[3px] bg-[#2EBB63] rounded-full h-1/3"></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Center/Bottom Overlay: Current Question / Subtitle */}
+        <div 
+          className="absolute bottom-28 left-0 right-0 z-20 flex flex-col items-center"
+          style={{
+            transform: `translate(${subtitlePos.x}px, ${subtitlePos.y}px)`,
+            cursor: isDraggingSubtitle ? 'grabbing' : 'grab',
+            opacity: isDraggingSubtitle ? 0.7 : 1,
+            transition: isDraggingSubtitle ? 'none' : 'opacity 0.2s'
+          }}
+          onMouseDown={handleSubtitleMouseDown}
+        >
+           <div className="max-w-2xl w-full mx-6 sm:mx-12 bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl p-6 text-center shadow-lg select-none transition-all hover:bg-white/25">
+              <h2 className="text-lg md:text-2xl font-medium text-white leading-relaxed drop-shadow-md text-balance tracking-wide">
+                "{displayedQuestion}"
+              </h2>
+           </div>
+        </div>
+
+        {/* Bottom Control Bar */}
+        <div className="absolute bottom-6 left-0 right-0 px-6 flex justify-center z-30">
+           <div className="flex flex-wrap items-center justify-center gap-4 bg-black/50 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-full shadow-2xl">
+              
+              {/* Progress & Timer */}
+              <div className="flex flex-col items-center px-4 border-r border-white/10">
+                <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Question {currentQuestionIndex + 1} of {activeQuestions.length}</span>
+                <span className="text-sm font-mono text-white">{formatTime(timer)}</span>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-3 px-2">
+                <button 
+                  onClick={togglePause}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm transition-all ${
+                    isPaused 
+                      ? 'bg-white text-red-600 hover:bg-gray-200' 
+                      : 'bg-red-500 text-white hover:bg-red-600'
+                  }`}
+                >
+                  {isPaused ? <Play className="w-4 h-4" /> : null}
+                  {isPaused ? 'Resume' : 'Pause'}
+                </button>
+
+                <button 
+                  onClick={handleEndQuestion}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#1F1F1F] rounded-full font-bold text-sm hover:bg-gray-200 transition-all"
+                >
+                  {currentQuestionIndex === activeQuestions.length - 1 ? (
+                     <><Check className="w-4 h-4" /> Finish Interview</>
+                  ) : (
+                     <><ArrowRight className="w-4 h-4" /> Next Question</>
+                  )}
+                </button>
+
+                <div className="w-px h-6 bg-white/20 mx-1"></div>
+
+                <button 
+                  onClick={() => setShowExitConfirm(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full font-medium text-sm transition-all"
+                >
+                  <X className="w-4 h-4" />
+                  Exit
+                </button>
+              </div>
+
+           </div>
+        </div>
+
+        {/* Exit Confirmation Modal */}
+        {showExitConfirm && (
+          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+              <h3 className="text-xl font-bold text-[#1F1F1F] mb-4">Exit Interview?</h3>
+              <p className="text-[#444746] mb-8 leading-relaxed">
+                You have not completed this interview. <br/>
+                If you exit now, no final Interview Report will be generated. <br/>
+                Are you sure you want to leave?
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button 
+                  onClick={() => setShowExitConfirm(false)}
+                  className="px-5 py-2.5 text-[#444746] font-bold hover:bg-[#F0F4F9] rounded-full transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowExitConfirm(false);
+                    stopListening();
+                    synthesisRef.current.cancel();
+                    
+                    // Reset to initial state (SETTINGS) instead of Dashboard
+                    setStep('SETTINGS');
+                    setTimer(0);
+                    setSessionResults([]);
+                    setIsRecording(false);
+                    setMatchedInterviewer(null);
+                    setIsFinishing(false);
+                  }}
+                  className="px-5 py-2.5 bg-[#B3261E] text-white font-bold rounded-full hover:bg-[#8C1D18] transition-colors shadow-sm"
+                >
+                  Confirm Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- RENDER: FEEDBACK (INTERVIEW REPORT) ---
+  if (step === 'FEEDBACK') {
+    // Mock Evaluation Data Generator
+    const getMockEval = (answer: string, index: number) => {
+      const length = answer.length;
+      let rating: 'Needs improvement' | 'Pass' | 'Strong' = 'Pass';
+      if (length < 50) rating = 'Needs improvement';
+      else if (length > 150) rating = 'Strong';
+
+      return {
+        rating,
+        feedback: rating === 'Strong' 
+          ? "Excellent answer with clear structure and impactful examples. You demonstrated a deep understanding of the core concepts."
+          : rating === 'Pass'
+          ? "Good answer overall, but could benefit from more specific examples to back up your claims."
+          : "The answer was too brief. Try to use the STAR method to provide a more comprehensive response.",
+        suggestions: [
+          "Use the STAR method for behavioral questions.",
+          "Quantify your impact with specific metrics.",
+          "Maintain a confident and steady pace."
+        ],
+        scores: {
+          Clarity: rating === 'Strong' ? 90 : rating === 'Pass' ? 70 : 40,
+          Structure: rating === 'Strong' ? 85 : rating === 'Pass' ? 65 : 45,
+          'Example quality': rating === 'Strong' ? 95 : rating === 'Pass' ? 60 : 30,
+          Impact: rating === 'Strong' ? 88 : rating === 'Pass' ? 75 : 50,
+        },
+        duration: Math.floor(Math.random() * 60) + 30, // Mock duration 30-90s
+      };
+    };
+
+    const handleSaveNote = (index: number) => {
+      // In a real app, this would save to the backend
+      // Here we just update the UI state to show it's saved
+      setSavedNotes(prev => ({ ...prev, [index]: true }));
+      
+      // Update session results with the note
+      const updatedResults = [...sessionResults];
+      if (updatedResults[index]) {
+        updatedResults[index] = { ...updatedResults[index], note: questionNotes[index] };
+        setSessionResults(updatedResults);
+      }
+
+      // Hide "Saved" message after 2 seconds
+      setTimeout(() => {
+        setSavedNotes(prev => {
+          const newState = { ...prev };
+          delete newState[index];
+          return newState;
+        });
+      }, 2000);
+    };
+
+    const handleSaveAndExit = () => {
+      // In a real app, this would save the full report to the backend
+      // For now, we just reset to the start of the interview flow
+      setStep('SETTINGS');
+      setTimer(0);
+      setSessionResults([]);
+      setIsRecording(false);
+      setMatchedInterviewer(null);
+      setIsFinishing(false);
+    };
+
+    return (
+      <div className="h-full overflow-y-auto bg-[#F0F4F9] p-4 md:p-8 animate-in fade-in duration-500">
+        <div className="max-w-4xl mx-auto space-y-6 pb-12">
+          
+          {/* Top Actions */}
+          <div className="flex items-center justify-between">
+            <button 
+              onClick={handleSaveAndExit}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-full text-sm font-bold hover:bg-[#F8F9FA] transition-colors shadow-sm"
+            >
+              <RefreshCw className="w-4 h-4" /> Practice Again
+            </button>
+            <button 
+              onClick={handleSaveAndExit}
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#0B57D0] text-white rounded-full text-sm font-bold hover:bg-[#0B67EF] transition-colors shadow-sm"
+            >
+              <Check className="w-4 h-4" /> Save & Exit
+            </button>
+          </div>
+
+          {/* Single White Container for Report */}
+          <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm overflow-hidden">
+            
+            {/* Section 1: Interview Report Header */}
+            <div className="p-8 border-b border-[#E3E3E3]">
+              {/* Row 1: Title & Rating */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <h1 className="text-3xl font-bold text-[#1F1F1F]">Interview Report</h1>
+                
+                <div className="flex items-center gap-3 bg-[#F8F9FA] px-4 py-2 rounded-xl border border-[#E3E3E3]">
+                  <span className="text-sm font-bold text-[#444746]">Overall Rating</span>
+                  <div className="flex gap-1">
+                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
+                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
+                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
+                    <Star className="w-5 h-5 text-[#0B57D0] fill-current opacity-30" />
+                    <Star className="w-5 h-5 text-[#0B57D0] fill-current opacity-30" />
+                  </div>
+                  <span className="text-sm font-bold text-[#0B57D0] ml-1">Good</span>
+                </div>
+              </div>
+
+              {/* Row 2: Info Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {/* Role */}
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">
+                    <Briefcase className="w-3.5 h-3.5" /> Role
+                  </div>
+                  <div className="font-bold text-[#1F1F1F] text-sm md:text-base truncate" title={workspace?.title || 'General Role'}>
+                    {workspace?.title || 'General Role'}
+                  </div>
+                </div>
+
+                {/* Interviewer */}
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">
+                    <User className="w-3.5 h-3.5" /> Interviewer
+                  </div>
+                  <div className="font-bold text-[#1F1F1F] text-sm md:text-base truncate">
+                    {matchedInterviewer?.name || 'AI Interviewer'}
+                  </div>
+                </div>
+
+                {/* Date */}
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">
+                    <Calendar className="w-3.5 h-3.5" /> Date
+                  </div>
+                  <div className="font-bold text-[#1F1F1F] text-sm md:text-base">
+                    {new Date().toLocaleDateString()}
+                  </div>
+                </div>
+
+                {/* Duration */}
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#444746] uppercase tracking-wider mb-2">
+                    <Clock className="w-3.5 h-3.5" /> Duration
+                  </div>
+                  <div className="font-bold text-[#1F1F1F] text-sm md:text-base">
+                    {formatTime(timer)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Overall Evaluation */}
+            <div className="p-8 border-b border-[#E3E3E3] bg-[#FAFAFA]/50">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-[#0B57D0]" />
+                <h2 className="text-xl font-bold text-[#1F1F1F]">Overall Evaluation</h2>
+              </div>
+              
+              <p className="text-[#444746] leading-relaxed mb-8 text-base">
+                Strong communication and clear structure in behavioral answers. However, technical explanations need clearer metrics and more specific examples to back up product decisions. You demonstrated good empathy but could improve on data-driven storytelling.
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1F1F1F] mb-4">
+                    <CheckCircle2 className="w-4 h-4 text-[#2ECC71]" /> Strengths
+                  </h4>
+                  <ul className="space-y-3">
+                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                      <span className="w-1.5 h-1.5 bg-[#2ECC71] rounded-full mt-2 flex-shrink-0"></span>
+                      Clear communication style with confident delivery.
+                    </li>
+                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                      <span className="w-1.5 h-1.5 bg-[#2ECC71] rounded-full mt-2 flex-shrink-0"></span>
+                      Good use of the STAR method for behavioral questions.
+                    </li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1F1F1F] mb-4">
+                    <AlertCircle className="w-4 h-4 text-[#E74C3C]" /> Areas to Improve
+                  </h4>
+                  <ul className="space-y-3">
+                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                      <span className="w-1.5 h-1.5 bg-[#E74C3C] rounded-full mt-2 flex-shrink-0"></span>
+                      Structure technical answers with more specific metrics.
+                    </li>
+                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                      <span className="w-1.5 h-1.5 bg-[#E74C3C] rounded-full mt-2 flex-shrink-0"></span>
+                      Provide more concrete examples of impact.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Transcript and Analysis */}
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-xl font-bold text-[#1F1F1F]">Transcript and Analysis</h2>
+                <button className="flex items-center gap-2 text-[#0B57D0] font-bold text-sm hover:bg-[#E8F0FE] px-4 py-2 rounded-full transition-colors">
+                  <PlayCircle className="w-4 h-4" /> View Recording
+                </button>
+              </div>
+
+              <div className="space-y-10">
+                {sessionResults.map((res, idx) => {
+                  const evalData = getMockEval(res.answer, idx);
+                  const transcriptText = editedTranscripts[idx] !== undefined ? editedTranscripts[idx] : res.answer;
+                  const note = questionNotes[idx] || '';
+                  const isNoteExpanded = expandedNotes[idx];
+
+                  // Determine color based on rating
+                  const ratingColor = evalData.rating === 'Strong' ? 'bg-[#2ECC71]' : evalData.rating === 'Pass' ? 'bg-[#F1C40F]' : 'bg-[#E74C3C]';
+                  const ratingText = evalData.rating === 'Strong' ? 'text-[#2ECC71]' : evalData.rating === 'Pass' ? 'text-[#F1C40F]' : 'text-[#E74C3C]';
+
+                  return (
+                    <div key={idx} className="relative pl-6 border-l-2 border-[#E3E3E3] hover:border-[#0B57D0] transition-colors group">
+                      {/* Question Number Bubble */}
+                      <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-[#E3E3E3] group-hover:border-[#0B57D0] transition-colors"></div>
+                      
+                      {/* Question */}
+                      <div className="mb-4">
+                        <span className="text-xs font-bold text-[#0B57D0] uppercase tracking-wider mb-1 block">Question {idx + 1}</span>
+                        <h3 className="text-lg font-bold text-[#1F1F1F] leading-snug">{res.question}</h3>
+                      </div>
+
+                      {/* Answer */}
+                      <div className="mb-4">
+                        <div className="text-[#444746] text-sm leading-relaxed whitespace-pre-wrap">
+                          {transcriptText || <span className="italic opacity-50">No transcript recorded.</span>}
+                        </div>
+                      </div>
+
+                      {/* Rating & Actions */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${ratingColor}`}></div>
+                          <span className={`text-xs font-bold ${ratingText}`}>{evalData.rating}</span>
+                        </div>
+                        
+                        {!isNoteExpanded && !note ? (
+                          <button 
+                            onClick={() => setExpandedNotes(prev => ({ ...prev, [idx]: true }))}
+                            className="text-xs font-bold text-[#444746] hover:text-[#0B57D0] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Edit3 className="w-3 h-3" /> Add Note
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {/* Note Editor */}
+                      {(isNoteExpanded || note) && (
+                        <div className="mt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <textarea
+                            value={note}
+                            onChange={(e) => setQuestionNotes(prev => ({ ...prev, [idx]: e.target.value }))}
+                            placeholder="Add your reflection notes here..."
+                            className="w-full p-3 bg-[#F8F9FA] border border-[#E3E3E3] rounded-lg text-sm text-[#1F1F1F] focus:outline-none focus:ring-2 focus:ring-[#0B57D0]/20 resize-none h-20 mb-2"
+                          />
+                          <div className="flex justify-end">
+                            {savedNotes[idx] ? (
+                              <span className="text-xs font-bold text-[#137333] flex items-center gap-1 animate-in fade-in duration-200">
+                                <Check className="w-3 h-3" /> Saved
+                              </span>
+                            ) : (
+                              <button 
+                                onClick={() => handleSaveNote(idx)}
+                                className="px-3 py-1.5 bg-[#0B57D0] text-white text-xs font-bold rounded-lg hover:bg-[#0B67EF] transition-colors"
+                              >
+                                Save Note
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+export default MockInterview;
