@@ -1,20 +1,54 @@
-import React, { useState } from 'react';
-import { TargetRole, UserProfile, AppView } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TargetRole, UserProfile, AppView, SavedQuestion } from '../types';
 import { Video, MessageSquare, Calendar as CalendarIcon, ArrowUpRight, ChevronLeft, ChevronRight, Edit2, HelpCircle, Edit3 } from 'lucide-react';
+import { getDashboardStats, listInterviewSessions } from '../api';
 
 interface DashboardProps {
   userProfile: UserProfile;
   roles: TargetRole[];
+  savedQuestions?: SavedQuestion[];
   onNavigate: (view: AppView) => void;
   onSelectRole: (role: TargetRole) => void;
+  isGuest?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, onNavigate, onSelectRole }) => {
-  // Stats
-  const stats = {
-    liveInterviews: 9,
-    mockQuestions: 42
-  };
+const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestions, onNavigate, onSelectRole, isGuest }) => {
+  // Stats — loaded from backend or computed from props
+  const [stats, setStats] = useState({ liveInterviews: 0, mockQuestions: 0 });
+  const [sessionDates, setSessionDates] = useState<Record<number, 'LIVE' | 'MOCK' | 'BOTH'>>({});
+
+  useEffect(() => {
+    if (isGuest) {
+      // Guest mode: compute from local data
+      setStats({
+        liveInterviews: 0,
+        mockQuestions: savedQuestions?.length || 0,
+      });
+    } else {
+      // USER mode: load from backend
+      getDashboardStats().then((data: any) => {
+        setStats({
+          liveInterviews: data.live_interviews || 0,
+          mockQuestions: data.mock_questions || 0,
+        });
+      }).catch(() => {});
+
+      // Load interview sessions to populate calendar
+      listInterviewSessions().then((sessions: any[]) => {
+        const dates: Record<number, 'LIVE' | 'MOCK' | 'BOTH'> = {};
+        for (const s of sessions) {
+          const d = new Date(s.date);
+          const day = d.getDate();
+          if (dates[day]) {
+            dates[day] = 'BOTH';
+          } else {
+            dates[day] = 'LIVE';
+          }
+        }
+        setSessionDates(dates);
+      }).catch(() => {});
+    }
+  }, [isGuest, savedQuestions]);
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -38,17 +72,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, onNavigate, o
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  // Mock events
-  const events: Record<number, 'LIVE' | 'MOCK' | 'BOTH'> = {
-    3: 'MOCK',
-    5: 'LIVE',
-    8: 'MOCK',
-    12: 'LIVE',
-    15: 'BOTH',
-    18: 'MOCK',
-    24: 'LIVE',
-    28: 'MOCK'
-  };
+  // Real events from backend sessions
+  const events = sessionDates;
 
   const getEventStyle = (type?: 'LIVE' | 'MOCK' | 'BOTH') => {
     if (!type) return '';

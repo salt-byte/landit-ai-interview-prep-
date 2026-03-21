@@ -292,8 +292,10 @@ const App: React.FC = () => {
           <Dashboard
             userProfile={userProfile}
             roles={roles}
+            savedQuestions={savedQuestions}
             onNavigate={setView}
             onSelectRole={handleSelectRole}
+            isGuest={authMode === 'GUEST'}
           />
         );
       case 'PROFILE':

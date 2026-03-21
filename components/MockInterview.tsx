@@ -1709,20 +1709,18 @@ Instructions:
 
                 <button
                   onClick={() => {
-                    if (currentQuestionIndex === activeQuestions.length - 1) {
-                      // Finish interview
-                      if (!useLocalMode) {
-                        handleFinishInterviewGemini();
-                      } else {
-                        handleEndQuestion();
-                      }
+                    if (!useLocalMode) {
+                      // Gemini Live mode: always allow finish
+                      handleFinishInterviewGemini();
+                    } else if (currentQuestionIndex === activeQuestions.length - 1) {
+                      handleEndQuestion();
                     } else {
                       handleEndQuestion();
                     }
                   }}
                   className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#1F1F1F] rounded-full font-bold text-sm hover:bg-gray-200 transition-all"
                 >
-                  {currentQuestionIndex === activeQuestions.length - 1 ? (
+                  {(!useLocalMode || currentQuestionIndex === activeQuestions.length - 1) ? (
                      <><Check className="w-4 h-4" /> Finish Interview</>
                   ) : (
                      <><ArrowRight className="w-4 h-4" /> Next Question</>
