@@ -49,7 +49,7 @@ export interface SavedQuestion {
   answer?: string;
   lastModified: string; // ISO date string
   savedAt: string; // ISO date string
-  source?: 'MOCK_PREP';
+  source?: 'MOCK_PREP' | 'LIVE_INTERVIEW';
   // Restoration Fields
   chatHistory?: { sender: 'USER' | 'AI'; text: string; quote?: string }[];
   transcription?: string;

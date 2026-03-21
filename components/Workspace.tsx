@@ -929,7 +929,7 @@ export const InterviewPrepBuilder: React.FC<{
     setEditorState('GENERATING');
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       const model = "gemini-3-flash-preview";
       
       const prompt = `You are an expert interview coach. Generate ${settings.qty} high-quality, professional interview questions for a ${role?.title} role at ${role?.company}.
@@ -987,7 +987,7 @@ export const InterviewPrepBuilder: React.FC<{
     setIsGeneratingAnswer(true);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       const model = "gemini-3-flash-preview";
       const question = generatedQuestions[index].q;
       
@@ -1079,7 +1079,7 @@ export const InterviewPrepBuilder: React.FC<{
       }
 
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
         const model = "gemini-3-flash-preview";
         const prompt = `You are an expert editor. Revise the following text based on the user's instruction.
         

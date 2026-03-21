@@ -22,7 +22,7 @@ import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion } from './types';
-import { getRoles, updateRole } from './api';
+import { getRoles, updateRole, getSavedQuestions, saveQuestion } from './api';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
@@ -158,10 +158,11 @@ const App: React.FC = () => {
     setAuthMode('USER');
   };
 
-  // Load roles from backend when USER logs in
+  // Load roles and saved questions from backend when USER logs in
   useEffect(() => {
     if (authMode === 'USER') {
       getRoles().then(setRoles).catch(console.error);
+      getSavedQuestions().then(setSavedQuestions).catch(console.error);
     }
   }, [authMode]);
 
@@ -223,14 +224,22 @@ const App: React.FC = () => {
 
   const handleSaveQuestion = (question: SavedQuestion) => {
     setSavedQuestions(prev => {
-      // Check if question already exists (by content or id)
-      // Since ID is generated with timestamp, it might be unique.
-      // But if we save all, we might duplicate.
-      // Let's check if a question with same content exists for this role.
       const exists = prev.some(q => q.question === question.question && q.roleId === question.roleId);
       if (exists) return prev;
       return [question, ...prev];
     });
+    // Persist to backend (backend handles dedup/upsert by question+roleId)
+    if (authMode === 'USER') {
+      saveQuestion({
+        roleId: question.roleId,
+        type: question.type,
+        question: question.question,
+        answer: question.answer,
+        source: question.source || 'MOCK_PREP',
+        chatHistory: question.chatHistory,
+        transcription: question.transcription,
+      }).catch(console.error);
+    }
   };
 
   const handleSelectSavedQuestion = (question: SavedQuestion) => {
@@ -301,12 +310,25 @@ const App: React.FC = () => {
         );
       case 'LIVE_INTERVIEW':
         return (
-          <MockInterview 
-            workspace={selectedRole} 
-            roles={roles} 
+          <MockInterview
+            workspace={selectedRole}
+            roles={roles}
             onSelectRole={setSelectedRole}
             onSaveSession={(questions) => {
               setSavedQuestions(prev => [...questions, ...prev]);
+              if (authMode === 'USER') {
+                questions.forEach((q: SavedQuestion) => {
+                  saveQuestion({
+                    roleId: q.roleId,
+                    type: q.type,
+                    question: q.question,
+                    answer: q.answer,
+                    source: 'LIVE_INTERVIEW',
+                    chatHistory: q.chatHistory,
+                    transcription: q.transcription,
+                  }).catch(console.error);
+                });
+              }
             }}
           />
         );
