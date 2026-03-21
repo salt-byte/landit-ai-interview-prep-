@@ -1,22 +1,22 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Video, 
-  Mic, 
-  StopCircle, 
-  RefreshCw, 
-  Star, 
-  ArrowRight, 
-  Play, 
-  Camera, 
-  Sparkles, 
-  MicOff, 
-  CheckCircle2, 
-  Lightbulb, 
-  Volume2, 
-  Monitor, 
-  AlertCircle, 
-  Briefcase, 
+import {
+  Video,
+  Mic,
+  StopCircle,
+  RefreshCw,
+  Star,
+  ArrowRight,
+  Play,
+  Camera,
+  Sparkles,
+  MicOff,
+  CheckCircle2,
+  Lightbulb,
+  Volume2,
+  Monitor,
+  AlertCircle,
+  Briefcase,
   ChevronDown,
   Check,
   Plus,
@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { TargetRole, InterviewFeedback } from '../types';
 import { createInterviewSession, createInterviewWS, getInterviewFeedback } from '../api';
+import { GoogleGenAI, Modality } from "@google/genai";
 
 interface MockInterviewProps {
   workspace: TargetRole | null;
@@ -62,33 +63,33 @@ interface QuestionType {
 }
 
 const QUESTION_TYPES: QuestionType[] = [
-  { 
-    id: 'behavioral', 
-    label: 'Behavioral & Experience', 
+  {
+    id: 'behavioral',
+    label: 'Behavioral & Experience',
     description: 'Past experiences, soft skills, and behavioral scenarios.',
     explanation: 'Focuses on your past experiences, leadership style, and how you collaborate, make decisions, and handle challenges in real-world situations.',
-    example: '“Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?”'
+    example: '"Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?"'
   },
-  { 
-    id: 'product', 
-    label: 'Product Design & Sense', 
+  {
+    id: 'product',
+    label: 'Product Design & Sense',
     description: 'Designing products, user empathy, and product improvement.',
     explanation: 'Evaluates your ability to identify user problems, design intuitive solutions, and prioritize features with clear product reasoning.',
-    example: '“How would you design a new feature to improve user retention for TikTok?”'
+    example: '"How would you design a new feature to improve user retention for TikTok?"'
   },
-  { 
-    id: 'analytical', 
-    label: 'Analytical & Execution', 
+  {
+    id: 'analytical',
+    label: 'Analytical & Execution',
     description: 'Metrics, data analysis, problem solving, and execution.',
     explanation: 'Tests your ability to diagnose metric changes, structure ambiguous problems, and drive data-informed execution.',
-    example: '“Daily active users dropped by 15% last month. How would you investigate and address this issue?”'
+    example: '"Daily active users dropped by 15% last month. How would you investigate and address this issue?"'
   },
-  { 
-    id: 'strategy', 
-    label: 'Strategy & Vision', 
+  {
+    id: 'strategy',
+    label: 'Strategy & Vision',
     description: 'Long-term thinking, market sense, and business strategy.',
     explanation: 'Assesses your long-term thinking, market judgment, and ability to evaluate strategic opportunities and trade-offs.',
-    example: '“Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?”'
+    example: '"Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?"'
   }
 ];
 
@@ -283,6 +284,24 @@ const INTERVIEWERS: Interviewer[] = [
   }
 ];
 
+// Voice mapping for Gemini Live API
+const INTERVIEWER_VOICE_MAP: Record<string, string> = {
+  alex: 'Puck',
+  victor: 'Charon',
+  emma: 'Kore',
+  adrian: 'Fenrir',
+  sophia: 'Aoede',
+};
+
+// Interviewer style descriptions for the system prompt
+const INTERVIEWER_STYLE_MAP: Record<string, string> = {
+  alex: 'Balanced, professional, and encouraging. You ask structured questions and give balanced feedback.',
+  victor: 'Direct, challenging, and authoritative. You push back on vague answers and demand data-driven reasoning.',
+  emma: 'Warm, supportive, and focused on team dynamics. You encourage candidates and look for growth potential.',
+  adrian: 'Analytical, precise, and detail-oriented. You drill down into specifics and expect rigorous technical depth.',
+  sophia: 'Empathetic, behavioral-focused, and insightful. You assess emotional intelligence and cultural fit.',
+};
+
 const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelectRole, onSaveSession, onNavigate }) => {
   const [step, setStep] = useState<'SETTINGS' | 'INTERVIEWER_INTRO' | 'DEVICE_CHECK' | 'INTERVIEW' | 'FEEDBACK'>('SETTINGS');
   const [settings, setSettings] = useState({
@@ -295,16 +314,16 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [permError, setPermError] = useState<string | null>(null);
-  
+
   // Session Data State
   const [sessionResults, setSessionResults] = useState<{question: string, answer: string, chat: any[]}[]>([]);
-  
+
   // Media State
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [audioLevel, setAudioLevel] = useState(0); // 0-100 for visualizer
 
-  // Backend WebSocket State
+  // Backend WebSocket State (kept for local mode fallback)
   const [sessionId, setSessionId] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [useLocalMode, setUseLocalMode] = useState(false);
@@ -320,16 +339,28 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [expandedNotes, setExpandedNotes] = useState<{[key: number]: boolean}>({});
   const [savedNotes, setSavedNotes] = useState<{[key: number]: boolean}>({});
 
-  // Live Interview State (moved here to avoid TDZ in production bundles)
+  // Live Interview State
   const [transcript, setTranscript] = useState('');
   const [interviewerState, setInterviewerState] = useState<'SPEAKING' | 'LISTENING' | 'IDLE'>('IDLE');
   const [isPaused, setIsPaused] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [followUpCount, setFollowUpCount] = useState(0);
   const [displayedQuestion, setDisplayedQuestion] = useState("");
   const [openingStep, setOpeningStep] = useState(0);
+
+  // Gemini Live API refs
+  const geminiSessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioWorkletNodeRef = useRef<any>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const isStreamingMicRef = useRef(false);
+  const audioQueueRef = useRef<Float32Array[]>([]);
+  const isPlayingRef = useRef(false);
+  const nextPlayTimeRef = useRef(0);
+
+  // Local mode fallback refs (browser TTS/ASR)
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis | null>(null);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Subtitle Dragging State
   const [subtitlePos, setSubtitlePos] = useState({ x: 0, y: 0 });
@@ -344,27 +375,28 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
 
+  // Initialize synthesisRef for local mode
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      synthesisRef.current = window.speechSynthesis;
+    }
+  }, []);
+
   const matchInterviewer = (types: string[], role: TargetRole | null) => {
-    // Logic:
-    // Strategy -> Victor (Director/VP)
-    // Analytical -> Adrian (Data/Growth Lead)
-    // Product -> Alex (Senior PM)
-    // Behavioral -> Emma (Hiring Manager)
-    
     let interviewerId = 'emma'; // Default
-    
+
     if (types.includes('strategy')) interviewerId = 'victor';
     else if (types.includes('analytical')) interviewerId = 'adrian';
     else if (types.includes('product')) interviewerId = 'alex';
     else if (types.includes('behavioral')) interviewerId = 'emma';
-    
+
     const interviewer = INTERVIEWERS.find(i => i.id === interviewerId) || INTERVIEWERS[0];
     const company = role?.company || 'the company';
 
     return {
       ...interviewer,
       company: company,
-      intro: `Hi, I’m ${interviewer.name.split(' ')[0]}, a ${interviewer.title} at ${company}. I’ll be leading today’s interview.`
+      intro: `Hi, I'm ${interviewer.name.split(' ')[0]}, a ${interviewer.title} at ${company}. I'll be leading today's interview.`
     };
   };
 
@@ -384,7 +416,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   }, [matchedInterviewer]);
 
 
-  // Cleanup stream + WS on unmount
+  // Cleanup stream + WS + Gemini session on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -393,6 +425,13 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       if (wsRef.current) {
         wsRef.current.close();
       }
+      if (geminiSessionRef.current) {
+        try { geminiSessionRef.current.close(); } catch {}
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try { audioContextRef.current.close(); } catch {}
+      }
+      stopMicStreaming();
     };
   }, []);
 
@@ -422,20 +461,20 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     const updateLevel = () => {
       if (!stream.active) return;
       analyser.getFloatTimeDomainData(dataArray);
-      
+
       let sumSquares = 0;
       for (let i = 0; i < dataArray.length; i++) {
         sumSquares += dataArray[i] * dataArray[i];
       }
       const rms = Math.sqrt(sumSquares / dataArray.length);
-      
+
       // Convert RMS to dBFS
       const db = 20 * Math.log10(rms || 1e-8);
-      
+
       // Thresholding (e.g., -45 dBFS)
       const threshold = -45;
       let targetLevel = 0;
-      
+
       if (db > threshold) {
         // Map db from [threshold, 0] to [0, 100]
         targetLevel = Math.min(100, Math.max(0, ((db - threshold) / Math.abs(threshold)) * 100));
@@ -449,11 +488,10 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
           targetLevel = smoothedLevel; // Hold previous level
         }
       }
-      
+
       lastTime = performance.now();
 
       // Exponential Moving Average (EMA)
-      // Faster attack (fade-in), slower release (fade-out)
       const alpha = targetLevel > smoothedLevel ? 0.4 : 0.15;
       smoothedLevel = alpha * targetLevel + (1 - alpha) * smoothedLevel;
 
@@ -476,37 +514,299 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       startAudioAnalysis(stream);
       setPermError(null);
     } catch (err: any) {
-      // Handle specific error cases without logging as error
       let errorMessage = "Unable to access camera/microphone.";
-      
+
       if (err.name === 'NotFoundError' || err.message?.includes('Requested device not found')) {
         errorMessage = "No camera or microphone found. You can continue without them.";
       } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         errorMessage = "Camera/Microphone access denied. Please allow access in your browser settings.";
       } else {
-        console.warn("Camera access error:", err); // Log as warning for other errors
+        console.warn("Camera access error:", err);
       }
-      
+
       setPermError(errorMessage);
     }
   };
 
   const handleStartDeviceCheck = () => {
     setStep('DEVICE_CHECK');
-    // Delay slightly to allow render
     setTimeout(initMedia, 100);
   };
+
+  // --- Gemini Live API: Audio Playback ---
+
+  const ensureAudioContext = (): AudioContext => {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+      audioContextRef.current = new AudioContext({ sampleRate: 24000 });
+    }
+    return audioContextRef.current;
+  };
+
+  const playAudioChunk = (base64Data: string) => {
+    try {
+      const ctx = ensureAudioContext();
+
+      // Decode base64 to raw bytes
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      // Convert Int16 PCM to Float32 for Web Audio API
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      // Create audio buffer
+      const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+
+      // Schedule playback to avoid gaps
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      const startTime = Math.max(now, nextPlayTimeRef.current);
+      source.start(startTime);
+      nextPlayTimeRef.current = startTime + audioBuffer.duration;
+
+      source.onended = () => {
+        // When all scheduled audio has finished, switch to LISTENING
+        if (ctx.currentTime >= nextPlayTimeRef.current - 0.05) {
+          setInterviewerState('LISTENING');
+        }
+      };
+    } catch (err) {
+      console.warn('Error playing audio chunk:', err);
+    }
+  };
+
+  // --- Gemini Live API: Microphone Streaming ---
+
+  const startMicStreaming = (session: any) => {
+    if (!streamRef.current || isStreamingMicRef.current) return;
+
+    const audioCtx = new AudioContext({ sampleRate: 16000 });
+    const source = audioCtx.createMediaStreamSource(streamRef.current);
+
+    // Use ScriptProcessorNode for broad browser compatibility
+    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+    scriptProcessorRef.current = processor;
+
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+
+    processor.onaudioprocess = (e) => {
+      if (!isStreamingMicRef.current || !session) return;
+
+      const inputData = e.inputBuffer.getChannelData(0);
+
+      // Convert Float32 to Int16 PCM
+      const int16 = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        const s = Math.max(-1, Math.min(1, inputData[i]));
+        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      // Convert to base64
+      const uint8 = new Uint8Array(int16.buffer);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i++) {
+        binary += String.fromCharCode(uint8[i]);
+      }
+      const base64 = btoa(binary);
+
+      try {
+        session.sendRealtimeInput({
+          audio: {
+            data: base64,
+            mimeType: "audio/pcm;rate=16000"
+          }
+        });
+      } catch {
+        // Session may have closed
+      }
+    };
+
+    isStreamingMicRef.current = true;
+  };
+
+  const stopMicStreaming = () => {
+    isStreamingMicRef.current = false;
+    if (scriptProcessorRef.current) {
+      try {
+        scriptProcessorRef.current.disconnect();
+      } catch {}
+      scriptProcessorRef.current = null;
+    }
+  };
+
+  // --- Gemini Live API: Session Management ---
+
+  const buildSystemPrompt = (interviewer: any): string => {
+    const style = INTERVIEWER_STYLE_MAP[interviewer.id] || INTERVIEWER_STYLE_MAP['alex'];
+    const roleTitle = workspace?.title || 'a general role';
+    const roleCompany = workspace?.company || 'the company';
+    const jd = workspace?.jd || 'No specific job description provided.';
+    const questionTypes = settings.types.map(t => {
+      const qt = QUESTION_TYPES.find(q => q.id === t);
+      return qt ? qt.label : t;
+    }).join(', ');
+
+    return `You are ${interviewer.name}, ${interviewer.title} — a ${interviewer.role}.
+Style: ${style}
+You are conducting a mock interview for the role of ${roleTitle} at ${roleCompany}.
+
+Job Description: ${jd}
+
+Instructions:
+- Start by introducing yourself briefly and asking the candidate to introduce themselves.
+- Ask one question at a time.
+- Listen to the candidate's response, then give brief feedback or a follow-up.
+- Cover these question types: ${questionTypes}
+- Ask about 10 questions total.
+- Be conversational and natural, like a real interview.
+- When you've asked all questions, thank the candidate and say "That concludes our interview today."`;
+  };
+
+  const connectGeminiLive = async (interviewer: any): Promise<boolean> => {
+    try {
+      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn('No Gemini API key found, falling back to local mode');
+        return false;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const voiceName = INTERVIEWER_VOICE_MAP[interviewer.id] || 'Puck';
+      const systemPrompt = buildSystemPrompt(interviewer);
+
+      const session = await ai.live.connect({
+        model: "gemini-2.0-flash-live-001",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: voiceName
+              }
+            }
+          },
+          systemInstruction: {
+            parts: [{ text: systemPrompt }]
+          }
+        }
+      });
+
+      geminiSessionRef.current = session;
+
+      // Handle audio responses from Gemini
+      session.on('audio', (data: any) => {
+        setInterviewerState('SPEAKING');
+        if (data && typeof data === 'string') {
+          playAudioChunk(data);
+        } else if (data?.data) {
+          playAudioChunk(data.data);
+        }
+      });
+
+      // Handle text responses (subtitles)
+      session.on('text', (text: string) => {
+        if (text) {
+          setDisplayedQuestion(text);
+          // Check for interview conclusion
+          if (text.toLowerCase().includes('that concludes our interview')) {
+            handleGeminiInterviewEnd();
+          }
+        }
+      });
+
+      // Handle turn completion
+      session.on('turnComplete', () => {
+        setInterviewerState('LISTENING');
+      });
+
+      // Handle interrupted
+      session.on('interrupted', () => {
+        // Gemini was interrupted by user speech, reset audio playback
+        nextPlayTimeRef.current = 0;
+      });
+
+      return true;
+    } catch (err) {
+      console.warn('Failed to connect Gemini Live API:', err);
+      return false;
+    }
+  };
+
+  const handleGeminiInterviewEnd = () => {
+    setIsRecording(false);
+    setIsFinishing(true);
+    stopMicStreaming();
+    if (geminiSessionRef.current) {
+      try { geminiSessionRef.current.close(); } catch {}
+      geminiSessionRef.current = null;
+    }
+    // Transition to feedback
+    setTimeout(() => {
+      setIsFinishing(false);
+      setStep('FEEDBACK');
+      if (onSaveSession && workspace) {
+        const savedQuestions = sessionResults.map((res, idx) => ({
+          id: `live-${Date.now()}-${idx}`,
+          roleId: workspace.id,
+          type: settings.types[0] || 'General',
+          question: res.question,
+          answer: res.answer,
+          chatHistory: res.chat,
+          transcription: res.answer,
+          lastModified: new Date().toISOString(),
+          savedAt: new Date().toISOString(),
+          source: 'LIVE_INTERVIEW'
+        }));
+        onSaveSession(savedQuestions);
+      }
+    }, 2000);
+  };
+
+  // --- Start Interview Handler ---
 
   const handleStartInterview = async () => {
     setStep('INTERVIEW');
     setIsRecording(true);
+    setOpeningStep(0);
+    setCurrentQuestionIndex(0);
+    setDisplayedQuestion('');
+
     setTimeout(() => {
       if (videoRef.current && streamRef.current) {
         videoRef.current.srcObject = streamRef.current;
       }
     }, 100);
 
-    // Try to connect to backend WebSocket
+    // Try Gemini Live API first
+    const geminiConnected = await connectGeminiLive(matchedInterviewer);
+
+    if (geminiConnected && geminiSessionRef.current) {
+      // Gemini Live mode: start mic streaming and let Gemini drive the conversation
+      setUseLocalMode(false);
+      setInterviewerState('SPEAKING');
+
+      // Start sending microphone audio to Gemini
+      startMicStreaming(geminiSessionRef.current);
+
+      // Gemini will automatically start speaking based on system prompt
+      // (the system prompt tells it to introduce itself first)
+      return;
+    }
+
+    // Fall back to local mode with browser TTS + optional backend WS
+    setUseLocalMode(true);
+
     try {
       const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
       const session = await createInterviewSession({
@@ -524,7 +824,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         if (msg.type === 'question') {
           setDisplayedQuestion(msg.content);
           setCurrentQuestionIndex(msg.index ?? 0);
-          speak(msg.content);
+          speakLocal(msg.content);
         } else if (msg.type === 'feedback_ready') {
           setIsRecording(false);
           setIsFinishing(true);
@@ -533,14 +833,10 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       };
 
       ws.onerror = () => {
-        setUseLocalMode(true);
-      };
-
-      ws.onclose = () => {
-        // If closed unexpectedly during interview, switch to local mode
+        // Already in local mode
       };
     } catch {
-      setUseLocalMode(true);
+      // Already in local mode, will use local questions
     }
   };
 
@@ -609,7 +905,6 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   useEffect(() => {
     if (step === 'FEEDBACK') {
       setSaveStatus('saving');
-      // Simulate auto-save
       const timer = setTimeout(() => {
         setSaveStatus('saved');
         setLastSavedTime(new Date());
@@ -630,30 +925,29 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     }, 1000);
   };
 
-  // TTS Function
-  const speak = (text: string, onEndCallback?: () => void) => {
+  // --- Local Mode: TTS Function (browser SpeechSynthesis fallback) ---
+  const speakLocal = (text: string, onEndCallback?: () => void) => {
+    if (!synthesisRef.current) return;
     if (synthesisRef.current.speaking) {
       synthesisRef.current.cancel();
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
     currentUtteranceRef.current = utterance;
-    
-    // Select voice based on gender (heuristic)
+
     const voices = synthesisRef.current.getVoices();
     const isFemale = ['emma', 'sophia'].includes(matchedInterviewer?.id || '');
-    
-    // Try to find premium/natural voices first
-    const preferredVoice = voices.find(v => 
-      v.lang.includes('en') && 
-      (isFemale 
+
+    const preferredVoice = voices.find(v =>
+      v.lang.includes('en') &&
+      (isFemale
         ? (v.name.includes('Premium') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Female'))
         : (v.name.includes('Premium') || v.name.includes('Google UK English Male') || v.name.includes('Daniel') || v.name.includes('Male'))
       )
     );
-    
+
     if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.rate = 0.95; // Slightly slower for natural feel
+    utterance.rate = 0.95;
     utterance.pitch = 1.0;
 
     utterance.onstart = () => setInterviewerState('SPEAKING');
@@ -662,7 +956,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       if (onEndCallback) {
         onEndCallback();
       } else {
-        startListening();
+        startListeningLocal();
       }
     };
 
@@ -670,8 +964,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     synthesisRef.current.speak(utterance);
   };
 
-  // ASR Function
-  const startListening = () => {
+  // --- Local Mode: ASR Function (browser SpeechRecognition fallback) ---
+  const startListeningLocal = () => {
     if (isPaused) return;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -704,20 +998,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     setIsRecording(true);
   };
 
-  const stopListening = () => {
+  const stopListeningLocal = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
     setIsRecording(false);
   };
 
-  // Handle Question Change & Opening Sequence
+  // Handle Question Change & Opening Sequence (LOCAL MODE ONLY)
   useEffect(() => {
-    if (step === 'INTERVIEW' && matchedInterviewer && activeQuestions.length > 0) {
-      if (followUpCount > 0) return; // Follow-ups are handled in handleEndQuestion
+    if (step === 'INTERVIEW' && useLocalMode && matchedInterviewer && activeQuestions.length > 0) {
+      if (followUpCount > 0) return;
 
       if (currentQuestionIndex === 0 && openingStep < 3) {
-        // Opening Sequence (local, runs regardless of WS mode)
         const openingSentences = [
           `Hi, I'm ${matchedInterviewer.name}, ${matchedInterviewer.title} at ${matchedInterviewer.company}.`,
           "Thanks for joining today.",
@@ -728,7 +1021,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         setDisplayedQuestion(textToSpeak);
 
         setTimeout(() => {
-          speak(textToSpeak, () => {
+          speakLocal(textToSpeak, () => {
             setOpeningStep(prev => prev + 1);
           });
         }, 500);
@@ -736,33 +1029,30 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       }
 
       // After opening sequence completes — check if WS is ready
-      if (!useLocalMode && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !wsStartSent) {
-        // Send start signal to backend; questions will come via ws.onmessage
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !wsStartSent) {
         setWsStartSent(true);
         wsRef.current.send(JSON.stringify({ type: 'start' }));
         return;
       }
 
-      // Local Question Mode (fallback or local mode)
-      if (useLocalMode) {
-        const question = activeQuestions[currentQuestionIndex];
-        let textToSpeak = question;
-        let textToDisplay = question;
+      // Local Question Mode (fallback)
+      const question = activeQuestions[currentQuestionIndex];
+      let textToSpeak = question;
+      let textToDisplay = question;
 
-        if (currentQuestionIndex > 0) {
-          const transitions = [
-            "That makes sense. Let's move on to another area. ",
-            "I'd like to shift gears slightly. ",
-            "Thank you for sharing that. ",
-            "Got it. Next question. "
-          ];
-          const transition = transitions[Math.floor(Math.random() * transitions.length)];
-          textToSpeak = transition + question;
-        }
-
-        setDisplayedQuestion(textToDisplay);
-        setTimeout(() => speak(textToSpeak), 500);
+      if (currentQuestionIndex > 0) {
+        const transitions = [
+          "That makes sense. Let's move on to another area. ",
+          "I'd like to shift gears slightly. ",
+          "Thank you for sharing that. ",
+          "Got it. Next question. "
+        ];
+        const transition = transitions[Math.floor(Math.random() * transitions.length)];
+        textToSpeak = transition + question;
       }
+
+      setDisplayedQuestion(textToDisplay);
+      setTimeout(() => speakLocal(textToSpeak), 500);
     }
   }, [currentQuestionIndex, step, matchedInterviewer, activeQuestions, openingStep, useLocalMode, wsStartSent]);
 
@@ -770,12 +1060,24 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const togglePause = () => {
     if (isPaused) {
       setIsPaused(false);
-      startListening();
+      if (useLocalMode) {
+        startListeningLocal();
+      } else {
+        // Gemini mode: resume mic streaming
+        if (geminiSessionRef.current) {
+          startMicStreaming(geminiSessionRef.current);
+        }
+      }
     } else {
       setIsPaused(true);
-      stopListening();
-      if (synthesisRef.current.speaking) {
-        synthesisRef.current.pause();
+      if (useLocalMode) {
+        stopListeningLocal();
+        if (synthesisRef.current?.speaking) {
+          synthesisRef.current.pause();
+        }
+      } else {
+        // Gemini mode: stop mic streaming (pauses input)
+        stopMicStreaming();
       }
     }
   };
@@ -793,16 +1095,31 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   }, [step, isPaused, interviewerState]);
 
   const handleEndQuestion = () => {
-    stopListening();
-    synthesisRef.current.cancel();
-    
+    if (useLocalMode) {
+      // Local mode: stop listening and TTS
+      stopListeningLocal();
+      if (synthesisRef.current) {
+        synthesisRef.current.cancel();
+      }
+    } else {
+      // Gemini mode: send a text message to move to next question
+      if (geminiSessionRef.current) {
+        try {
+          geminiSessionRef.current.sendClientContent({
+            turns: [{ role: 'user', parts: [{ text: 'Please move on to the next question.' }] }]
+          });
+        } catch {}
+      }
+      // Capture current state for session results
+    }
+
     const currentAnswerText = transcript;
-    
-    // Evaluate for follow-up
+
+    // Evaluate for follow-up (local mode only)
     let needsFollowUp = false;
     let followUpText = "";
 
-    if (currentAnswerText.trim().length > 0 && followUpCount < 2) {
+    if (useLocalMode && currentAnswerText.trim().length > 0 && followUpCount < 2) {
       if (currentAnswerText.length < 50) {
         needsFollowUp = true;
         followUpText = "Could you elaborate a bit more on that? I'd love to hear more details.";
@@ -812,7 +1129,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       } else if (!/\d|%|metrics|measured|impact/i.test(currentAnswerText)) {
         needsFollowUp = true;
         followUpText = "How did you measure the impact of your actions? Do you have any specific metrics or results to share?";
-      } else if (Math.random() > 0.7) { // 30% chance for a deep dive if everything else is fine
+      } else if (Math.random() > 0.7) {
         needsFollowUp = true;
         followUpText = "What were the main trade-offs you faced in that situation, and what would you do differently today?";
       }
@@ -820,13 +1137,12 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
     // Capture current Q&A data
     const currentQuestionText = displayedQuestion;
-    
-    // Construct chat history for this specific question
+
     const currentChat = [
-      { 
-        sender: 'AI', 
-        text: currentQuestionText, 
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+      {
+        sender: 'AI',
+        text: currentQuestionText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       },
       ...(currentAnswerText.trim() ? [{
         sender: 'USER',
@@ -846,45 +1162,93 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
     setTranscript('');
 
-    if (needsFollowUp) {
+    if (useLocalMode && needsFollowUp) {
       setFollowUpCount(c => c + 1);
       setDisplayedQuestion(followUpText);
-      setTimeout(() => speak(followUpText), 500);
-      return; // Do not advance main question index
+      setTimeout(() => speakLocal(followUpText), 500);
+      return;
     }
 
     // If no follow-up, advance to next main question
     setFollowUpCount(0);
 
-    if (currentQuestionIndex < activeQuestions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    if (useLocalMode) {
+      if (currentQuestionIndex < activeQuestions.length - 1) {
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+      } else {
+        // End of Interview (local mode)
+        setIsFinishing(true);
+        setIsRecording(false);
+
+        const closingText = "Thank you. That concludes our interview. We appreciate your time today.";
+        setDisplayedQuestion(closingText);
+        speakLocal(closingText, () => {
+          setStep('FEEDBACK');
+          setIsFinishing(false);
+          if (onSaveSession && workspace) {
+            const savedQuestions = updatedResults.map((res, idx) => ({
+              id: `live-${Date.now()}-${idx}`,
+              roleId: workspace.id,
+              type: settings.types[0] || 'General',
+              question: res.question,
+              answer: res.answer,
+              chatHistory: res.chat,
+              transcription: res.answer,
+              lastModified: new Date().toISOString(),
+              savedAt: new Date().toISOString(),
+              source: 'LIVE_INTERVIEW'
+            }));
+            onSaveSession(savedQuestions);
+          }
+        });
+      }
     } else {
-      // End of Interview
-      setIsFinishing(true);
-      setIsRecording(false);
-      
-      const closingText = "Thank you. That concludes our interview. We appreciate your time today.";
-      setDisplayedQuestion(closingText);
-      speak(closingText, () => {
-        setStep('FEEDBACK');
-        setIsFinishing(false);
-        // Save to Global State
-        if (onSaveSession && workspace) {
-          const savedQuestions = updatedResults.map((res, idx) => ({
-            id: `live-${Date.now()}-${idx}`,
-            roleId: workspace.id,
-            type: settings.types[0] || 'General',
-            question: res.question,
-            answer: res.answer,
-            chatHistory: res.chat,
-            transcription: res.answer,
-            lastModified: new Date().toISOString(),
-            savedAt: new Date().toISOString(),
-            source: 'LIVE_INTERVIEW'
-          }));
-          onSaveSession(savedQuestions);
-        }
-      });
+      // Gemini mode: increment question counter for UI display
+      // Gemini handles the actual conversation flow
+      setCurrentQuestionIndex(prev => Math.min(prev + 1, activeQuestions.length - 1));
+    }
+  };
+
+  // Handle ending the interview (for both modes)
+  const handleExitInterview = () => {
+    setShowExitConfirm(false);
+
+    if (useLocalMode) {
+      stopListeningLocal();
+      if (synthesisRef.current) {
+        synthesisRef.current.cancel();
+      }
+    } else {
+      // Gemini mode: close session
+      stopMicStreaming();
+      if (geminiSessionRef.current) {
+        try { geminiSessionRef.current.close(); } catch {}
+        geminiSessionRef.current = null;
+      }
+    }
+
+    setStep('SETTINGS');
+    setTimer(0);
+    setSessionResults([]);
+    setIsRecording(false);
+    setMatchedInterviewer(null);
+    setIsFinishing(false);
+  };
+
+  // Handle finishing the interview via the Finish button (Gemini mode)
+  const handleFinishInterviewGemini = () => {
+    if (!useLocalMode && geminiSessionRef.current) {
+      // Tell Gemini to conclude
+      try {
+        geminiSessionRef.current.sendClientContent({
+          turns: [{ role: 'user', parts: [{ text: 'Please wrap up and conclude the interview now.' }] }]
+        });
+      } catch {}
+
+      // Give Gemini a moment to respond, then end
+      setTimeout(() => {
+        handleGeminiInterviewEnd();
+      }, 5000);
     }
   };
 
@@ -895,7 +1259,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     return (
       <div className="h-full flex flex-col animate-in fade-in duration-500">
         <div className="max-w-5xl mx-auto w-full p-6">
-          
+
           {/* Header & Guidance Text */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-[#1F1F1F] mb-2">Live Interview Prep</h2>
@@ -912,7 +1276,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                 <span className="text-[10px] text-[#0B57D0] font-bold uppercase tracking-wider bg-[#E8F0FE] px-2 py-0.5 rounded">Required</span>
               </div>
               <div className="relative flex-1 flex flex-col justify-center">
-                <button 
+                <button
                   onClick={() => setShowRoleSelector(!showRoleSelector)}
                   className="w-full flex items-center justify-between p-3.5 bg-[#F0F4F9] border border-[#E3E3E3] rounded-xl text-sm font-medium text-[#1F1F1F] hover:border-[#0B57D0] transition-all"
                 >
@@ -924,7 +1288,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                   </div>
                   <ChevronDown className={`w-4 h-4 text-[#444746] flex-shrink-0 transition-transform ${showRoleSelector ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {showRoleSelector && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#E3E3E3] rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="max-h-[240px] overflow-y-auto">
@@ -949,10 +1313,9 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                         ))
                       )}
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         onSelectRole(null);
-                        // In a real app, this would navigate to the roles page
                       }}
                       className="w-full p-3 border-t border-[#E3E3E3] bg-[#FAFAFA] text-[#0B57D0] text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#F0F4F9] transition-colors"
                     >
@@ -971,13 +1334,13 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {QUESTION_TYPES.map(type => (
-                  <div 
+                  <div
                     key={type.id}
                     className={`flex items-center gap-3 p-3 rounded-xl border transition-all h-full ${settings.types.includes(type.id) ? 'bg-[#F0F4F9] border-[#0B57D0]' : 'bg-white border-[#E3E3E3] hover:border-[#C4C7C5]'}`}
                   >
                     <button
                       onClick={() => {
-                        const newTypes = settings.types.includes(type.id) 
+                        const newTypes = settings.types.includes(type.id)
                           ? settings.types.filter(t => t !== type.id)
                           : [...settings.types, type.id];
                         setSettings({ ...settings, types: newTypes });
@@ -992,7 +1355,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                         <p className="text-[11px] text-[#444746] truncate">{type.description.split(',')[0]}</p>
                       </div>
                     </button>
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowInfo(showInfo === type.id ? null : type.id);
@@ -1009,7 +1372,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
           {/* Action Button */}
           <div className="flex flex-col items-center pt-8">
-            <button 
+            <button
               onClick={() => {
                 if (isValid) {
                   setMatchedInterviewer(null); // Force re-match
@@ -1019,8 +1382,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
               disabled={!isValid}
               className={`
                 w-full max-w-[280px] py-3.5 rounded-full font-bold text-base flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-[0.98]
-                ${isValid 
-                  ? 'bg-[#0B57D0] text-white hover:bg-[#0B67EF]' 
+                ${isValid
+                  ? 'bg-[#0B57D0] text-white hover:bg-[#0B67EF]'
                   : 'bg-[#E3E3E3] text-[#444746] cursor-not-allowed opacity-50'
                 }
               `}
@@ -1057,7 +1420,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                   </p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowInfo(null)}
                 className="w-full mt-8 py-3 bg-[#1F1F1F] text-white rounded-full font-bold text-sm hover:bg-[#444746] transition-colors"
               >
@@ -1076,8 +1439,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       const type = QUESTION_TYPES.find(qt => qt.id === t);
       return type ? type.label.toLowerCase().replace(' & ', ' and ') : '';
     }).filter(Boolean);
-    
-    const focusText = typeLabels.length > 1 
+
+    const focusText = typeLabels.length > 1
       ? typeLabels.slice(0, -1).join(', ') + ' and ' + typeLabels.slice(-1)
       : typeLabels[0];
 
@@ -1091,8 +1454,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                  <span className="text-[10px] font-bold text-[#444746] uppercase tracking-widest mb-1">Interviewer</span>
                  <div className="w-px h-2 bg-[#E3E3E3]"></div>
               </div>
-              <img 
-                src={matchedInterviewer.avatar} 
+              <img
+                src={matchedInterviewer.avatar}
                 alt={matchedInterviewer.name}
                 className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg relative z-0"
               />
@@ -1112,19 +1475,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                 {matchedInterviewer.intro}
               </p>
               <p className="text-lg text-[#444746] leading-relaxed">
-                We’ll spend time discussing {focusText} questions. I’m interested in understanding how you think, structure problems, and communicate trade-offs.
+                We'll spend time discussing {focusText} questions. I'm interested in understanding how you think, structure problems, and communicate trade-offs.
               </p>
             </div>
 
             <div className="flex items-center gap-4">
-              <button 
+              <button
                 onClick={() => setStep('SETTINGS')}
                 className="flex-1 py-4 border border-[#E3E3E3] text-[#444746] rounded-full font-bold hover:bg-[#F0F4F9] transition-all flex items-center justify-center gap-2"
               >
                 <ChevronLeft className="w-5 h-5" />
                 Back
               </button>
-              <button 
+              <button
                 onClick={() => {
                   setStep('DEVICE_CHECK');
                   setTimeout(initMedia, 100);
@@ -1194,9 +1557,9 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                        </div>
                     </div>
                  </div>
-                 
+
                  <div className="mt-auto space-y-3">
-                    <button 
+                    <button
                        onClick={handleStartInterview}
                        className="w-full py-4 bg-[#0B57D0] text-white rounded-full font-bold shadow-lg hover:bg-[#0B67EF] transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                     >
@@ -1218,11 +1581,11 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     return (
       <div className="relative h-full w-full bg-[#111] rounded-[24px] overflow-hidden animate-in fade-in duration-500 flex flex-col">
         {/* Main Video (Candidate) */}
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          muted 
-          className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" 
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"
         />
 
         {/* Top Center: Recording Status & User Mic */}
@@ -1230,34 +1593,29 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
           <div className="flex items-center gap-3 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-sm transition-all duration-300">
             {/* Recording Dot: Always red if recording and not paused */}
             <div className={`w-2 h-2 rounded-full ${isRecording && !isPaused ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-white/50'}`} />
-            
+
             <div className="flex items-center gap-[3px] h-4">
               {[...Array(16)].map((_, i) => {
-                // Create a more natural waveform effect
-                // Center bars are taller, edges are shorter
-                const centerDist = Math.abs(i - 7.5) / 7.5; // 0 at center, 1 at edges
-                const baseHeight = 20 * (1 - centerDist * 0.5); // Base height curve
-                
-                // Dynamic height calculation
+                const centerDist = Math.abs(i - 7.5) / 7.5;
+                const baseHeight = 20 * (1 - centerDist * 0.5);
+
                 let height = baseHeight;
                 if (isRecording && !isPaused && audioLevel > 5) {
-                   // Amplify movement when talking
                    const noise = Math.random() * 0.5 + 0.5;
-                   const signal = (audioLevel / 100) * 2.5; // Amplify signal
+                   const signal = (audioLevel / 100) * 2.5;
                    height = Math.min(100, Math.max(10, baseHeight + (signal * 80 * noise)));
                 } else {
-                   // Idle breathing
                    height = Math.max(10, baseHeight + Math.sin(Date.now() / 200 + i) * 5);
                 }
 
                 return (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className="w-[3px] bg-[#2EBB63] rounded-full transition-all duration-75 ease-out"
-                    style={{ 
+                    style={{
                       height: `${height}%`,
                       opacity: isRecording && !isPaused ? 0.9 : 0.4
-                    }} 
+                    }}
                   />
                 );
               })}
@@ -1268,8 +1626,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         {/* Top Right: Interviewer PiP & Status */}
         <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-3">
           <div className="relative w-48 sm:w-64 aspect-video bg-[#1F1F1F] rounded-lg overflow-hidden shadow-lg">
-            <img 
-              src={matchedInterviewer?.avatar} 
+            <img
+              src={matchedInterviewer?.avatar}
               alt={matchedInterviewer?.name}
               className="w-full h-full object-cover"
             />
@@ -1296,7 +1654,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         </div>
 
         {/* Center/Bottom Overlay: Current Question / Subtitle */}
-        <div 
+        <div
           className="absolute bottom-28 left-0 right-0 z-20 flex flex-col items-center"
           style={{
             transform: `translate(${subtitlePos.x}px, ${subtitlePos.y}px)`,
@@ -1316,7 +1674,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         {/* Bottom Control Bar */}
         <div className="absolute bottom-6 left-0 right-0 px-6 flex justify-center z-30">
            <div className="flex flex-wrap items-center justify-center gap-4 bg-black/50 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-full shadow-2xl">
-              
+
               {/* Progress & Timer */}
               <div className="flex flex-col items-center px-4 border-r border-white/10">
                 <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Question {currentQuestionIndex + 1} of {activeQuestions.length}</span>
@@ -1325,11 +1683,11 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
               {/* Controls */}
               <div className="flex items-center gap-3 px-2">
-                <button 
+                <button
                   onClick={togglePause}
                   className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm transition-all ${
-                    isPaused 
-                      ? 'bg-white text-red-600 hover:bg-gray-200' 
+                    isPaused
+                      ? 'bg-white text-red-600 hover:bg-gray-200'
                       : 'bg-red-500 text-white hover:bg-red-600'
                   }`}
                 >
@@ -1337,8 +1695,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                   {isPaused ? 'Resume' : 'Pause'}
                 </button>
 
-                <button 
-                  onClick={handleEndQuestion}
+                <button
+                  onClick={() => {
+                    if (currentQuestionIndex === activeQuestions.length - 1) {
+                      // Finish interview
+                      if (!useLocalMode) {
+                        handleFinishInterviewGemini();
+                      } else {
+                        handleEndQuestion();
+                      }
+                    } else {
+                      handleEndQuestion();
+                    }
+                  }}
                   className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#1F1F1F] rounded-full font-bold text-sm hover:bg-gray-200 transition-all"
                 >
                   {currentQuestionIndex === activeQuestions.length - 1 ? (
@@ -1350,7 +1719,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
                 <div className="w-px h-6 bg-white/20 mx-1"></div>
 
-                <button 
+                <button
                   onClick={() => setShowExitConfirm(true)}
                   className="flex items-center gap-2 px-4 py-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full font-medium text-sm transition-all"
                 >
@@ -1373,26 +1742,14 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                 Are you sure you want to leave?
               </p>
               <div className="flex items-center justify-end gap-3">
-                <button 
+                <button
                   onClick={() => setShowExitConfirm(false)}
                   className="px-5 py-2.5 text-[#444746] font-bold hover:bg-[#F0F4F9] rounded-full transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  onClick={() => {
-                    setShowExitConfirm(false);
-                    stopListening();
-                    synthesisRef.current.cancel();
-                    
-                    // Reset to initial state (SETTINGS) instead of Dashboard
-                    setStep('SETTINGS');
-                    setTimer(0);
-                    setSessionResults([]);
-                    setIsRecording(false);
-                    setMatchedInterviewer(null);
-                    setIsFinishing(false);
-                  }}
+                <button
+                  onClick={handleExitInterview}
                   className="px-5 py-2.5 bg-[#B3261E] text-white font-bold rounded-full hover:bg-[#8C1D18] transition-colors shadow-sm"
                 >
                   Confirm Exit
@@ -1416,7 +1773,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
       return {
         rating,
-        feedback: rating === 'Strong' 
+        feedback: rating === 'Strong'
           ? "Excellent answer with clear structure and impactful examples. You demonstrated a deep understanding of the core concepts."
           : rating === 'Pass'
           ? "Good answer overall, but could benefit from more specific examples to back up your claims."
@@ -1432,23 +1789,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
           'Example quality': rating === 'Strong' ? 95 : rating === 'Pass' ? 60 : 30,
           Impact: rating === 'Strong' ? 88 : rating === 'Pass' ? 75 : 50,
         },
-        duration: Math.floor(Math.random() * 60) + 30, // Mock duration 30-90s
+        duration: Math.floor(Math.random() * 60) + 30,
       };
     };
 
     const handleSaveNote = (index: number) => {
-      // In a real app, this would save to the backend
-      // Here we just update the UI state to show it's saved
       setSavedNotes(prev => ({ ...prev, [index]: true }));
-      
-      // Update session results with the note
+
       const updatedResults = [...sessionResults];
       if (updatedResults[index]) {
         updatedResults[index] = { ...updatedResults[index], chat: [...(updatedResults[index].chat || []), { sender: 'USER', text: questionNotes[index] }] };
         setSessionResults(updatedResults);
       }
 
-      // Hide "Saved" message after 2 seconds
       setTimeout(() => {
         setSavedNotes(prev => {
           const newState = { ...prev };
@@ -1459,8 +1812,6 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     };
 
     const handleSaveAndExit = () => {
-      // In a real app, this would save the full report to the backend
-      // For now, we just reset to the start of the interview flow
       setStep('SETTINGS');
       setTimer(0);
       setSessionResults([]);
@@ -1472,16 +1823,16 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     return (
       <div className="h-full overflow-y-auto bg-[#F0F4F9] p-4 md:p-8 animate-in fade-in duration-500">
         <div className="max-w-4xl mx-auto space-y-6 pb-12">
-          
+
           {/* Top Actions */}
           <div className="flex items-center justify-between">
-            <button 
+            <button
               onClick={handleSaveAndExit}
               className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-full text-sm font-bold hover:bg-[#F8F9FA] transition-colors shadow-sm"
             >
               <RefreshCw className="w-4 h-4" /> Practice Again
             </button>
-            <button 
+            <button
               onClick={handleSaveAndExit}
               className="flex items-center gap-2 px-5 py-2.5 bg-[#0B57D0] text-white rounded-full text-sm font-bold hover:bg-[#0B67EF] transition-colors shadow-sm"
             >
@@ -1491,13 +1842,13 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
           {/* Single White Container for Report */}
           <div className="bg-white rounded-[24px] border border-[#E3E3E3] shadow-sm overflow-hidden">
-            
+
             {/* Section 1: Interview Report Header */}
             <div className="p-8 border-b border-[#E3E3E3]">
               {/* Row 1: Title & Rating */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <h1 className="text-3xl font-bold text-[#1F1F1F]">Interview Report</h1>
-                
+
                 <div className="flex items-center gap-3 bg-[#F8F9FA] px-4 py-2 rounded-xl border border-[#E3E3E3]">
                   <span className="text-sm font-bold text-[#444746]">Overall Rating</span>
                   <div className="flex gap-1">
@@ -1561,11 +1912,11 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                 <Sparkles className="w-5 h-5 text-[#0B57D0]" />
                 <h2 className="text-xl font-bold text-[#1F1F1F]">Overall Evaluation</h2>
               </div>
-              
+
               <p className="text-[#444746] leading-relaxed mb-8 text-base">
                 Strong communication and clear structure in behavioral answers. However, technical explanations need clearer metrics and more specific examples to back up product decisions. You demonstrated good empathy but could improve on data-driven storytelling.
               </p>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1F1F1F] mb-4">
@@ -1582,7 +1933,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                     </li>
                   </ul>
                 </div>
-                
+
                 <div>
                   <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1F1F1F] mb-4">
                     <AlertCircle className="w-4 h-4 text-[#E74C3C]" /> Areas to Improve
@@ -1617,7 +1968,6 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                   const note = questionNotes[idx] || '';
                   const isNoteExpanded = expandedNotes[idx];
 
-                  // Determine color based on rating
                   const ratingColor = evalData.rating === 'Strong' ? 'bg-[#2ECC71]' : evalData.rating === 'Pass' ? 'bg-[#F1C40F]' : 'bg-[#E74C3C]';
                   const ratingText = evalData.rating === 'Strong' ? 'text-[#2ECC71]' : evalData.rating === 'Pass' ? 'text-[#F1C40F]' : 'text-[#E74C3C]';
 
@@ -1625,7 +1975,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                     <div key={idx} className="relative pl-6 border-l-2 border-[#E3E3E3] hover:border-[#0B57D0] transition-colors group">
                       {/* Question Number Bubble */}
                       <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-[#E3E3E3] group-hover:border-[#0B57D0] transition-colors"></div>
-                      
+
                       {/* Question */}
                       <div className="mb-4">
                         <span className="text-xs font-bold text-[#0B57D0] uppercase tracking-wider mb-1 block">Question {idx + 1}</span>
@@ -1645,9 +1995,9 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                           <div className={`w-2 h-2 rounded-full ${ratingColor}`}></div>
                           <span className={`text-xs font-bold ${ratingText}`}>{evalData.rating}</span>
                         </div>
-                        
+
                         {!isNoteExpanded && !note ? (
-                          <button 
+                          <button
                             onClick={() => setExpandedNotes(prev => ({ ...prev, [idx]: true }))}
                             className="text-xs font-bold text-[#444746] hover:text-[#0B57D0] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
@@ -1671,7 +2021,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
                                 <Check className="w-3 h-3" /> Saved
                               </span>
                             ) : (
-                              <button 
+                              <button
                                 onClick={() => handleSaveNote(idx)}
                                 className="px-3 py-1.5 bg-[#0B57D0] text-white text-xs font-bold rounded-lg hover:bg-[#0B67EF] transition-colors"
                               >

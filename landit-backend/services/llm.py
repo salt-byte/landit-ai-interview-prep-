@@ -1,18 +1,38 @@
 """
-LLM service — all Claude API calls go through here.
+LLM service — all Gemini API calls go through here.
 Keeps API logic in one place, easy to swap models.
 """
 import json
 import re
-from anthropic import AsyncAnthropic
+from google import genai
 from config import settings, DIMENSIONS, DIMENSION_LABELS
 
-client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-MODEL = "claude-sonnet-4-6"
+client = genai.Client(api_key=settings.gemini_api_key)
+MODEL = "gemini-2.0-flash"
+
+
+async def _generate(prompt: str, max_tokens: int = 4096, system: str = "") -> str:
+    """Unified async wrapper for Gemini generateContent."""
+    config = {"max_output_tokens": max_tokens}
+    if system:
+        config["system_instruction"] = system
+
+    response = await client.aio.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config=config,
+    )
+    return response.text.strip()
+
+
+def _parse_json(raw: str) -> dict | list:
+    """Strip markdown fences and parse JSON."""
+    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
+    return json.loads(raw)
 
 
 async def extract_profile_from_resume(resume_text: str) -> dict:
-    """Layer 2: Parse raw resume text → structured profile fields."""
+    """Layer 2: Parse raw resume text -> structured profile fields."""
     prompt = f"""Extract structured information from this resume. Return ONLY valid JSON with this exact schema:
 {{
   "fullName": "string",
@@ -46,7 +66,7 @@ async def extract_profile_from_resume(resume_text: str) -> dict:
       "jobTitle": "string",
       "startDate": "string",
       "endDate": "string",
-      "description": "string (bullet points, each line starting with •)"
+      "description": "string (bullet points, each line starting with bullet)"
     }}
   ],
   "projects": [
@@ -63,22 +83,12 @@ async def extract_profile_from_resume(resume_text: str) -> dict:
 Resume:
 {resume_text}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
-    # Strip markdown code fences if present
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    raw = await _generate(prompt, max_tokens=4096)
+    return _parse_json(raw)
 
 
 async def extract_dimension_scores(profile_text: str) -> dict:
-    """
-    Layer 3: Map user experience → 15 dimension scores (1-5) + evidence.
-    Uses rubric-constrained prompt for stability.
-    """
+    """Layer 3: Map user experience -> 15 dimension scores (1-5) + evidence."""
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
     prompt = f"""You are an expert career assessor. Score the candidate on 15 competency dimensions based on their background.
 
@@ -107,21 +117,12 @@ Return ONLY valid JSON:
 Candidate profile:
 {profile_text}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    raw = await _generate(prompt, max_tokens=2048)
+    return _parse_json(raw)
 
 
 async def extract_jd_dimension_model(jd_text: str, role_title: str, company: str) -> dict:
-    """
-    Layer 3: Map JD → 15 dimension required scores + weights.
-    Backend normalizes Σ(weights)=1 after.
-    """
+    """Layer 3: Map JD -> 15 dimension required scores + weights."""
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
     prompt = f"""You are an expert talent assessor. Analyze this job description and map it to 15 competency dimensions.
 
@@ -148,14 +149,8 @@ All 15 dimensions must be present. Set weight=0 for irrelevant dimensions.
 Job Description:
 {jd_text}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    raw = await _generate(prompt, max_tokens=1024)
+    return _parse_json(raw)
 
 
 async def generate_interview_prep(
@@ -173,7 +168,7 @@ async def generate_interview_prep(
     answer_instruction = (
         "Include detailed answer frameworks using STAR method where applicable, key points, and pitfalls to avoid."
         if include_answers
-        else "List questions only — no answers."
+        else "List questions only - no answers."
     )
 
     prompt = f"""You are an expert interview coach preparing a candidate for: {role_title} at {company}.
@@ -197,12 +192,7 @@ Format in clean Markdown with:
 Job Description context:
 {jd[:1500]}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    return await _generate(prompt, max_tokens=4096)
 
 
 async def refine_prep_with_chat(
@@ -224,12 +214,7 @@ User request: {user_message}
 Apply the requested changes and return the COMPLETE updated document in Markdown format.
 Keep existing good content, only modify what was requested."""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
+    return await _generate(prompt, max_tokens=4096)
 
 
 async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
@@ -246,14 +231,8 @@ URL: {url}
 Content:
 {page_content[:4000]}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    raw = await _generate(prompt, max_tokens=2048)
+    return _parse_json(raw)
 
 
 async def generate_session_feedback(
@@ -285,14 +264,8 @@ Provide structured feedback. Return ONLY valid JSON:
   }}
 }}"""
 
-    msg = await client.messages.create(
-        model=MODEL,
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    raw = await _generate(prompt, max_tokens=1024)
+    return _parse_json(raw)
 
 
 async def get_next_interview_question(
@@ -301,10 +274,14 @@ async def get_next_interview_question(
     interviewer_id: str,
 ) -> str:
     """Generate next interview question from the AI interviewer (WebSocket use)."""
-    msg = await client.messages.create(
-        model=MODEL,
+    # Build a single prompt from system + conversation history
+    history_text = "\n".join(
+        f"{'Interviewer' if m['role'] == 'assistant' else 'Candidate'}: {m['content']}"
+        for m in conversation_history
+    )
+
+    return await _generate(
+        prompt=history_text,
         max_tokens=512,
         system=system_prompt,
-        messages=conversation_history,
     )
-    return msg.content[0].text.strip()
