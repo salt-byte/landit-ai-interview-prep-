@@ -8,30 +8,28 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    # In a real app, this would link to an auth User table
     user_key: Mapped[str] = mapped_column(String(64), unique=True, index=True, default="default")
 
-    name: Mapped[str] = mapped_column(String(128), default="")
-    headline: Mapped[str] = mapped_column(String(256), default="")
-    bio: Mapped[str] = mapped_column(Text, default="")
-    avatar_url: Mapped[str] = mapped_column(String(512), default="")
-
-    target_roles: Mapped[str] = mapped_column(String(256), default="")
+    full_name: Mapped[str] = mapped_column(String(128), default="")
+    profile_photo: Mapped[str] = mapped_column(String(512), default="")
+    target_role: Mapped[str] = mapped_column(String(256), default="")
+    employment_type: Mapped[str] = mapped_column(String(64), default="")
+    email: Mapped[str] = mapped_column(String(256), default="")
+    phone_number: Mapped[str] = mapped_column(String(64), default="")
     location: Mapped[str] = mapped_column(String(128), default="")
-    education_level: Mapped[str] = mapped_column(String(64), default="")
-    years_of_experience: Mapped[str] = mapped_column(String(32), default="")
-    interests: Mapped[str] = mapped_column(Text, default="")
+    personal_website: Mapped[str] = mapped_column(String(512), default="")
+    linkedin_profile: Mapped[str] = mapped_column(String(512), default="")
 
-    # Skills stored as simple strings (comma-separated)
+    # Skills
     skills_technical: Mapped[str] = mapped_column(Text, default="")
-    skills_product: Mapped[str] = mapped_column(Text, default="")
-    skills_communication: Mapped[str] = mapped_column(Text, default="")
+    skills_tools_and_technologies: Mapped[str] = mapped_column(Text, default="")
+    skills_soft: Mapped[str] = mapped_column(Text, default="")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     education: Mapped[list["Education"]] = relationship("Education", back_populates="profile", cascade="all, delete-orphan")
-    experience: Mapped[list["Experience"]] = relationship("Experience", back_populates="profile", cascade="all, delete-orphan")
+    work_experience: Mapped[list["WorkExperience"]] = relationship("WorkExperience", back_populates="profile", cascade="all, delete-orphan")
     projects: Mapped[list["Project"]] = relationship("Project", back_populates="profile", cascade="all, delete-orphan")
     documents: Mapped[list["Document"]] = relationship("Document", back_populates="profile", cascade="all, delete-orphan")
 
@@ -41,30 +39,32 @@ class Education(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_profiles.id"))
-    school: Mapped[str] = mapped_column(String(256), default="")
+    institution_name: Mapped[str] = mapped_column(String(256), default="")
     degree: Mapped[str] = mapped_column(String(64), default="")
-    major: Mapped[str] = mapped_column(String(128), default="")
-    year: Mapped[str] = mapped_column(String(32), default="")
-    key_coursework: Mapped[str] = mapped_column(Text, default="")
-    academic_focus: Mapped[str] = mapped_column(Text, default="")
+    field_of_study: Mapped[str] = mapped_column(String(128), default="")
+    start_date: Mapped[str] = mapped_column(String(32), default="")
+    end_date: Mapped[str] = mapped_column(String(32), default="")
+    gpa: Mapped[str] = mapped_column(String(16), default="")
+    relevant_coursework: Mapped[str] = mapped_column(Text, default="")
+    additional_details: Mapped[str] = mapped_column(Text, default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     profile: Mapped["UserProfile"] = relationship("UserProfile", back_populates="education")
 
 
-class Experience(Base):
-    __tablename__ = "experiences"
+class WorkExperience(Base):
+    __tablename__ = "work_experiences"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_profiles.id"))
-    company: Mapped[str] = mapped_column(String(256), default="")
-    role: Mapped[str] = mapped_column(String(128), default="")
-    type: Mapped[str] = mapped_column(String(64), default="Full-time")
-    duration: Mapped[str] = mapped_column(String(64), default="")
-    responsibilities: Mapped[str] = mapped_column(Text, default="")
+    company_name: Mapped[str] = mapped_column(String(256), default="")
+    job_title: Mapped[str] = mapped_column(String(128), default="")
+    start_date: Mapped[str] = mapped_column(String(32), default="")
+    end_date: Mapped[str] = mapped_column(String(32), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    profile: Mapped["UserProfile"] = relationship("UserProfile", back_populates="experience")
+    profile: Mapped["UserProfile"] = relationship("UserProfile", back_populates="work_experience")
 
 
 class Project(Base):
@@ -72,12 +72,11 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_profiles.id"))
-    name: Mapped[str] = mapped_column(String(256), default="")
-    context: Mapped[str] = mapped_column(Text, default="")
-    role: Mapped[str] = mapped_column(String(128), default="")
-    tools: Mapped[str] = mapped_column(String(256), default="")
-    outcome: Mapped[str] = mapped_column(Text, default="")
-    learnings: Mapped[str] = mapped_column(Text, default="")
+    project_name: Mapped[str] = mapped_column(String(256), default="")
+    project_description: Mapped[str] = mapped_column(Text, default="")
+    start_date: Mapped[str] = mapped_column(String(32), default="")
+    end_date: Mapped[str] = mapped_column(String(32), default="")
+    project_link: Mapped[str] = mapped_column(String(512), default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     profile: Mapped["UserProfile"] = relationship("UserProfile", back_populates="projects")
@@ -89,7 +88,7 @@ class Document(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_profiles.id"))
     name: Mapped[str] = mapped_column(String(256))
-    type: Mapped[str] = mapped_column(String(64), default="Notes")  # Resume/Portfolio/Work Sample/Notes
+    type: Mapped[str] = mapped_column(String(64), default="Notes")
     file_path: Mapped[str] = mapped_column(String(512), default="")
     file_size: Mapped[int] = mapped_column(Integer, default=0)
     mime_type: Mapped[str] = mapped_column(String(128), default="")

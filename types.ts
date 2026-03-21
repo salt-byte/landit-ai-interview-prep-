@@ -6,11 +6,9 @@ export interface UploadedFile {
   date: string;
 }
 
-export interface RoleSource {
-  id: string;
-  name: string;
-  type: string;
-  date: string;
+export interface InterviewQuestion {
+  text: string;
+  notes?: string;
 }
 
 export interface TargetRole {
@@ -20,11 +18,29 @@ export interface TargetRole {
   jd: string;
   teamInfo: string;
   // New Context Fields
+  location?: string;
+  employmentType?: string;
+  keyResponsibilities?: string;
+  qualifications?: string;
+  companyOverview?: string;
+  teamOverview?: string;
+  additionalInfo?: string;
+  interviewQuestionsList?: InterviewQuestion[];
+  generalNotes?: string;
+  preparationNotes?: string;
+  insights?: string;
+
+  // Legacy fields for backward compatibility
   interviewQuestions?: string[];
   companyBackground?: string;
   teamBackground?: string;
   additionalNotes?: string;
-  sources?: RoleSource[];
+}
+
+export interface NavigationSource {
+  type: 'QUESTION_BANK' | 'DIRECT';
+  roleId?: string;
+  roleTitle?: string;
 }
 
 export type AppView = 
@@ -49,7 +65,7 @@ export interface SavedQuestion {
   answer?: string;
   lastModified: string; // ISO date string
   savedAt: string; // ISO date string
-  source?: 'MOCK_PREP' | 'LIVE_INTERVIEW';
+  source?: 'MOCK_PREP';
   // Restoration Fields
   chatHistory?: { sender: 'USER' | 'AI'; text: string; quote?: string }[];
   transcription?: string;
@@ -93,56 +109,55 @@ export interface InterviewFeedback {
 
 export interface Education {
   id: string;
-  school: string;
+  institutionName: string;
   degree: string;
-  major: string;
-  year: string;
-  keyCoursework: string;
-  academicFocus?: string;
+  fieldOfStudy: string;
+  startDate: string;
+  endDate: string;
+  gpa: string;
+  relevantCoursework: string;
+  additionalDetails: string;
 }
 
-export interface Experience {
+export interface WorkExperience {
   id: string;
-  company: string;
-  role: string;
-  type: string; // e.g. 'Internship', 'Full-time'
-  duration: string;
-  responsibilities: string; // Bullet points as a block of text
+  companyName: string;
+  jobTitle: string;
+  startDate: string;
+  endDate: string;
+  description: string;
 }
 
 export interface Project {
   id: string;
-  name: string;
-  context: string;
-  role: string;
-  tools: string;
-  outcome: string;
-  learnings?: string;
+  projectName: string;
+  projectDescription: string;
+  startDate: string;
+  endDate: string;
+  projectLink: string;
 }
 
 export interface UserSkills {
-  technical: string;
-  product: string;
-  communication: string;
+  technicalSkills: string;
+  toolsAndTechnologies: string;
+  softSkills: string;
 }
 
 export interface UserProfile {
-  // Header
-  name: string;
-  headline: string;
-  bio: string;
-  avatar: string;
-  
-  // Basic Info
-  targetRoles: string;
+  // Personal
+  fullName: string;
+  profilePhoto: string;
+  targetRole: string;
+  employmentType: string;
+  email: string;
+  phoneNumber: string;
   location: string;
-  educationLevel: string;
-  yearsOfExperience: string;
+  personalWebsite: string;
+  linkedInProfile: string;
 
   // Sections
   education: Education[];
-  experience: Experience[];
+  workExperience: WorkExperience[];
   projects: Project[];
   skills: UserSkills;
-  interests: string;
 }

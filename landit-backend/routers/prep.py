@@ -18,7 +18,6 @@ USER_KEY = "default"
 
 
 async def get_gap_summary_for_role(db: AsyncSession, role_id: int) -> str:
-    """Helper: compute gap summary for a role."""
     dim_result = await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )
@@ -43,10 +42,6 @@ async def generate_prep(
     data: PrepGenerateRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Layer 5: Generate interview prep content via LLM.
-    Uses gap matrix + user profile as context.
-    """
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
@@ -54,8 +49,7 @@ async def generate_prep(
 
     gap_summary = await get_gap_summary_for_role(db, role_id)
 
-    # Build profile summary
-    from models.user import UserProfile, Education, Experience
+    from models.user import UserProfile, WorkExperience
     profile_result = await db.execute(
         select(UserProfile).where(UserProfile.user_key == USER_KEY)
     )
@@ -63,21 +57,20 @@ async def generate_prep(
 
     if profile:
         exp_result = await db.execute(
-            select(Experience).where(Experience.profile_id == profile.id)
+            select(WorkExperience).where(WorkExperience.profile_id == profile.id)
         )
         exps = exp_result.scalars().all()
         profile_dict = {
-            "name": profile.name,
-            "headline": profile.headline,
-            "years_of_experience": profile.years_of_experience,
-            "experience": [
-                {"company": e.company, "role": e.role, "duration": e.duration, "responsibilities": e.responsibilities}
+            "name": profile.full_name,
+            "target_role": profile.target_role,
+            "work_experience": [
+                {"company": e.company_name, "role": e.job_title, "start_date": e.start_date, "end_date": e.end_date, "description": e.description}
                 for e in exps
             ],
             "skills": {
                 "technical": profile.skills_technical,
-                "product": profile.skills_product,
-                "communication": profile.skills_communication,
+                "tools": profile.skills_tools_and_technologies,
+                "soft": profile.skills_soft,
             },
         }
         profile_summary = build_profile_summary(profile_dict)
@@ -94,7 +87,6 @@ async def generate_prep(
         categories=data.categories,
     )
 
-    # Save to role
     role.prep_content = content
     role.prep_version += 1
     role.is_prep_user_edited = False
@@ -106,7 +98,6 @@ async def generate_prep(
 
 @router.get("/{role_id}")
 async def get_prep(role_id: int, db: AsyncSession = Depends(get_db)):
-    """Get saved prep content for a role."""
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
@@ -120,7 +111,6 @@ async def get_prep(role_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{role_id}")
 async def save_prep(role_id: int, data: dict, db: AsyncSession = Depends(get_db)):
-    """Save user-edited prep content (version chain: v2 User Edited)."""
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
@@ -139,7 +129,6 @@ async def chat_refine(
     data: PrepChatRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """AI chat to refine prep content — returns updated full content."""
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:

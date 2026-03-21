@@ -5,78 +5,81 @@ from typing import Optional
 
 class EducationSchema(BaseModel):
     id: Optional[str] = None
-    school: str = ""
+    institution_name: str = Field("", alias="institutionName")
     degree: str = ""
-    major: str = ""
-    year: str = ""
-    key_coursework: str = Field("", alias="keyCoursework")
-    academic_focus: Optional[str] = Field("", alias="academicFocus")
+    field_of_study: str = Field("", alias="fieldOfStudy")
+    start_date: str = Field("", alias="startDate")
+    end_date: str = Field("", alias="endDate")
+    gpa: str = ""
+    relevant_coursework: str = Field("", alias="relevantCoursework")
+    additional_details: str = Field("", alias="additionalDetails")
 
     model_config = {"populate_by_name": True}
 
 
-class ExperienceSchema(BaseModel):
+class WorkExperienceSchema(BaseModel):
     id: Optional[str] = None
-    company: str = ""
-    role: str = ""
-    type: str = "Full-time"
-    duration: str = ""
-    responsibilities: str = ""
+    company_name: str = Field("", alias="companyName")
+    job_title: str = Field("", alias="jobTitle")
+    start_date: str = Field("", alias="startDate")
+    end_date: str = Field("", alias="endDate")
+    description: str = ""
 
     model_config = {"populate_by_name": True}
 
 
 class ProjectSchema(BaseModel):
     id: Optional[str] = None
-    name: str = ""
-    context: str = ""
-    role: str = ""
-    tools: str = ""
-    outcome: str = ""
-    learnings: Optional[str] = ""
+    project_name: str = Field("", alias="projectName")
+    project_description: str = Field("", alias="projectDescription")
+    start_date: str = Field("", alias="startDate")
+    end_date: str = Field("", alias="endDate")
+    project_link: str = Field("", alias="projectLink")
 
     model_config = {"populate_by_name": True}
 
 
 class UserSkillsSchema(BaseModel):
-    technical: str = ""
-    product: str = ""
-    communication: str = ""
+    technical_skills: str = Field("", alias="technicalSkills")
+    tools_and_technologies: str = Field("", alias="toolsAndTechnologies")
+    soft_skills: str = Field("", alias="softSkills")
+
+    model_config = {"populate_by_name": True}
 
 
 class UserProfileUpdate(BaseModel):
-    name: str = ""
-    headline: str = ""
-    bio: str = ""
-    avatar: Optional[str] = ""
-    target_roles: str = Field("", alias="targetRoles")
+    full_name: str = Field("", alias="fullName")
+    profile_photo: str = Field("", alias="profilePhoto")
+    target_role: str = Field("", alias="targetRole")
+    employment_type: str = Field("", alias="employmentType")
+    email: str = ""
+    phone_number: str = Field("", alias="phoneNumber")
     location: str = ""
-    education_level: str = Field("", alias="educationLevel")
-    years_of_experience: str = Field("", alias="yearsOfExperience")
+    personal_website: str = Field("", alias="personalWebsite")
+    linkedin_profile: str = Field("", alias="linkedInProfile")
     education: list[EducationSchema] = []
-    experience: list[ExperienceSchema] = []
+    work_experience: list[WorkExperienceSchema] = Field([], alias="workExperience")
     projects: list[ProjectSchema] = []
     skills: UserSkillsSchema = UserSkillsSchema()
-    interests: str = ""
 
     model_config = {"populate_by_name": True}
 
 
 class UserProfileResponse(BaseModel):
     id: int
-    name: str
-    headline: str
-    bio: str
-    avatar: str
-    targetRoles: str
-    location: str
-    educationLevel: str
-    yearsOfExperience: str
-    education: list[EducationSchema]
-    experience: list[ExperienceSchema]
-    projects: list[ProjectSchema]
-    skills: UserSkillsSchema
-    interests: str
+    fullName: str = ""
+    profilePhoto: str = ""
+    targetRole: str = ""
+    employmentType: str = ""
+    email: str = ""
+    phoneNumber: str = ""
+    location: str = ""
+    personalWebsite: str = ""
+    linkedInProfile: str = ""
+    education: list[EducationSchema] = []
+    workExperience: list[WorkExperienceSchema] = []
+    projects: list[ProjectSchema] = []
+    skills: UserSkillsSchema = UserSkillsSchema()
     completion_percentage: int = 0
 
     model_config = {"from_attributes": True}

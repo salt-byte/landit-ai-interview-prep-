@@ -25,17 +25,11 @@ USER_KEY = "default"
 
 
 def get_user_scores_from_db(uds_list) -> dict[str, float]:
-    """Convert UserDimensionScore records to simple dict."""
     return {u.dimension: u.score for u in uds_list}
 
 
 @router.get("/gap-matrix/{role_id}")
 async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
-    """
-    Compute and return gap matrix for a given role.
-    Also creates a GapSnapshot record for traceability.
-    """
-    # Load role dimension model
     dim_model_result = await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )
@@ -43,17 +37,14 @@ async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
     if not dim_model:
         raise HTTPException(404, "Run /roles/{id}/analyze-jd first to generate dimension model")
 
-    # Load user dimension scores
     uds_result = await db.execute(
         select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
     )
     uds_list = uds_result.scalars().all()
     user_scores = get_user_scores_from_db(uds_list)
 
-    # Compute
     match_score, gaps = compute_match_score(user_scores, dim_model.dimensions)
 
-    # Save snapshot
     snapshot = GapSnapshot(
         role_id=role_id,
         user_key=USER_KEY,
@@ -74,7 +65,6 @@ async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/user-dimensions")
 async def get_user_dimensions(db: AsyncSession = Depends(get_db)):
-    """Get current aggregated user dimension scores (from Long-term Memory)."""
     result = await db.execute(
         select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
     )
@@ -96,11 +86,7 @@ async def get_user_dimensions(db: AsyncSession = Depends(get_db)):
 
 @router.post("/extract-user-dimensions")
 async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
-    """
-    Layer 2-3: Extract dimension scores from user profile via LLM.
-    Requires profile to be populated.
-    """
-    from models.user import UserProfile, Education, Experience, Project
+    from models.user import UserProfile, Education, WorkExperience, Project
     from services.llm import extract_dimension_scores
     from services.computation import build_profile_summary
 
@@ -112,29 +98,27 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Profile not found")
 
     edu = (await db.execute(select(Education).where(Education.profile_id == profile.id))).scalars().all()
-    exp = (await db.execute(select(Experience).where(Experience.profile_id == profile.id))).scalars().all()
+    exp = (await db.execute(select(WorkExperience).where(WorkExperience.profile_id == profile.id))).scalars().all()
     proj = (await db.execute(select(Project).where(Project.profile_id == profile.id))).scalars().all()
 
     profile_dict = {
-        "name": profile.name,
-        "headline": profile.headline,
-        "years_of_experience": profile.years_of_experience,
-        "education": [{"school": e.school, "degree": e.degree, "major": e.major} for e in edu],
-        "experience": [
-            {"company": e.company, "role": e.role, "duration": e.duration, "responsibilities": e.responsibilities}
+        "name": profile.full_name,
+        "target_role": profile.target_role,
+        "education": [{"school": e.institution_name, "degree": e.degree, "field": e.field_of_study} for e in edu],
+        "work_experience": [
+            {"company": e.company_name, "role": e.job_title, "start_date": e.start_date, "end_date": e.end_date, "description": e.description}
             for e in exp
         ],
         "skills": {
             "technical": profile.skills_technical,
-            "product": profile.skills_product,
-            "communication": profile.skills_communication,
+            "tools": profile.skills_tools_and_technologies,
+            "soft": profile.skills_soft,
         },
     }
 
     profile_text = build_profile_summary(profile_dict)
     raw_scores = await extract_dimension_scores(profile_text)
 
-    # Upsert dimension scores
     for dim in DIMENSIONS:
         dim_data = raw_scores.get(dim, {})
         score = float(dim_data.get("score", 0.0))
@@ -149,7 +133,6 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
         )
         uds = result.scalar_one_or_none()
         if uds:
-            # Only update if not user-confirmed
             if uds.confidence != "confirmed":
                 uds.score = score
                 uds.confidence = confidence
@@ -171,7 +154,6 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
 
 @router.get("/weakness-vector")
 async def get_weakness_vector(db: AsyncSession = Depends(get_db)):
-    """Long-term Memory: Get weakness vector for this user."""
     wv = await get_or_create_weakness_vector(db, USER_KEY)
     return {
         "vector": wv.vector,
@@ -183,7 +165,6 @@ async def get_weakness_vector(db: AsyncSession = Depends(get_db)):
 
 @router.get("/ability-curve")
 async def get_ability_curve(db: AsyncSession = Depends(get_db)):
-    """Long-term Memory: Get ability curve (score history across sessions)."""
     result = await db.execute(
         select(InterviewFeedback, InterviewSession.started_at)
         .join(InterviewSession)

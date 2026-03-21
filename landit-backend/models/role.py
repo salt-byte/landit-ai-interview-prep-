@@ -14,14 +14,28 @@ class TargetRole(Base):
     company: Mapped[str] = mapped_column(String(256))
     jd: Mapped[str] = mapped_column(Text, default="")
     team_info: Mapped[str] = mapped_column(String(256), default="")
+
+    # New v3 context fields
+    location: Mapped[str] = mapped_column(String(256), default="")
+    employment_type: Mapped[str] = mapped_column(String(64), default="")
+    key_responsibilities: Mapped[str] = mapped_column(Text, default="")
+    qualifications: Mapped[str] = mapped_column(Text, default="")
+    company_overview: Mapped[str] = mapped_column(Text, default="")
+    team_overview: Mapped[str] = mapped_column(Text, default="")
+    additional_info: Mapped[str] = mapped_column(Text, default="")
+    # Structured interview questions: [{text, notes?}]
+    interview_questions_list: Mapped[list] = mapped_column(JSON, default=list)
+    general_notes: Mapped[str] = mapped_column(Text, default="")
+    preparation_notes: Mapped[str] = mapped_column(Text, default="")
+    insights: Mapped[str] = mapped_column(Text, default="")
+
+    # Legacy fields (backward compatibility)
     company_background: Mapped[str] = mapped_column(Text, default="")
     team_background: Mapped[str] = mapped_column(Text, default="")
     additional_notes: Mapped[str] = mapped_column(Text, default="")
-
-    # Interview questions stored as JSON array
     interview_questions: Mapped[list] = mapped_column(JSON, default=list)
 
-    # Generated content - stored after AI generation
+    # Generated content
     prep_content: Mapped[str] = mapped_column(Text, default="")
     prep_version: Mapped[int] = mapped_column(Integer, default=0)
     is_prep_user_edited: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -41,7 +55,7 @@ class RoleSource(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("target_roles.id"))
     name: Mapped[str] = mapped_column(String(512))
-    type: Mapped[str] = mapped_column(String(64))  # Link / PDF Document / etc.
+    type: Mapped[str] = mapped_column(String(64))
     file_path: Mapped[str] = mapped_column(String(512), default="")
     extracted_content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -50,20 +64,13 @@ class RoleSource(Base):
 
 
 class RoleDimensionModel(Base):
-    """
-    Required dimension scores + weights for a target role (JD → 15 dims).
-    Σ(weights) normalized to 1.0 on write.
-    """
     __tablename__ = "role_dimension_models"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("target_roles.id"), unique=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     is_user_edited: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    # Stored as JSON: {dim_key: {required_score: float, weight: float}}
     dimensions: Mapped[dict] = mapped_column(JSON, default=dict)
-
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

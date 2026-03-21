@@ -1,298 +1,278 @@
-import type {
-    UserProfile,
-    UploadedFile,
-    TargetRole,
-    RoleSource,
-    InterviewFeedback,
-    SavedQuestion,
-    InterviewSession,
-} from './types';
+/**
+ * API client for LandIt backend.
+ * Base URL is configured via VITE_API_URL environment variable.
+ */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
-        ...options,
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`API ${options?.method ?? 'GET'} ${path} failed (${res.status}): ${text}`);
-    }
-    return res.json() as Promise<T>;
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const url = `${API_BASE}${path}`;
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  // Don't set Content-Type for FormData (browser sets it with boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+
+  return res.json();
 }
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
+// ─── Profile ────────────────────────────────────────────────────────────────
 
-export async function getProfile(): Promise<UserProfile & { completion_percentage: number }> {
-    return request('/api/profile');
+export async function getProfile() {
+  return request<any>('/api/profile');
 }
 
-export async function updateProfile(
-    data: Omit<UserProfile, 'id'>
-): Promise<UserProfile & { completion_percentage: number }> {
-    return request('/api/profile', {
-        method: 'PUT',
-        body: JSON.stringify(data),
-    });
+export async function updateProfile(data: any) {
+  return request<any>('/api/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function getDocuments(): Promise<UploadedFile[]> {
-    return request('/api/profile/documents');
+export async function getDocuments() {
+  return request<any[]>('/api/profile/documents');
 }
 
-export async function uploadAndParseDocument(
-    file: File
-): Promise<{ extracted: Partial<UserProfile>; document_id: number; document: UploadedFile }> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`${BASE_URL}/api/profile/documents/upload-and-parse`, {
-        method: 'POST',
-        body: form,
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Upload failed (${res.status}): ${text}`);
-    }
-    return res.json();
+export async function uploadDocument(file: File, typeOverride?: string) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (typeOverride) formData.append('type_override', typeOverride);
+
+  return request<any>('/api/profile/documents/upload', {
+    method: 'POST',
+    body: formData,
+  });
 }
 
-export async function uploadDocument(
-    file: File
-): Promise<UploadedFile & { detected_type: string }> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`${BASE_URL}/api/profile/documents/upload`, {
-        method: 'POST',
-        body: form,
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Upload failed (${res.status}): ${text}`);
-    }
-    return res.json();
+export async function uploadAndParseDocument(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request<any>('/api/profile/documents/upload-and-parse', {
+    method: 'POST',
+    body: formData,
+  });
 }
 
-export async function deleteDocument(docId: string): Promise<void> {
-    await request(`/api/profile/documents/${docId}`, { method: 'DELETE' });
+export async function deleteDocument(docId: string) {
+  return request<any>(`/api/profile/documents/${docId}`, {
+    method: 'DELETE',
+  });
 }
 
-// ─── Roles ────────────────────────────────────────────────────────────────────
+// ─── Roles ──────────────────────────────────────────────────────────────────
 
-export async function getRoles(): Promise<TargetRole[]> {
-    return request('/api/roles');
+export async function getRoles() {
+  return request<any[]>('/api/roles');
 }
 
-export async function createRole(
-    data: Omit<TargetRole, 'id'>
-): Promise<TargetRole> {
-    return request('/api/roles', {
-        method: 'POST',
-        body: JSON.stringify(data),
-    });
+export async function createRole(data: any) {
+  return request<any>('/api/roles', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function updateRole(
-    id: string,
-    data: Omit<TargetRole, 'id'>
-): Promise<TargetRole> {
-    return request(`/api/roles/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-    });
+export async function getRole(roleId: string) {
+  return request<any>(`/api/roles/${roleId}`);
 }
 
-export async function deleteRole(id: string): Promise<void> {
-    await request(`/api/roles/${id}`, { method: 'DELETE' });
+export async function updateRole(roleId: string, data: any) {
+  return request<any>(`/api/roles/${roleId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function parseLink(
-    url: string
-): Promise<{ title: string; company: string; jd: string; teamInfo: string }> {
-    const raw = await request<{ title: string; company: string; jd: string; team_info?: string; teamInfo?: string }>('/api/roles/parse-link', {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-    });
-    return {
-        title: raw.title || '',
-        company: raw.company || '',
-        jd: raw.jd || '',
-        teamInfo: raw.teamInfo || raw.team_info || '',
-    };
+export async function deleteRole(roleId: string) {
+  return request<any>(`/api/roles/${roleId}`, {
+    method: 'DELETE',
+  });
 }
 
-export async function uploadRoleSource(
-    roleId: string,
-    file: File
-): Promise<RoleSource> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`${BASE_URL}/api/roles/${roleId}/sources/upload`, {
-        method: 'POST',
-        body: form,
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Upload failed (${res.status}): ${text}`);
-    }
-    return res.json();
+export async function parseLink(url: string) {
+  return request<any>('/api/roles/parse-link', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
 }
 
-export async function addRoleLinkSource(
-    roleId: string,
-    url: string
-): Promise<RoleSource> {
-    return request(`/api/roles/${roleId}/sources/add-link`, {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-    });
+export async function uploadRoleSource(roleId: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request<any>(`/api/roles/${roleId}/sources/upload`, {
+    method: 'POST',
+    body: formData,
+  });
 }
 
-export async function deleteRoleSource(roleId: string, sourceId: string): Promise<void> {
-    await request(`/api/roles/${roleId}/sources/${sourceId}`, { method: 'DELETE' });
+export async function addLinkSource(roleId: string, url: string) {
+  return request<any>(`/api/roles/${roleId}/sources/add-link`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
 }
 
-export async function analyzeJD(roleId: string): Promise<unknown> {
-    return request(`/api/roles/${roleId}/analyze-jd`, { method: 'POST' });
+export async function deleteRoleSource(roleId: string, sourceId: string) {
+  return request<any>(`/api/roles/${roleId}/sources/${sourceId}`, {
+    method: 'DELETE',
+  });
 }
 
-// ─── Interview Prep ───────────────────────────────────────────────────────────
-
-export async function generatePrep(
-    roleId: string,
-    data: { mode?: string; categories?: string[] } = {}
-): Promise<{ content: string; version: number }> {
-    return request(`/api/prep/${roleId}/generate`, {
-        method: 'POST',
-        body: JSON.stringify({ mode: 'QA', ...data }),
-    });
+export async function analyzeJD(roleId: string) {
+  return request<any>(`/api/roles/${roleId}/analyze-jd`, {
+    method: 'POST',
+  });
 }
 
-export async function getPrep(
-    roleId: string
-): Promise<{ content: string; version: number; is_user_edited: boolean } | null> {
-    try {
-        return await request(`/api/prep/${roleId}`);
-    } catch {
-        return null;
-    }
+export async function getDimensionModel(roleId: string) {
+  return request<any>(`/api/roles/${roleId}/dimension-model`);
 }
 
-export async function updatePrep(
-    roleId: string,
-    content: string
-): Promise<{ ok: boolean; version: number }> {
-    return request(`/api/prep/${roleId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ content }),
-    });
+export async function updateDimensionModel(roleId: string, dimensions: any) {
+  return request<any>(`/api/roles/${roleId}/dimension-model`, {
+    method: 'PUT',
+    body: JSON.stringify({ dimensions }),
+  });
 }
 
-export async function chatPrep(
-    roleId: string,
-    message: string,
-    currentContent: string
-): Promise<{ content: string; ai_message: string }> {
-    return request(`/api/prep/${roleId}/chat`, {
-        method: 'POST',
-        body: JSON.stringify({ message, current_content: currentContent }),
-    });
+// ─── Interview Prep ─────────────────────────────────────────────────────────
+
+export async function generatePrep(roleId: string, mode = 'QA', categories?: string[]) {
+  return request<any>(`/api/prep/${roleId}/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ mode, categories }),
+  });
 }
 
-// ─── Mock Interview ───────────────────────────────────────────────────────────
-
-export async function createInterviewSession(data: {
-    role_id?: number;
-    interviewer_id?: string;
-    transcript_consent?: boolean;
-}): Promise<{ id: number; status: string }> {
-    return request('/api/interview/sessions', {
-        method: 'POST',
-        body: JSON.stringify({
-            interviewer_id: 'alex',
-            transcript_consent: true,
-            ...data,
-        }),
-    });
+export async function getPrep(roleId: string) {
+  return request<any>(`/api/prep/${roleId}`);
 }
 
-export async function listInterviewSessions(): Promise<InterviewSession[]> {
-    return request('/api/interview/sessions');
+export async function updatePrep(roleId: string, content: string) {
+  return request<any>(`/api/prep/${roleId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
 }
 
-export async function getInterviewSessionDetail(sessionId: number): Promise<InterviewSession> {
-    return request(`/api/interview/sessions/${sessionId}/detail`);
+export async function chatPrep(roleId: string, message: string, currentContent: string) {
+  return request<any>(`/api/prep/${roleId}/chat`, {
+    method: 'POST',
+    body: JSON.stringify({ message, current_content: currentContent }),
+  });
 }
 
-export async function getInterviewFeedback(
-    sessionId: number
-): Promise<InterviewFeedback> {
-    const raw = await request<{
-        session_id: number;
-        overall_score: number;
-        strengths: string[];
-        improvements: string[];
-        recommended_actions: string[];
-        transcript: string;
-        dimension_scores: Record<string, number>;
-    }>(`/api/interview/sessions/${sessionId}/feedback`);
+// ─── Mock Interview ─────────────────────────────────────────────────────────
 
-    return {
-        score: raw.overall_score,
-        strengths: raw.strengths,
-        improvements: raw.improvements,
-        transcript: raw.transcript,
-    };
+export async function createInterviewSession(roleId?: string, interviewerId = 'alex') {
+  return request<any>('/api/interview/sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      role_id: roleId ? parseInt(roleId) : null,
+      interviewer_id: interviewerId,
+    }),
+  });
 }
 
-export function createInterviewWS(sessionId: number): WebSocket {
-    const wsBase = BASE_URL.replace(/^http/, 'ws');
-    return new WebSocket(`${wsBase}/api/interview/sessions/${sessionId}/stream`);
+export async function listInterviewSessions() {
+  return request<any[]>('/api/interview/sessions');
 }
 
-// ─── Question Bank ────────────────────────────────────────────────────────────
-
-export async function getSavedQuestions(
-    roleId?: string,
-    questionType?: string
-): Promise<SavedQuestion[]> {
-    const params = new URLSearchParams();
-    if (roleId) params.set('role_id', roleId);
-    if (questionType) params.set('question_type', questionType);
-    const qs = params.toString();
-    return request(`/api/interview/questions${qs ? `?${qs}` : ''}`);
+export async function getSessionDetail(sessionId: string) {
+  return request<any>(`/api/interview/sessions/${sessionId}/detail`);
 }
 
-export async function saveQuestion(
-    data: Omit<SavedQuestion, 'id' | 'lastModified' | 'savedAt'>
-): Promise<SavedQuestion> {
-    return request('/api/interview/questions', {
-        method: 'POST',
-        body: JSON.stringify(data),
-    });
+export async function getInterviewFeedback(sessionId: string) {
+  return request<any>(`/api/interview/sessions/${sessionId}/feedback`);
+}
+
+export function createInterviewWS(sessionId: string): WebSocket {
+  const wsBase = API_BASE.replace(/^http/, 'ws');
+  return new WebSocket(`${wsBase}/api/interview/sessions/${sessionId}/stream`);
+}
+
+// ─── Question Bank ──────────────────────────────────────────────────────────
+
+export async function getSavedQuestions(roleId?: string, questionType?: string) {
+  const params = new URLSearchParams();
+  if (roleId) params.append('role_id', roleId);
+  if (questionType) params.append('question_type', questionType);
+  const qs = params.toString();
+  return request<any[]>(`/api/interview/questions${qs ? `?${qs}` : ''}`);
+}
+
+export async function saveQuestion(data: {
+  roleId: string;
+  type: string;
+  question: string;
+  answer?: string;
+  source?: string;
+  chatHistory?: any[];
+  transcription?: string;
+}) {
+  return request<any>('/api/interview/questions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function updateSavedQuestion(
-    id: string,
-    data: { answer?: string; chatHistory?: any[]; transcription?: string }
-): Promise<SavedQuestion> {
-    return request(`/api/interview/questions/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-    });
+  questionId: string,
+  data: { answer?: string; chatHistory?: any[]; transcription?: string },
+) {
+  return request<any>(`/api/interview/questions/${questionId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function deleteSavedQuestion(id: string): Promise<void> {
-    await request(`/api/interview/questions/${id}`, { method: 'DELETE' });
+export async function deleteSavedQuestion(questionId: string) {
+  return request<any>(`/api/interview/questions/${questionId}`, {
+    method: 'DELETE',
+  });
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
+// ─── Dashboard ──────────────────────────────────────────────────────────────
 
-export async function getDashboardStats(): Promise<{
-    live_interviews: number;
-    mock_questions: number;
-    profile_completion: number;
-    roles_count: number;
-}> {
-    return request('/api/dashboard/stats');
+export async function getDashboardStats() {
+  return request<any>('/api/dashboard/stats');
+}
+
+// ─── Compute ────────────────────────────────────────────────────────────────
+
+export async function getGapMatrix(roleId: string) {
+  return request<any>(`/api/compute/gap-matrix/${roleId}`);
+}
+
+export async function getUserDimensions() {
+  return request<any>('/api/compute/user-dimensions');
+}
+
+export async function extractUserDimensions() {
+  return request<any>('/api/compute/extract-user-dimensions', {
+    method: 'POST',
+  });
+}
+
+export async function getWeaknessVector() {
+  return request<any>('/api/compute/weakness-vector');
+}
+
+export async function getAbilityCurve() {
+  return request<any>('/api/compute/ability-curve');
 }

@@ -141,30 +141,43 @@ def build_gap_summary(gaps: list[dict], top_n: int = 5) -> str:
 def build_profile_summary(profile_data: dict) -> str:
     """Build a concise text summary of user profile for LLM prompts."""
     parts = []
-    if profile_data.get("name"):
-        parts.append(f"Name: {profile_data['name']}")
-    if profile_data.get("headline"):
-        parts.append(f"Title: {profile_data['headline']}")
-    if profile_data.get("years_of_experience"):
-        parts.append(f"Experience: {profile_data['years_of_experience']}")
+    name = profile_data.get("name") or profile_data.get("full_name", "")
+    if name:
+        parts.append(f"Name: {name}")
+    target_role = profile_data.get("target_role", "")
+    if target_role:
+        parts.append(f"Target Role: {target_role}")
 
-    exp = profile_data.get("experience", [])
+    exp = profile_data.get("work_experience") or profile_data.get("experience", [])
     if exp:
-        parts.append("Experience:")
+        parts.append("Work Experience:")
         for e in exp[:3]:
-            parts.append(f"  - {e.get('role', '')} at {e.get('company', '')} ({e.get('duration', '')})")
-            if e.get("responsibilities"):
-                parts.append(f"    {e['responsibilities'][:200]}")
+            role = e.get("role") or e.get("job_title", "")
+            company = e.get("company") or e.get("company_name", "")
+            duration = e.get("duration", "")
+            if not duration:
+                start = e.get("start_date", "")
+                end = e.get("end_date", "")
+                if start or end:
+                    duration = f"{start} - {end}"
+            parts.append(f"  - {role} at {company} ({duration})")
+            desc = e.get("responsibilities") or e.get("description", "")
+            if desc:
+                parts.append(f"    {desc[:200]}")
 
     edu = profile_data.get("education", [])
     if edu:
         e = edu[0]
-        parts.append(f"Education: {e.get('degree', '')} in {e.get('major', '')} from {e.get('school', '')}")
+        school = e.get("school") or e.get("institution_name", "")
+        field = e.get("major") or e.get("field") or e.get("field_of_study", "")
+        parts.append(f"Education: {e.get('degree', '')} in {field} from {school}")
 
     skills = profile_data.get("skills", {})
     if skills.get("technical"):
         parts.append(f"Technical skills: {skills['technical']}")
-    if skills.get("product"):
-        parts.append(f"Product skills: {skills['product']}")
+    if skills.get("tools"):
+        parts.append(f"Tools & Technologies: {skills['tools']}")
+    if skills.get("soft"):
+        parts.append(f"Soft skills: {skills['soft']}")
 
     return "\n".join(parts)

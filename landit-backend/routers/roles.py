@@ -25,6 +25,19 @@ def role_to_dict(role: TargetRole, sources=None) -> dict:
         "company": role.company,
         "jd": role.jd,
         "teamInfo": role.team_info,
+        # New v3 fields
+        "location": role.location,
+        "employmentType": role.employment_type,
+        "keyResponsibilities": role.key_responsibilities,
+        "qualifications": role.qualifications,
+        "companyOverview": role.company_overview,
+        "teamOverview": role.team_overview,
+        "additionalInfo": role.additional_info,
+        "interviewQuestionsList": role.interview_questions_list or [],
+        "generalNotes": role.general_notes,
+        "preparationNotes": role.preparation_notes,
+        "insights": role.insights,
+        # Legacy
         "companyBackground": role.company_background,
         "teamBackground": role.team_background,
         "additionalNotes": role.additional_notes,
@@ -60,6 +73,17 @@ async def create_role(data: TargetRoleCreate, db: AsyncSession = Depends(get_db)
         company=data.company,
         jd=data.jd,
         team_info=data.team_info,
+        location=data.location,
+        employment_type=data.employment_type,
+        key_responsibilities=data.key_responsibilities,
+        qualifications=data.qualifications,
+        company_overview=data.company_overview,
+        team_overview=data.team_overview,
+        additional_info=data.additional_info,
+        interview_questions_list=data.interview_questions_list if data.interview_questions_list else [],
+        general_notes=data.general_notes,
+        preparation_notes=data.preparation_notes,
+        insights=data.insights,
         company_background=data.company_background,
         team_background=data.team_background,
         additional_notes=data.additional_notes,
@@ -92,6 +116,17 @@ async def update_role(role_id: int, data: TargetRoleUpdate, db: AsyncSession = D
     role.company = data.company
     role.jd = data.jd
     role.team_info = data.team_info
+    role.location = data.location
+    role.employment_type = data.employment_type
+    role.key_responsibilities = data.key_responsibilities
+    role.qualifications = data.qualifications
+    role.company_overview = data.company_overview
+    role.team_overview = data.team_overview
+    role.additional_info = data.additional_info
+    role.interview_questions_list = data.interview_questions_list if data.interview_questions_list else []
+    role.general_notes = data.general_notes
+    role.preparation_notes = data.preparation_notes
+    role.insights = data.insights
     role.company_background = data.company_background
     role.team_background = data.team_background
     role.additional_notes = data.additional_notes
@@ -117,7 +152,6 @@ async def delete_role(role_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/parse-link")
 async def parse_link(data: ParseLinkRequest):
-    """AI-parse a job posting URL and return structured fields."""
     result = await extract_jd_from_url(data.url)
     return result
 
@@ -160,7 +194,6 @@ async def add_link_source(
     data: ParseLinkRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Add a URL as a source and extract content via AI."""
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
@@ -176,9 +209,8 @@ async def add_link_source(
     )
     db.add(source)
 
-    # Optionally enrich role with extracted data
     if extracted.get("company_background"):
-        role.company_background = (role.company_background or "") + f"\n\n[AI Extracted from {data.url}]:\n{extracted.get('jd', '')[:500]}"
+        role.company_overview = (role.company_overview or "") + f"\n\n[AI Extracted from {data.url}]:\n{extracted.get('jd', '')[:500]}"
         role.updated_at = datetime.utcnow()
 
     await db.commit()
@@ -208,10 +240,6 @@ async def delete_role_source(role_id: int, source_id: int, db: AsyncSession = De
 
 @router.post("/{role_id}/analyze-jd")
 async def analyze_jd(role_id: int, db: AsyncSession = Depends(get_db)):
-    """
-    Layer 3: Run LLM on JD → extract RoleDimensionModel.
-    Requires role to have a JD. Returns the dimension model.
-    """
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
@@ -222,13 +250,12 @@ async def analyze_jd(role_id: int, db: AsyncSession = Depends(get_db)):
     raw_dims = await extract_jd_dimension_model(role.jd, role.title, role.company)
     normalized = normalize_weights(raw_dims)
 
-    # Upsert RoleDimensionModel
     existing = (await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )).scalar_one_or_none()
 
     if existing:
-        if not existing.is_user_edited:  # don't overwrite user edits
+        if not existing.is_user_edited:
             existing.dimensions = normalized
             existing.version += 1
             existing.updated_at = datetime.utcnow()
@@ -269,7 +296,6 @@ async def get_dimension_model(role_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{role_id}/dimension-model")
 async def update_dimension_model(role_id: int, data: dict, db: AsyncSession = Depends(get_db)):
-    """Human checkpoint — user can edit dimension model, treated as ground truth."""
     result = await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )
