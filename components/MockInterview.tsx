@@ -677,79 +677,84 @@ Instructions:
     try {
       const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn('[LandIt] No VITE_GEMINI_API_KEY found, falling back to local mode');
+        console.warn('[LandIt] No VITE_GEMINI_API_KEY found');
         return false;
       }
 
       const ai = new GoogleGenAI({ apiKey });
       const voiceName = INTERVIEWER_VOICE_MAP[interviewer.id] || 'Puck';
       const systemPrompt = buildSystemPrompt(interviewer);
+      let accumulatedText = '';
+
+      console.log('[LandIt] Connecting to Gemini Live with voice:', voiceName);
 
       const session = await ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-latest",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: voiceName
-              }
+              prebuiltVoiceConfig: { voiceName }
             }
           },
           systemInstruction: {
             parts: [{ text: systemPrompt }]
-          }
-        }
+          },
+          outputAudioTranscription: {},
+        },
+        callbacks: {
+          onopen: () => {
+            console.log('[LandIt] Gemini Live session opened');
+          },
+          onmessage: (message: any) => {
+            // Handle audio output
+            if (message.serverContent?.modelTurn?.parts) {
+              for (const part of message.serverContent.modelTurn.parts) {
+                if (part.inlineData?.data) {
+                  setInterviewerState('SPEAKING');
+                  playAudioChunk(part.inlineData.data);
+                }
+              }
+            }
+
+            // Handle output transcription (subtitles)
+            if (message.serverContent?.outputTranscription?.text) {
+              const text = message.serverContent.outputTranscription.text;
+              accumulatedText += ' ' + text;
+              setDisplayedQuestion(text);
+
+              // Check for interview conclusion
+              const lower = accumulatedText.toLowerCase();
+              if (lower.includes('concludes our interview') ||
+                  lower.includes('conclude our interview') ||
+                  lower.includes('end of our interview') ||
+                  lower.includes('that concludes')) {
+                accumulatedText = '';
+                setTimeout(() => handleGeminiInterviewEnd(), 2000);
+              }
+            }
+
+            // Handle turn completion
+            if (message.serverContent?.turnComplete) {
+              setInterviewerState('LISTENING');
+            }
+
+            // Handle interruption
+            if (message.serverContent?.interrupted) {
+              nextPlayTimeRef.current = 0;
+            }
+          },
+          onerror: (e: any) => {
+            console.error('[LandIt] Gemini Live error:', e);
+          },
+          onclose: (e: any) => {
+            console.log('[LandIt] Gemini Live session closed:', e?.reason || '');
+          },
+        },
       });
 
       geminiSessionRef.current = session;
-
-      // Handle audio responses from Gemini
-      session.on('audio', (data: any) => {
-        setInterviewerState('SPEAKING');
-        if (data && typeof data === 'string') {
-          playAudioChunk(data);
-        } else if (data?.data) {
-          playAudioChunk(data.data);
-        }
-      });
-
-      // Handle text responses (subtitles) — accumulate for end detection
-      let accumulatedText = '';
-      session.on('text', (text: string) => {
-        if (text) {
-          accumulatedText += ' ' + text;
-          setDisplayedQuestion(prev => {
-            // If text seems like a new sentence, replace; otherwise append
-            if (text.length > 30 || text.endsWith('.') || text.endsWith('?')) {
-              return text;
-            }
-            return prev ? prev + ' ' + text : text;
-          });
-          // Check accumulated text for conclusion phrases
-          const lower = accumulatedText.toLowerCase();
-          if (lower.includes('concludes our interview') ||
-              lower.includes('conclude our interview') ||
-              lower.includes('end of our interview') ||
-              lower.includes('wrapping up') ||
-              lower.includes('that concludes')) {
-            accumulatedText = '';
-            setTimeout(() => handleGeminiInterviewEnd(), 2000);
-          }
-        }
-      });
-
-      // Handle turn completion
-      session.on('turnComplete', () => {
-        setInterviewerState('LISTENING');
-      });
-
-      // Handle interrupted
-      session.on('interrupted', () => {
-        // Gemini was interrupted by user speech, reset audio playback
-        nextPlayTimeRef.current = 0;
-      });
-
+      console.log('[LandIt] Gemini Live connected successfully');
       return true;
     } catch (err) {
       console.error('[LandIt] Gemini Live connection failed:', err);
