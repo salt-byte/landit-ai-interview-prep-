@@ -22,7 +22,7 @@ import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion, NavigationSource } from './types';
-import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion } from './api';
+import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole } from './api';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
@@ -164,9 +164,12 @@ const App: React.FC = () => {
     setAuthMode('USER');
   };
 
-  // Load roles and saved questions from backend when USER logs in
+  // Load all data from Supabase when USER logs in
   useEffect(() => {
     if (authMode === 'USER') {
+      getProfile().then((p: any) => {
+        if (p && p.fullName) setUserProfile(p);
+      }).catch(console.error);
       getRoles().then(setRoles).catch(console.error);
       getSavedQuestions().then(setSavedQuestions).catch(console.error);
     }
@@ -297,7 +300,15 @@ const App: React.FC = () => {
         return (
           <Profile
             profile={userProfile}
-            onUpdateProfile={setUserProfile}
+            onUpdateProfile={(profileOrUpdater: any) => {
+              const newProfile = typeof profileOrUpdater === 'function'
+                ? profileOrUpdater(userProfile)
+                : profileOrUpdater;
+              setUserProfile(newProfile);
+              if (authMode === 'USER') {
+                updateProfile(newProfile).catch(console.error);
+              }
+            }}
             completionPercentage={completionPercentage}
           />
         );
