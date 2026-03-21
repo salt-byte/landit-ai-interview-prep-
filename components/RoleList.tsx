@@ -121,15 +121,22 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
     setCreateError('');
     try {
       const extracted = await parseLink(linkInput.trim());
-      setNewRole({
-        title: extracted.title || '',
-        company: extracted.company || '',
-        jd: extracted.jd || '',
-        teamInfo: extracted.teamInfo || '',
-      });
-      setShowPreview(true);
+      // Check if the site blocked our scraper
+      if (extracted.jd && (extracted.jd.includes('ACCESS_BLOCKED') || extracted.jd.includes('Failed') || extracted.jd.includes('HTTP Error'))) {
+        setCreateError('This website blocked automatic parsing. Please copy the job description and paste it manually.');
+        setActiveTab('MANUAL');
+      } else {
+        setNewRole({
+          title: extracted.title || '',
+          company: extracted.company || '',
+          jd: extracted.jd || '',
+          teamInfo: extracted.teamInfo || '',
+        });
+        setShowPreview(true);
+      }
     } catch (err) {
-      setCreateError('Failed to parse link. Please try again or use manual input.');
+      setCreateError('Failed to parse link. Please copy the job description and paste it manually.');
+      setActiveTab('MANUAL');
     } finally {
       setIsAnalyzing(false);
     }
