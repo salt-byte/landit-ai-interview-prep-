@@ -84,7 +84,7 @@ async def scrape_with_tavily(url: str) -> str:
 
 async def scrape_with_httpx(url: str) -> str:
     """Fallback: direct HTTP fetch with browser headers."""
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, http2=False) as client:
         resp = await client.get(url, headers=BROWSER_HEADERS)
         resp.raise_for_status()
         raw_html = resp.text
