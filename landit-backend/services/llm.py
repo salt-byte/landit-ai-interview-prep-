@@ -219,19 +219,26 @@ Keep existing good content, only modify what was requested."""
 
 async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
     """Extract job details from scraped page content."""
-    prompt = f"""Extract job posting details from this web page content. Return ONLY valid JSON:
+    prompt = f"""Extract job posting details from this web page content. Return ONLY valid JSON with ALL fields populated (use empty string if not found):
 {{
   "title": "job title",
   "company": "company name",
-  "jd": "full job description text",
-  "team_info": "team name if mentioned"
+  "jd": "full job description text (responsibilities + requirements combined)",
+  "team_info": "team or department name if mentioned",
+  "location": "job location (city, state, remote, hybrid, etc.)",
+  "employmentType": "Full-time, Part-time, Internship, or Contract",
+  "keyResponsibilities": "key responsibilities as bullet points, each starting with bullet",
+  "qualifications": "required and preferred qualifications as bullet points",
+  "companyOverview": "company description / about the company section",
+  "teamOverview": "team description if mentioned",
+  "additionalInfo": "salary, benefits, or other notable info"
 }}
 
 URL: {url}
 Content:
-{page_content[:4000]}"""
+{page_content[:6000]}"""
 
-    raw = await _generate(prompt, max_tokens=2048)
+    raw = await _generate(prompt, max_tokens=3000)
     return _parse_json(raw)
 
 

@@ -46,7 +46,7 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
   const [showModal, setShowModal] = useState(false);
   
   // Form State
-  const [newRole, setNewRole] = useState({ title: '', company: '', jd: '', teamInfo: '' });
+  const [newRole, setNewRole] = useState<any>({ title: '', company: '', jd: '', teamInfo: '' });
   
   // UI State for Modal
   const [activeTab, setActiveTab] = useState<'MANUAL' | 'LINK'>('MANUAL');
@@ -62,13 +62,19 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
     setCreateError('');
     try {
       if (isGuest) {
-        // GUEST mode: create locally without API call
         const localRole: TargetRole = {
           id: `local-${Date.now()}`,
           title: newRole.title,
           company: newRole.company,
           jd: newRole.jd,
           teamInfo: newRole.teamInfo || '',
+          location: newRole.location || '',
+          employmentType: newRole.employmentType || '',
+          keyResponsibilities: newRole.keyResponsibilities || '',
+          qualifications: newRole.qualifications || '',
+          companyOverview: newRole.companyOverview || '',
+          teamOverview: newRole.teamOverview || '',
+          additionalInfo: newRole.additionalInfo || '',
         };
         onRoleCreate(localRole);
         resetModal();
@@ -78,8 +84,15 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
           company: newRole.company,
           jd: newRole.jd,
           teamInfo: newRole.teamInfo || '',
-          companyBackground: '',
-          teamBackground: '',
+          location: newRole.location || '',
+          employmentType: newRole.employmentType || '',
+          keyResponsibilities: newRole.keyResponsibilities || '',
+          qualifications: newRole.qualifications || '',
+          companyOverview: newRole.companyOverview || '',
+          teamOverview: newRole.teamOverview || '',
+          additionalInfo: newRole.additionalInfo || '',
+          companyBackground: newRole.companyOverview || '',
+          teamBackground: newRole.teamOverview || '',
           additionalNotes: '',
           interviewQuestions: [],
         });
@@ -106,7 +119,7 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
 
   const resetModal = () => {
     setShowModal(false);
-    setNewRole({ title: '', company: '', jd: '', teamInfo: '' });
+    setNewRole({ title: '', company: '', jd: '', teamInfo: '', location: '', employmentType: '', keyResponsibilities: '', qualifications: '', companyOverview: '', teamOverview: '', additionalInfo: '' });
     setActiveTab('MANUAL');
     setLinkInput('');
     setIsAnalyzing(false);
@@ -130,7 +143,14 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
           title: extracted.title || '',
           company: extracted.company || '',
           jd: extracted.jd || '',
-          teamInfo: extracted.teamInfo || '',
+          teamInfo: extracted.team_info || extracted.teamInfo || '',
+          location: extracted.location || '',
+          employmentType: extracted.employmentType || '',
+          keyResponsibilities: extracted.keyResponsibilities || '',
+          qualifications: extracted.qualifications || '',
+          companyOverview: extracted.companyOverview || '',
+          teamOverview: extracted.teamOverview || '',
+          additionalInfo: extracted.additionalInfo || '',
         });
         setShowPreview(true);
       }
