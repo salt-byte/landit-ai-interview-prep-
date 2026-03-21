@@ -677,7 +677,7 @@ Instructions:
     try {
       const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn('No Gemini API key found, falling back to local mode');
+        console.warn('[LandIt] No VITE_GEMINI_API_KEY found, falling back to local mode');
         return false;
       }
 
@@ -738,7 +738,7 @@ Instructions:
 
       return true;
     } catch (err) {
-      console.warn('Failed to connect Gemini Live API:', err);
+      console.error('[LandIt] Gemini Live connection failed:', err);
       return false;
     }
   };
@@ -789,10 +789,13 @@ Instructions:
     }, 100);
 
     // Try Gemini Live API first
+    console.log('[LandIt] Attempting Gemini Live connection...');
     const geminiConnected = await connectGeminiLive(matchedInterviewer);
+    console.log('[LandIt] Gemini Live connected:', geminiConnected);
 
     if (geminiConnected && geminiSessionRef.current) {
       // Gemini Live mode: start mic streaming and let Gemini drive the conversation
+      console.log('[LandIt] Using Gemini Live voice mode');
       setUseLocalMode(false);
       setInterviewerState('SPEAKING');
 
@@ -805,6 +808,7 @@ Instructions:
     }
 
     // Fall back to local mode with browser TTS + optional backend WS
+    console.warn('[LandIt] Falling back to LOCAL mode (browser TTS)');
     setUseLocalMode(true);
 
     try {
