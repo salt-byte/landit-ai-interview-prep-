@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion } from '../types';
-import { deleteRoleSource } from '../api';
+import { deleteRoleSource, generatePrep } from '../api';
 import MockInterview from './MockInterview';
 import AddSourceModal from './AddSourceModal';
 import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
@@ -498,6 +498,26 @@ const sanitizeText = (text: string): string => {
     .trim();
 };
 
+/** Parse backend Markdown prep document (### Q: / **Answer Framework:**) into Q&A pairs */
+const parsePrepContent = (content: string, limit: number): { q: string; a?: string }[] => {
+  const results: { q: string; a?: string }[] = [];
+  const blocks = content.split(/(?=###\s*Q:)/i);
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const qMatch = lines[0]?.match(/###\s*Q:\s*(.+)/i);
+    if (!qMatch) continue;
+    const q = qMatch[1].trim();
+    const answerLines = lines.slice(1)
+      .filter(l => !l.startsWith('#') && l.trim())
+      .map(l => l.replace(/^\*\*(?:Answer Framework|Key Points|Sample Answer|Guidance):\*\*\s*/i, '').trim())
+      .filter(l => l.length > 0);
+    const a = answerLines.length > 0 ? sanitizeText(answerLines.join('\n')) : undefined;
+    results.push({ q, a });
+    if (results.length >= limit) break;
+  }
+  return results;
+};
+
 // --- Interview Prep Builder Sub-Component (NEW) ---
 export const InterviewPrepBuilder: React.FC<{ 
   role: TargetRole | null;
@@ -927,7 +947,27 @@ export const InterviewPrepBuilder: React.FC<{
 
   const generateQuestions = async () => {
     setEditorState('GENERATING');
-    
+
+    // Primary: backend Claude generation (uses gap analysis + profile context)
+    if (role?.id) {
+      try {
+        const result = await generatePrep(role.id, { mode: 'QA', categories: settings.types });
+        const parsed = parsePrepContent(result.content, settings.qty);
+        if (parsed.length > 0) {
+          setGeneratedQuestions(parsed);
+          setEditorState('EDITING');
+          setChatHistory(prev => [...prev, {
+            sender: 'AI',
+            text: `I've generated ${parsed.length} targeted questions based on your profile and role. AI is ready to help you refine your answers.`
+          }]);
+          return;
+        }
+      } catch {
+        // fall through to client-side fallback
+      }
+    }
+
+    // Fallback: Gemini client-side
     try {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       const model = "gemini-3-flash-preview";
