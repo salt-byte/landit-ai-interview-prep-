@@ -47,9 +47,12 @@ import {
   Quote,
   Undo
 } from 'lucide-react';
-// GoogleGenAI removed — all AI calls go through backend API
+import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion } from '../types';
-import { deleteRoleSource, generatePrep, chatPrep } from '../api';
+import { deleteRoleSource, getGapMatrix, getWeaknessVector } from '../api';
+
+const gemini = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
+const GEMINI_MODEL = "gemini-2.0-flash";
 import MockInterview from './MockInterview';
 import AddSourceModal from './AddSourceModal';
 import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
@@ -949,32 +952,66 @@ export const InterviewPrepBuilder: React.FC<{
     setEditorState('GENERATING');
 
     try {
+      // Step 1: Fetch gap data from backend (fast, just DB read)
+      let gapContext = "";
       if (role?.id) {
-        const result = await generatePrep(role.id, 'QA', settings.types);
-        const parsed = parsePrepContent(result.content, settings.qty);
-        if (parsed.length > 0) {
-          setGeneratedQuestions(parsed);
-          setEditorState('EDITING');
-          setChatHistory(prev => [...prev, {
-            sender: 'AI',
-            text: `I've generated ${parsed.length} targeted questions based on your profile and role gap analysis. Select a question to generate a sample answer.`
-          }]);
-          return;
+        try {
+          const [gapData, weaknessData] = await Promise.all([
+            getGapMatrix(role.id).catch(() => null),
+            getWeaknessVector().catch(() => null),
+          ]);
+          if (gapData?.gaps) {
+            const topGaps = gapData.gaps.filter((g: any) => g.gap > 0.5).slice(0, 5);
+            gapContext = "Candidate weaknesses (focus questions here):\n" +
+              topGaps.map((g: any) => "- " + g.label + ": score " + g.user_score + " vs required " + g.required_score).join("\n");
+          }
+          if (weaknessData?.vector) {
+            const topWeak = Object.entries(weaknessData.vector)
+              .sort((a: any, b: any) => b[1] - a[1])
+              .slice(0, 3);
+            if (topWeak.length > 0 && !gapContext) {
+              gapContext = "Historical weak areas: " + topWeak.map(([k]) => k.replace(/_/g, " ")).join(", ");
+            }
+          }
+        } catch {
+          // No gap data available, that's fine
         }
       }
-      throw new Error("No role selected or no questions generated");
+
+      // Step 2: Call Gemini directly from frontend (fast, direct connection)
+      const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nFocus on these question types: " + settings.types.join(", ") + ".\n\n" + (gapContext ? gapContext + "\n\n" : "") + "Role Context:\n" + (role?.jd || "") + "\n\nRequirements:\n1. Return ONLY the questions, one per line.\n2. Do NOT include numbering, category labels, or prefixes.\n3. Each question should be a single, complete sentence.\n4. Focus on the candidate's weak areas if provided.";
+
+      const response = await gemini.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      const text = response.text || "";
+      const questions = text.split("\n")
+        .map((q: string) => q.trim())
+        .filter((q: string) => q.length > 10)
+        .slice(0, settings.qty)
+        .map((q: string) => ({ q, a: undefined }));
+
+      if (questions.length === 0) throw new Error("No questions generated");
+
+      setGeneratedQuestions(questions);
+      setEditorState('EDITING');
+      setChatHistory(prev => [...prev, {
+        sender: 'AI',
+        text: "I've generated " + questions.length + " targeted questions" + (gapContext ? " based on your gap analysis" : "") + ". Select a question to generate a sample answer."
+      }]);
     } catch (error) {
       console.error("Error generating questions:", error);
-      // Fallback mock questions
       const mockQuestions = Array.from({ length: settings.qty }).map(() => ({
-        q: `How would you handle a situation where you need to prioritize multiple conflicting tasks for a ${role?.title || 'product'} role?`,
+        q: "How would you handle a situation where you need to prioritize multiple conflicting tasks for a " + (role?.title || "product") + " role?",
         a: undefined
       }));
       setGeneratedQuestions(mockQuestions);
       setEditorState('EDITING');
       setChatHistory(prev => [...prev, {
         sender: 'AI',
-        text: `I've generated practice questions for you. Select a question to generate a sample answer.`
+        text: "I've generated practice questions for you. Select a question to generate a sample answer."
       }]);
     }
   };
@@ -985,31 +1022,26 @@ export const InterviewPrepBuilder: React.FC<{
 
     try {
       const question = generatedQuestions[index].q;
+      const prompt = "You are an expert interview coach. Provide a sample answer for this interview question for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nRole Context:\n" + (role?.jd || "").slice(0, 1000) + "\n\nRequirements:\n1. Write as if you are the candidate speaking.\n2. Use STAR framework where applicable.\n3. Be concise but impactful.\n4. Do NOT use Markdown symbols. Use plain text with paragraphs.";
 
-      if (role?.id) {
-        // Use backend chatPrep API to generate answer
-        const result = await chatPrep(
-          role.id,
-          `Generate a high-quality sample answer for this interview question. Write as the candidate speaking. Be concise and use STAR framework where applicable. Question: "${question}"`,
-          generatedQuestions.map(function(q) { return "Q: " + q.q + (q.a ? "\nA: " + q.a : ""); }).join("\n\n")
-        );
+      const response = await gemini.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [{ parts: [{ text: prompt }] }],
+      });
 
-        const answer = sanitizeText(result.content || "");
-        const updatedQuestions = [...generatedQuestions];
-        updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
-        setGeneratedQuestions(updatedQuestions);
+      const answer = sanitizeText(response.text || "");
+      const updatedQuestions = [...generatedQuestions];
+      updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
+      setGeneratedQuestions(updatedQuestions);
 
-        if (editorRef.current) {
-          editorRef.current.setContent(answer);
-        }
-
-        setChatHistory(prev => [...prev, {
-          sender: 'AI',
-          text: `I've generated a suggested answer. Would you like me to refine or improve it?`
-        }]);
-      } else {
-        throw new Error("No role selected");
+      if (editorRef.current) {
+        editorRef.current.setContent(answer);
       }
+
+      setChatHistory(prev => [...prev, {
+        sender: 'AI',
+        text: "I've generated a suggested answer. Would you like me to refine or improve it?"
+      }]);
     } catch (error) {
       console.error("Error generating answer:", error);
       const updatedQuestions = [...generatedQuestions];
@@ -1060,15 +1092,14 @@ export const InterviewPrepBuilder: React.FC<{
       }
 
       try {
-        if (!role?.id) throw new Error("No role selected");
+        const editPrompt = "You are an expert editor. Revise the following text based on the user's instruction.\n\nOriginal Text:\n" + quotedText + "\n\nUser Instruction: " + userMsg + "\n\nRequirements:\n1. Return ONLY the revised text.\n2. Maintain the original tone unless instructed otherwise.\n3. Do not include any explanations.\n4. Preserve the original formatting structure.";
 
-        const result = await chatPrep(
-          role.id,
-          "Revise the following text based on the user's instruction. Return ONLY the revised text, no explanations.\n\nOriginal Text: \"" + quotedText + "\"\n\nUser Instruction: \"" + userMsg + "\"",
-          generatedQuestions.map(function(q) { return "Q: " + q.q + (q.a ? "\nA: " + q.a : ""); }).join("\n\n")
-        );
+        const editResponse = await gemini.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [{ parts: [{ text: editPrompt }] }],
+        });
 
-        const revisedText = result.content || "";
+        const revisedText = editResponse.text || "";
         
         // Directly replace selection in the editor
         if (editorRef.current) {
