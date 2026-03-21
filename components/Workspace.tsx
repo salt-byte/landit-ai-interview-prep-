@@ -47,9 +47,9 @@ import {
   Quote,
   Undo
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+// GoogleGenAI removed — all AI calls go through backend API
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion } from '../types';
-import { deleteRoleSource, generatePrep } from '../api';
+import { deleteRoleSource, generatePrep, chatPrep } from '../api';
 import MockInterview from './MockInterview';
 import AddSourceModal from './AddSourceModal';
 import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
@@ -774,7 +774,7 @@ export const InterviewPrepBuilder: React.FC<{
     
     setChatHistory(prev => [...prev, { 
       sender: 'AI', 
-      text: "I’ve transcribed your recording and added it to your notes. Would you like me to refine this answer or format it into a STAR structure?" 
+      text: "I've transcribed your recording and added it to your notes. Would you like me to refine this answer or format it into a STAR structure?" 
     }]);
   };
 
@@ -920,104 +920,61 @@ export const InterviewPrepBuilder: React.FC<{
       label: 'Behavioral & Experience', 
       description: 'Past experiences, soft skills, and behavioral scenarios.',
       explanation: 'Focuses on your past experiences, leadership style, and how you collaborate, make decisions, and handle challenges in real-world situations.',
-      example: '“Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?”'
+      example: '"Tell me about a time you had to align multiple stakeholders with conflicting priorities. How did you handle it?"'
     },
     { 
       id: 'product', 
       label: 'Product Design & Sense', 
       description: 'Designing products, user empathy, and product improvement.',
       explanation: 'Evaluates your ability to identify user problems, design intuitive solutions, and prioritize features with clear product reasoning.',
-      example: '“How would you design a new feature to improve user retention for TikTok?”'
+      example: '"How would you design a new feature to improve user retention for TikTok?"'
     },
     { 
       id: 'analytical', 
       label: 'Analytical & Execution', 
       description: 'Metrics, data analysis, problem solving, and execution.',
       explanation: 'Tests your ability to diagnose metric changes, structure ambiguous problems, and drive data-informed execution.',
-      example: '“Daily active users dropped by 15% last month. How would you investigate and address this issue?”'
+      example: '"Daily active users dropped by 15% last month. How would you investigate and address this issue?"'
     },
     { 
       id: 'strategy', 
       label: 'Strategy & Vision', 
       description: 'Long-term thinking, market sense, and business strategy.',
       explanation: 'Assesses your long-term thinking, market judgment, and ability to evaluate strategic opportunities and trade-offs.',
-      example: '“Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?”'
+      example: '"Should OpenAI expand into enterprise collaboration tools? How would you evaluate this opportunity?"'
     }
   ];
 
   const generateQuestions = async () => {
     setEditorState('GENERATING');
 
-    // Primary: backend Claude generation (uses gap analysis + profile context)
-    if (role?.id) {
-      try {
-        const result = await generatePrep(role.id, { mode: 'QA', categories: settings.types });
+    try {
+      if (role?.id) {
+        const result = await generatePrep(role.id, 'QA', settings.types);
         const parsed = parsePrepContent(result.content, settings.qty);
         if (parsed.length > 0) {
           setGeneratedQuestions(parsed);
           setEditorState('EDITING');
           setChatHistory(prev => [...prev, {
             sender: 'AI',
-            text: `I've generated ${parsed.length} targeted questions based on your profile and role. AI is ready to help you refine your answers.`
+            text: `I've generated ${parsed.length} targeted questions based on your profile and role gap analysis. Select a question to generate a sample answer.`
           }]);
           return;
         }
-      } catch {
-        // fall through to client-side fallback
       }
-    }
-
-    // Fallback: Gemini client-side
-    try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-      const model = "gemini-3-flash-preview";
-      
-      const prompt = `You are an expert interview coach. Generate ${settings.qty} high-quality, professional interview questions for a ${role?.title} role at ${role?.company}.
-      
-      Focus on these question types: ${settings.types.join(', ')}.
-      
-      Role Context:
-      ${role?.jd}
-      ${role?.companyBackground}
-      
-      Requirements:
-      1. Return ONLY the questions, one per line.
-      2. Do NOT include any numbering, category labels, or prefixes like "Mock Question:".
-      3. Each question should be a single, complete sentence or short paragraph.
-      4. Ensure the questions are targeted and challenging.`;
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ parts: [{ text: prompt }] }],
-      });
-
-      const text = response.text || "";
-      const questions = text.split('\n')
-        .map(q => q.trim())
-        .filter(q => q.length > 0)
-        .slice(0, settings.qty)
-        .map(q => ({ q, a: undefined }));
-      
-      if (questions.length === 0) throw new Error("No questions generated");
-      
-      setGeneratedQuestions(questions);
-      setEditorState('EDITING');
-      setChatHistory(prev => [...prev, { 
-        sender: 'AI', 
-        text: `I've generated practice questions for you. AI is ready to help... (select question and generate answer)` 
-      }]);
+      throw new Error("No role selected or no questions generated");
     } catch (error) {
       console.error("Error generating questions:", error);
       // Fallback mock questions
-      const mockQuestions = Array.from({ length: settings.qty }).map((_, i) => ({
+      const mockQuestions = Array.from({ length: settings.qty }).map(() => ({
         q: `How would you handle a situation where you need to prioritize multiple conflicting tasks for a ${role?.title || 'product'} role?`,
         a: undefined
       }));
       setGeneratedQuestions(mockQuestions);
       setEditorState('EDITING');
-      setChatHistory(prev => [...prev, { 
-        sender: 'AI', 
-        text: `I've generated practice questions for you. AI is ready to help... (select question and generate answer)` 
+      setChatHistory(prev => [...prev, {
+        sender: 'AI',
+        text: `I've generated practice questions for you. Select a question to generate a sample answer.`
       }]);
     }
   };
@@ -1025,56 +982,40 @@ export const InterviewPrepBuilder: React.FC<{
   const handleGenerateAnswer = async (index: number) => {
     if (isGeneratingAnswer) return;
     setIsGeneratingAnswer(true);
-    
+
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-      const model = "gemini-3-flash-preview";
       const question = generatedQuestions[index].q;
-      
-      const prompt = `You are an expert interview coach. Provide a high-quality, professional sample answer for the following interview question for a ${role?.title} role at ${role?.company}. 
-      
-      Question: ${question}
-      
-      Role Context:
-      ${role?.jd}
-      ${role?.companyBackground}
-      
-      Requirements:
-      1. Start directly with the answer. Do NOT include any meta-commentary, framing, or analysis of the question (e.g., do not say "This is a great question" or "This question tests...").
-      2. Write as if you are the candidate speaking in the interview.
-      3. Use clear, well-structured paragraphs with proper spacing.
-      4. Be concise but impactful.
-      5. Do NOT use Markdown symbols (e.g., ###, **, -). Use standard HTML tags for formatting if needed, or just plain text with paragraphs.
-      6. Use standard English single quotes (') instead of curved quotes.`;
 
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ parts: [{ text: prompt }] }],
-      });
+      if (role?.id) {
+        // Use backend chatPrep API to generate answer
+        const result = await chatPrep(
+          role.id,
+          `Generate a high-quality sample answer for this interview question. Write as the candidate speaking. Be concise and use STAR framework where applicable. Question: "${question}"`,
+          generatedQuestions.map(function(q) { return "Q: " + q.q + (q.a ? "\nA: " + q.a : ""); }).join("\n\n")
+        );
 
-      const answer = sanitizeText(response.text || "I'm sorry, I couldn't generate an answer at this time.");
-      
-      const updatedQuestions = [...generatedQuestions];
-      updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
-      setGeneratedQuestions(updatedQuestions);
-      
-      // Update editor content via ref
-      if (editorRef.current) {
-        editorRef.current.setContent(answer);
+        const answer = sanitizeText(result.content || "");
+        const updatedQuestions = [...generatedQuestions];
+        updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
+        setGeneratedQuestions(updatedQuestions);
+
+        if (editorRef.current) {
+          editorRef.current.setContent(answer);
+        }
+
+        setChatHistory(prev => [...prev, {
+          sender: 'AI',
+          text: `I've generated a suggested answer. Would you like me to refine or improve it?`
+        }]);
+      } else {
+        throw new Error("No role selected");
       }
-
-      // Add Copilot message
-      setChatHistory(prev => [...prev, { 
-        sender: 'AI', 
-        text: `I’ve generated a suggested answer. Would you like me to refine or improve it?` 
-      }]);
     } catch (error) {
       console.error("Error generating answer:", error);
-      // Fallback mock answer if API fails or key is missing
       const updatedQuestions = [...generatedQuestions];
-      updatedQuestions[index] = { 
-        ...updatedQuestions[index], 
-        a: "This is a sample answer generated based on the STAR framework. Situation: Describe the context. Task: Explain your responsibility. Action: Detail the steps you took. Result: Share the positive outcome." 
+      updatedQuestions[index] = {
+        ...updatedQuestions[index],
+        a: "This is a sample answer generated based on the STAR framework. Situation: Describe the context. Task: Explain your responsibility. Action: Detail the steps you took. Result: Share the positive outcome."
       };
       setGeneratedQuestions(updatedQuestions);
     } finally {
@@ -1119,30 +1060,15 @@ export const InterviewPrepBuilder: React.FC<{
       }
 
       try {
-        const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-        const model = "gemini-3-flash-preview";
-        const prompt = `You are an expert editor. Revise the following text based on the user's instruction.
-        
-        Original Text:
-        "${quotedText}"
-        
-        User Instruction:
-        "${userMsg}"
-        
-        Requirements:
-        1. Return ONLY the revised text.
-        2. Maintain the original tone unless instructed otherwise.
-        3. Do not include any explanations or conversational filler.
-        4. IMPORTANT: Preserve the original formatting structure. If the original text was a list item, the revised text should be a list item. If it was a heading, keep it as a heading.
-        5. Do NOT use Markdown symbols (e.g., ###, **, -).
-        6. Use standard English single quotes (') instead of curved quotes.`;
+        if (!role?.id) throw new Error("No role selected");
 
-        const response = await ai.models.generateContent({
-          model,
-          contents: [{ parts: [{ text: prompt }] }],
-        });
+        const result = await chatPrep(
+          role.id,
+          "Revise the following text based on the user's instruction. Return ONLY the revised text, no explanations.\n\nOriginal Text: \"" + quotedText + "\"\n\nUser Instruction: \"" + userMsg + "\"",
+          generatedQuestions.map(function(q) { return "Q: " + q.q + (q.a ? "\nA: " + q.a : ""); }).join("\n\n")
+        );
 
-        const revisedText = response.text || "";
+        const revisedText = result.content || "";
         
         // Directly replace selection in the editor
         if (editorRef.current) {
@@ -1758,7 +1684,7 @@ export const InterviewPrepBuilder: React.FC<{
                       <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-white border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>
                         {msg.text}
                       </div>
-                      {((idx === 0 && msg.sender === 'AI') || msg.text.includes("I’ve transcribed your recording")) && (
+                      {((idx === 0 && msg.sender === 'AI') || msg.text.includes("I've transcribed your recording")) && (
                         <div className="flex flex-col gap-1 mt-1">
                           {["Make it concise", "Add STAR format", "Sound more confident"].map(s => (
                             <button key={s} onClick={() => handleQuickPrompt(s)} className="text-xs bg-[#F8F9FA] hover:bg-[#E8F0FE] text-[#444746] px-3 py-1.5 rounded-md transition-colors text-left w-fit">
