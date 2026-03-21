@@ -9,7 +9,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { UploadedFile, RoleSource, UserProfile } from '../types';
-import { uploadAndParseDocument, uploadDocument, uploadRoleSource, addRoleLinkSource } from '../api';
+import { uploadAndParseDocument, uploadDocument, uploadRoleSource, addLinkSource } from '../api';
 
 interface AddSourceModalProps {
   isOpen: boolean;
@@ -18,11 +18,13 @@ interface AddSourceModalProps {
   onProfileExtracted?: (extracted: Partial<UserProfile>) => void;
   /** When provided, uploads go to the role-specific endpoint instead of profile */
   roleId?: string;
+  /** When true, skip backend API calls and create local-only entries */
+  isGuest?: boolean;
 }
 
 const SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Notes', 'Job Description', 'Other'];
 
-const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted, roleId }) => {
+const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted, roleId, isGuest }) => {
   const [step, setStep] = useState<'SELECT' | 'UPLOAD' | 'LINK' | 'PREVIEW'>('SELECT');
   const [selectedFileType, setSelectedFileType] = useState<string>('Resume');
   const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
@@ -51,13 +53,26 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     }
   };
 
-  // Flow A: Upload File — calls real backend API
+  // Flow A: Upload File — calls real backend API (or creates local entry in GUEST mode)
   const handleUploadFile = async () => {
     if (!pendingFile || !pendingFileObj) return;
     setUploadStatus('UPLOADING');
     try {
+      if (isGuest) {
+        // GUEST mode: create a local-only entry without API call
+        await new Promise(r => setTimeout(r, 500)); // simulate brief delay
+        const localFile: UploadedFile = {
+          id: `local-${Date.now()}`,
+          name: pendingFile.name,
+          type: selectedFileType,
+          date: new Date().toISOString().split('T')[0],
+        };
+        setUploadStatus('SUCCESS');
+        onAddSource(localFile);
+        setTimeout(handleClose, 800);
+        return;
+      }
       if (roleId) {
-        // Role context: upload to role-specific endpoint
         const result = await uploadRoleSource(roleId, pendingFileObj);
         setUploadStatus('SUCCESS');
         onAddSource(result);
@@ -87,7 +102,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     try {
       if (roleId) {
         // Role context: add link to role-specific endpoint
-        const result = await addRoleLinkSource(roleId, linkUrl.trim());
+        const result = await addLinkSource(roleId, linkUrl.trim());
         setUploadStatus('SUCCESS');
         onAddSource(result);
         setTimeout(handleClose, 800);

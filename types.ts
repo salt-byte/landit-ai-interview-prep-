@@ -6,6 +6,13 @@ export interface UploadedFile {
   date: string;
 }
 
+export interface RoleSource {
+  id: string;
+  name: string;
+  type: string;
+  date: string;
+}
+
 export interface InterviewQuestion {
   text: string;
   notes?: string;

@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Plus, ArrowUpRight, FileText, Globe, Loader2, Link as LinkIcon, Sparkles } from 'lucide-react';
+import { Plus, ArrowUpRight, FileText, Globe, Loader2, Link as LinkIcon, Sparkles, Trash2 } from 'lucide-react';
 import { TargetRole } from '../types';
-import { createRole, parseLink } from '../api';
+import { createRole, parseLink, deleteRole } from '../api';
 
 export const INITIAL_ROLES: TargetRole[] = [
   {
@@ -38,9 +38,11 @@ interface RoleListProps {
   roles: TargetRole[];
   onSelectRole: (role: TargetRole) => void;
   onRoleCreate: (role: TargetRole) => void;
+  onRoleDelete?: (roleId: string) => void;
+  isGuest?: boolean;
 }
 
-const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate }) => {
+const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, onRoleDelete, isGuest }) => {
   const [showModal, setShowModal] = useState(false);
   
   // Form State
@@ -59,22 +61,46 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate }
     setIsCreating(true);
     setCreateError('');
     try {
-      const role = await createRole({
-        title: newRole.title,
-        company: newRole.company,
-        jd: newRole.jd,
-        teamInfo: newRole.teamInfo || '',
-        companyBackground: '',
-        teamBackground: '',
-        additionalNotes: '',
-        interviewQuestions: [],
-      });
-      onRoleCreate(role);
-      resetModal();
+      if (isGuest) {
+        // GUEST mode: create locally without API call
+        const localRole: TargetRole = {
+          id: `local-${Date.now()}`,
+          title: newRole.title,
+          company: newRole.company,
+          jd: newRole.jd,
+          teamInfo: newRole.teamInfo || '',
+        };
+        onRoleCreate(localRole);
+        resetModal();
+      } else {
+        const role = await createRole({
+          title: newRole.title,
+          company: newRole.company,
+          jd: newRole.jd,
+          teamInfo: newRole.teamInfo || '',
+          companyBackground: '',
+          teamBackground: '',
+          additionalNotes: '',
+          interviewQuestions: [],
+        });
+        onRoleCreate(role);
+        resetModal();
+      }
     } catch (err) {
       setCreateError('Failed to create role. Please try again.');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, roleId: string) => {
+    e.stopPropagation();
+    if (!confirm('Delete this role?')) return;
+    if (onRoleDelete) {
+      onRoleDelete(roleId);
+    }
+    if (!isGuest) {
+      deleteRole(roleId).catch(console.error);
     }
   };
 
@@ -167,7 +193,16 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate }
                 </div>
               </div>
               
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                {onRoleDelete && (
+                  <button
+                    onClick={(e) => handleDelete(e, role.id)}
+                    className="p-1.5 text-[#C4C7C5] hover:text-[#B3261E] hover:bg-[#FFDAD6] rounded-lg transition-colors"
+                    title="Delete role"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
                 <ArrowUpRight className="w-5 h-5 text-[#0B57D0]" />
               </div>
             </div>

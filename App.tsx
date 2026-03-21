@@ -308,6 +308,8 @@ const App: React.FC = () => {
               roles={roles}
               onSelectRole={handleSelectRole}
               onRoleCreate={handleRoleCreate}
+              onRoleDelete={(roleId) => setRoles(prev => prev.filter(r => r.id !== roleId))}
+              isGuest={authMode === 'GUEST'}
             />
           );
         }
