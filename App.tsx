@@ -21,75 +21,74 @@ import MockInterview from './components/MockInterview';
 import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
-import { TargetRole, AppView, UserProfile, SavedQuestion } from './types';
+import { TargetRole, AppView, UserProfile, SavedQuestion, NavigationSource } from './types';
 import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion } from './api';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
-  name: "Claire Liu",
-  headline: "Product Manager & Data Analyst",
-  bio: "Bridging communication and data science to build user-centric products. Experienced in product analytics, experimentation, and AI-driven feature development.",
-  avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=256&h=256&auto=format&fit=crop",
-  
-  targetRoles: "Product Manager, Data Analyst",
+  fullName: "Claire Liu",
+  profilePhoto: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=256&h=256&auto=format&fit=crop",
+  targetRole: "Product Manager, Data Analyst",
+  employmentType: "Full-time",
+  email: "claire.liu@example.com",
+  phoneNumber: "+1 (555) 123-4567",
   location: "Los Angeles / San Francisco",
-  educationLevel: "Master's Degree",
-  yearsOfExperience: "", // [DEMO] Missing Field
-
+  personalWebsite: "https://claireliu.com",
+  linkedInProfile: "https://linkedin.com/in/claireliu",
   education: [
     {
       id: 'edu-1',
-      school: "University of Southern California (USC)",
+      institutionName: "University of Southern California (USC)",
       degree: "M.S.",
-      major: "Communication Data Science",
-      year: "2024 - 2026",
-      keyCoursework: "Applied Machine Learning, Data Visualization & Storytelling, Product Analytics",
-      academicFocus: "" // [DEMO] Missing Field
+      fieldOfStudy: "Communication Data Science",
+      startDate: "2024",
+      endDate: "2026",
+      gpa: "3.8",
+      relevantCoursework: "Applied Machine Learning, Data Visualization & Storytelling, Product Analytics",
+      additionalDetails: ""
     }
   ],
-  experience: [
+  workExperience: [
     {
       id: 'exp-1',
-      company: "AI Content Startup (SaaS)",
-      role: "Product Management Intern",
-      type: "Internship",
-      duration: "Summer 2024",
-      responsibilities: "• Led AI writing feature definitions, increasing new user activation by 12%\n• Partnered with Engineering & Design teams for rapid sprint execution\n• Analyzed feature performance using SQL and internal dashboards"
+      companyName: "AI Content Startup (SaaS)",
+      jobTitle: "Product Management Intern",
+      startDate: "Jun 2024",
+      endDate: "Aug 2024",
+      description: "• Led AI writing feature definitions, increasing new user activation by 12%\n• Partnered with Engineering & Design teams for rapid sprint execution\n• Analyzed feature performance using SQL and internal dashboards"
     },
     {
       id: 'exp-2',
-      company: "E-commerce Platform",
-      role: "Data Analyst Intern",
-      type: "Internship",
-      duration: "Summer 2023",
-      responsibilities: "• Built conversion funnel dashboards for product and marketing teams\n• Conducted A/B test analysis to inform feature prioritization"
+      companyName: "E-commerce Platform",
+      jobTitle: "Data Analyst Intern",
+      startDate: "Jun 2023",
+      endDate: "Aug 2023",
+      description: "• Built conversion funnel dashboards for product and marketing teams\n• Conducted A/B test analysis to inform feature prioritization"
     },
     {
       id: 'exp-missing-demo',
-      company: "", // [DEMO] Missing Company
-      role: "Research Assistant",
-      type: "Part-time",
-      duration: "2022 - 2023",
-      responsibilities: "" // [DEMO] Missing Responsibilities
+      companyName: "",
+      jobTitle: "Research Assistant",
+      startDate: "2022",
+      endDate: "2023",
+      description: ""
     }
   ],
   projects: [
     {
       id: 'proj-1',
-      name: "AI Writing Tool Onboarding Optimization",
-      context: "", // [DEMO] Missing Context
-      role: "Product & Data Analysis",
-      tools: "SQL, Figma, Amplitude",
-      outcome: "+12% activation",
-      learnings: "Importance of early value signaling"
+      projectName: "AI Writing Tool Onboarding Optimization",
+      projectDescription: "Optimized the onboarding flow for a new AI writing tool.",
+      startDate: "Jan 2024",
+      endDate: "Mar 2024",
+      projectLink: "https://github.com/claireliu/ai-onboarding"
     }
   ],
   skills: {
-    technical: "SQL, Python, A/B Testing, Data Analysis",
-    product: "PRD Writing, Experiment Design, Metrics Definition",
-    communication: "" // [DEMO] Missing Skill Category
-  },
-  interests: "AI consumer products, Growth experimentation, Data-informed decision making"
+    technicalSkills: "SQL, Python, A/B Testing, Data Analysis",
+    toolsAndTechnologies: "Figma, Amplitude, Tableau",
+    softSkills: "PRD Writing, Experiment Design, Metrics Definition, Storytelling"
+  }
 };
 
 const INITIAL_SAVED_QUESTIONS: SavedQuestion[] = [
@@ -132,12 +131,19 @@ const INITIAL_SAVED_QUESTIONS: SavedQuestion[] = [
 
 // Empty state for signed-in users (fresh start)
 const EMPTY_PROFILE: UserProfile = {
-  name: "", headline: "", bio: "",
-  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop",
-  targetRoles: "", location: "", educationLevel: "", yearsOfExperience: "",
-  education: [], experience: [], projects: [],
-  skills: { technical: "", product: "", communication: "" },
-  interests: "",
+  fullName: "",
+  profilePhoto: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop",
+  targetRole: "",
+  employmentType: "",
+  email: "",
+  phoneNumber: "",
+  location: "",
+  personalWebsite: "",
+  linkedInProfile: "",
+  education: [],
+  workExperience: [],
+  projects: [],
+  skills: { technicalSkills: "", toolsAndTechnologies: "", softSkills: "" },
 };
 
 const App: React.FC = () => {
@@ -177,6 +183,10 @@ const App: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<TargetRole | null>(null);
   const [roles, setRoles] = useState<TargetRole[]>([]);
 
+  // Navigation source tracking (v3)
+  const [navSource, setNavSource] = useState<NavigationSource | null>(null);
+  const [questionBankSelectedRole, setQuestionBankSelectedRole] = useState<string | null>(null);
+
   // Lifted Mock Prep State
   const [mockPrepSettings, setMockPrepSettings] = useState({
     types: [] as string[],
@@ -211,6 +221,18 @@ const App: React.FC = () => {
         teamBackground: updatedRole.teamBackground || '',
         additionalNotes: updatedRole.additionalNotes || '',
         interviewQuestions: updatedRole.interviewQuestions || [],
+        // v3 role fields
+        location: updatedRole.location || '',
+        employmentType: updatedRole.employmentType || '',
+        keyResponsibilities: updatedRole.keyResponsibilities || '',
+        qualifications: updatedRole.qualifications || '',
+        companyOverview: updatedRole.companyOverview || '',
+        teamOverview: updatedRole.teamOverview || '',
+        additionalInfo: updatedRole.additionalInfo || '',
+        interviewQuestionsList: updatedRole.interviewQuestionsList || [],
+        generalNotes: updatedRole.generalNotes || '',
+        preparationNotes: updatedRole.preparationNotes || '',
+        insights: updatedRole.insights || '',
       });
       setSelectedRole(saved);
       setRoles(prev => prev.map(r => r.id === saved.id ? saved : r));
@@ -264,7 +286,7 @@ const App: React.FC = () => {
     switch (view) {
       case 'DASHBOARD':
         return (
-          <Dashboard 
+          <Dashboard
             userProfile={userProfile}
             roles={roles}
             onNavigate={setView}
@@ -273,19 +295,19 @@ const App: React.FC = () => {
         );
       case 'PROFILE':
         return (
-          <Profile 
-            profile={userProfile} 
-            onUpdateProfile={setUserProfile} 
+          <Profile
+            profile={userProfile}
+            onUpdateProfile={setUserProfile}
             completionPercentage={completionPercentage}
           />
         );
       case 'ROLES':
         if (!selectedRole) {
           return (
-            <RoleList 
-              roles={roles} 
-              onSelectRole={handleSelectRole} 
-              onRoleCreate={handleRoleCreate} 
+            <RoleList
+              roles={roles}
+              onSelectRole={handleSelectRole}
+              onRoleCreate={handleRoleCreate}
             />
           );
         }
@@ -303,10 +325,10 @@ const App: React.FC = () => {
         );
       case 'MOCK_PREP':
         return (
-          <InterviewPrepBuilder 
-            role={selectedRole} 
-            roles={roles} 
-            onSelectRole={setSelectedRole} 
+          <InterviewPrepBuilder
+            role={selectedRole}
+            roles={roles}
+            onSelectRole={setSelectedRole}
             onNavigate={setView}
             settings={mockPrepSettings}
             onUpdateSettings={setMockPrepSettings}
@@ -361,19 +383,19 @@ const App: React.FC = () => {
     }
   };
 
-  const NavItem = ({ 
-    id, 
-    label, 
-    icon: Icon, 
-    isActive, 
-    onClick, 
+  const NavItem = ({
+    id,
+    label,
+    icon: Icon,
+    isActive,
+    onClick,
     hasSubItems = false,
     isExpanded = false
-  }: { 
-    id: AppView, 
-    label: string, 
-    icon: any, 
-    isActive: boolean, 
+  }: {
+    id: AppView,
+    label: string,
+    icon: any,
+    isActive: boolean,
     onClick: () => void,
     hasSubItems?: boolean,
     isExpanded?: boolean
@@ -381,8 +403,8 @@ const App: React.FC = () => {
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-        isActive 
-          ? 'bg-[#D3E3FD] text-[#041E49]' 
+        isActive
+          ? 'bg-[#D3E3FD] text-[#041E49]'
           : 'text-[#444746] hover:bg-[#F0F4F9] hover:text-[#1F1F1F]'
       }`}
     >
@@ -394,22 +416,22 @@ const App: React.FC = () => {
     </button>
   );
 
-  const SubNavItem = ({ 
-    id, 
-    label, 
-    isActive, 
-    onClick 
-  }: { 
-    id: AppView, 
-    label: string, 
-    isActive: boolean, 
-    onClick: () => void 
+  const SubNavItem = ({
+    id,
+    label,
+    isActive,
+    onClick
+  }: {
+    id: AppView,
+    label: string,
+    isActive: boolean,
+    onClick: () => void
   }) => (
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 rounded-lg text-sm transition-all ${
-        isActive 
-          ? 'text-[#0B57D0] font-bold bg-[#F0F4F9]' 
+        isActive
+          ? 'text-[#0B57D0] font-bold bg-[#F0F4F9]'
           : 'text-[#444746] hover:text-[#1F1F1F] hover:bg-[#F0F4F9]/50'
       }`}
     >
@@ -439,29 +461,29 @@ const App: React.FC = () => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
-          <NavItem 
-            id="DASHBOARD" 
-            label="Dashboard" 
-            icon={LayoutDashboard} 
-            isActive={view === 'DASHBOARD'} 
-            onClick={() => setView('DASHBOARD')} 
+          <NavItem
+            id="DASHBOARD"
+            label="Dashboard"
+            icon={LayoutDashboard}
+            isActive={view === 'DASHBOARD'}
+            onClick={() => setView('DASHBOARD')}
           />
-          <NavItem 
-            id="PROFILE" 
-            label="My Profile" 
-            icon={User} 
-            isActive={view === 'PROFILE'} 
-            onClick={() => setView('PROFILE')} 
+          <NavItem
+            id="PROFILE"
+            label="My Profile"
+            icon={User}
+            isActive={view === 'PROFILE'}
+            onClick={() => setView('PROFILE')}
           />
-          <NavItem 
-            id="ROLES" 
-            label="My Roles" 
-            icon={Briefcase} 
-            isActive={view === 'ROLES'} 
+          <NavItem
+            id="ROLES"
+            label="My Roles"
+            icon={Briefcase}
+            isActive={view === 'ROLES'}
             onClick={() => {
               setSelectedRole(null);
               setView('ROLES');
-            }} 
+            }}
           />
 
           {/* Interviews Group */}
@@ -473,17 +495,17 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="space-y-0.5 mt-1">
-              <SubNavItem 
-                id="MOCK_PREP" 
-                label="Mock Prep" 
-                isActive={view === 'MOCK_PREP'} 
-                onClick={() => setView('MOCK_PREP')} 
+              <SubNavItem
+                id="MOCK_PREP"
+                label="Mock Prep"
+                isActive={view === 'MOCK_PREP'}
+                onClick={() => setView('MOCK_PREP')}
               />
-              <SubNavItem 
-                id="LIVE_INTERVIEW" 
-                label="Live Interview" 
-                isActive={view === 'LIVE_INTERVIEW'} 
-                onClick={() => setView('LIVE_INTERVIEW')} 
+              <SubNavItem
+                id="LIVE_INTERVIEW"
+                label="Live Interview"
+                isActive={view === 'LIVE_INTERVIEW'}
+                onClick={() => setView('LIVE_INTERVIEW')}
               />
             </div>
           </div>
@@ -497,17 +519,17 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="space-y-0.5 mt-1">
-              <SubNavItem 
-                id="QUESTION_BANK" 
-                label="Question Bank" 
-                isActive={view === 'QUESTION_BANK'} 
-                onClick={() => setView('QUESTION_BANK')} 
+              <SubNavItem
+                id="QUESTION_BANK"
+                label="Question Bank"
+                isActive={view === 'QUESTION_BANK'}
+                onClick={() => setView('QUESTION_BANK')}
               />
-              <SubNavItem 
-                id="DOCS_REPORTS" 
-                label="Interview Reports" 
-                isActive={view === 'DOCS_REPORTS'} 
-                onClick={() => setView('DOCS_REPORTS')} 
+              <SubNavItem
+                id="DOCS_REPORTS"
+                label="Interview Reports"
+                isActive={view === 'DOCS_REPORTS'}
+                onClick={() => setView('DOCS_REPORTS')}
               />
             </div>
           </div>
@@ -517,14 +539,14 @@ const App: React.FC = () => {
         <div className="p-4 border-t border-[#E3E3E3]">
           <div className="flex items-center gap-3 p-2 rounded-xl">
             <div className="w-9 h-9 rounded-full overflow-hidden border border-[#E3E3E3] flex-shrink-0">
-              {userProfile.avatar
-                ? <img src={userProfile.avatar} alt="User" className="w-full h-full object-cover" />
+              {userProfile.profilePhoto
+                ? <img src={userProfile.profilePhoto} alt="User" className="w-full h-full object-cover" />
                 : <div className="w-full h-full bg-[#E3E3E3] flex items-center justify-center"><User className="w-4 h-4 text-[#444746]" /></div>
               }
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[#1F1F1F] truncate">
-                {authMode === 'GUEST' ? 'Guest' : (userProfile.name || 'My Account')}
+                {authMode === 'GUEST' ? 'Guest' : (userProfile.fullName || 'My Account')}
               </p>
               <p className="text-xs text-[#444746] truncate flex items-center gap-1">
                 {authMode === 'GUEST'

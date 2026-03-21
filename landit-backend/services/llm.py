@@ -15,46 +15,47 @@ async def extract_profile_from_resume(resume_text: str) -> dict:
     """Layer 2: Parse raw resume text → structured profile fields."""
     prompt = f"""Extract structured information from this resume. Return ONLY valid JSON with this exact schema:
 {{
-  "name": "string",
-  "headline": "string (role/title)",
-  "bio": "string (2-3 sentence professional summary)",
-  "target_roles": "string (comma-separated role types they target)",
+  "fullName": "string",
+  "targetRole": "string (comma-separated role types they target)",
+  "employmentType": "string (Full-time/Part-time/Internship)",
+  "email": "string",
+  "phoneNumber": "string",
   "location": "string",
-  "education_level": "string",
-  "years_of_experience": "string (e.g. '3 years')",
-  "interests": "string",
+  "personalWebsite": "string (if found)",
+  "linkedInProfile": "string (if found)",
   "skills": {{
-    "technical": "string (comma-separated)",
-    "product": "string (comma-separated)",
-    "communication": "string (comma-separated)"
+    "technicalSkills": "string (comma-separated)",
+    "toolsAndTechnologies": "string (comma-separated)",
+    "softSkills": "string (comma-separated)"
   }},
   "education": [
     {{
-      "school": "string",
+      "institutionName": "string",
       "degree": "string",
-      "major": "string",
-      "year": "string",
-      "key_coursework": "string",
-      "academic_focus": "string"
+      "fieldOfStudy": "string",
+      "startDate": "string",
+      "endDate": "string",
+      "gpa": "string",
+      "relevantCoursework": "string",
+      "additionalDetails": "string"
     }}
   ],
-  "experience": [
+  "workExperience": [
     {{
-      "company": "string",
-      "role": "string",
-      "type": "string (Full-time/Internship/Part-time/Contract)",
-      "duration": "string",
-      "responsibilities": "string (bullet points, each line starting with •)"
+      "companyName": "string",
+      "jobTitle": "string",
+      "startDate": "string",
+      "endDate": "string",
+      "description": "string (bullet points, each line starting with •)"
     }}
   ],
   "projects": [
     {{
-      "name": "string",
-      "context": "string (problem/background)",
-      "role": "string",
-      "tools": "string (comma-separated)",
-      "outcome": "string",
-      "learnings": "string"
+      "projectName": "string",
+      "projectDescription": "string",
+      "startDate": "string",
+      "endDate": "string",
+      "projectLink": "string (if found, else empty)"
     }}
   ]
 }}
