@@ -6,6 +6,7 @@ from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    tavily_api_key: str = ""
     zhipuai_api_key: str = ""
     app_secret_key: str = "landit-dev-secret-change-in-prod"
     debug: bool = True
