@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Briefcase, 
   Calendar, 
@@ -17,6 +17,7 @@ import {
   User
 } from 'lucide-react';
 import { TargetRole, InterviewSession, AppView } from '../types';
+import { listInterviewSessions, getInterviewSessionDetail } from '../api';
 
 // --- Mock Data ---
 
@@ -187,6 +188,7 @@ const formatTime = (seconds: number) => {
 interface InterviewReportsProps {
   roles: TargetRole[];
   onNavigate?: (view: AppView) => void;
+  useMockData?: boolean;
 }
 
 // Helper to get role emoji (Same as QuestionBank)
@@ -206,15 +208,29 @@ const getRoleEmoji = (company: string) => {
   return '💼';
 };
 
-const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }) => {
+const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, useMockData = false }) => {
   const [viewState, setViewState] = useState<'ROLE_LIST' | 'SESSION_LIST' | 'REPORT_DETAIL'>('ROLE_LIST');
   const [selectedRole, setSelectedRole] = useState<TargetRole | null>(null);
   const [selectedSession, setSelectedSession] = useState<InterviewSession | null>(null);
-  
+  const [sessions, setSessions] = useState<InterviewSession[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
   // State for Report Detail (Notes)
   const [questionNotes, setQuestionNotes] = useState<{[key: number]: string}>({});
   const [expandedNotes, setExpandedNotes] = useState<{[key: number]: boolean}>({});
   const [savedNotes, setSavedNotes] = useState<{[key: number]: boolean}>({});
+
+  useEffect(() => {
+    if (useMockData) {
+      setSessions(MOCK_SESSIONS);
+      return;
+    }
+    setIsLoading(true);
+    listInterviewSessions()
+      .then(setSessions)
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }, [useMockData]);
 
   const handleSaveNote = (index: number) => {
     // In a real app, this would save to the backend
@@ -236,17 +252,14 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
     }, 2000);
   };
 
-  // Filter sessions by role
   const getSessionsForRole = (roleId: string) => {
-    // In a real app, we'd filter by ID. For this mock, we'll map the mock roles to our mock data.
-    // Let's assume the roles passed in match our mock data structure or we map them.
-    // For demo purposes, let's map based on company name if ID doesn't match, or just use the mock data directly.
-    
-    if (roleId === 'claire-pm-1') return MOCK_SESSIONS.filter(s => s.company === 'OpenAI');
-    if (roleId === 'claire-da-1') return MOCK_SESSIONS.filter(s => s.company === 'TikTok');
-    if (roleId === 'claire-pmm-1') return MOCK_SESSIONS.filter(s => s.company === 'Notion');
-    
-    return [];
+    if (useMockData) {
+      // Guest: map demo role IDs to mock sessions by company
+      const role = roles.find(r => r.id === roleId);
+      if (!role) return [];
+      return MOCK_SESSIONS.filter(s => s.company.toLowerCase() === role.company.toLowerCase());
+    }
+    return sessions.filter(s => s.roleId === roleId);
   };
 
   const handleRoleClick = (role: TargetRole) => {
@@ -254,8 +267,17 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
     setViewState('SESSION_LIST');
   };
 
-  const handleSessionClick = (session: InterviewSession) => {
-    setSelectedSession(session);
+  const handleSessionClick = async (session: InterviewSession) => {
+    if (!useMockData) {
+      try {
+        const detail = await getInterviewSessionDetail(parseInt(session.id));
+        setSelectedSession(detail);
+      } catch {
+        setSelectedSession(session);
+      }
+    } else {
+      setSelectedSession(session);
+    }
     setViewState('REPORT_DETAIL');
   };
 
@@ -286,11 +308,22 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
           <p className="text-[#444746] mt-1">Review your past interview performances and track your progress.</p>
         </div>
 
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white p-6 rounded-2xl border border-[#E3E3E3] animate-pulse">
+                <div className="w-12 h-12 bg-[#E3E3E3] rounded-xl mb-4" />
+                <div className="h-4 bg-[#E3E3E3] rounded w-3/4 mb-2" />
+                <div className="h-3 bg-[#E3E3E3] rounded w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {roles.map((role) => {
-            const sessions = getSessionsForRole(role.id);
+            const roleSess = getSessionsForRole(role.id);
             return (
-              <div 
+              <div
                 key={role.id}
                 onClick={() => handleRoleClick(role)}
                 className="bg-white p-6 rounded-2xl border border-[#E3E3E3] shadow-sm hover:shadow-md transition-all cursor-pointer group"
@@ -300,7 +333,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
                     {getRoleEmoji(role.company)}
                   </div>
                   <span className="bg-[#F0F4F9] text-[#444746] text-xs font-bold px-2 py-1 rounded-full">
-                    {sessions.length} Interviews
+                    {roleSess.length} Interviews
                   </span>
                 </div>
                 
@@ -312,13 +345,14 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
             );
           })}
         </div>
+        )}
       </div>
     );
   }
 
   // --- VIEW: SESSION LIST ---
   if (viewState === 'SESSION_LIST' && selectedRole) {
-    const sessions = getSessionsForRole(selectedRole.id);
+    const roleSessions = getSessionsForRole(selectedRole.id);
 
     return (
       <div className="max-w-4xl mx-auto">
@@ -334,7 +368,12 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate }
         </div>
 
         <div className="space-y-4">
-          {sessions.map((session) => (
+          {roleSessions.length === 0 && (
+            <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-[#E3E3E3]">
+              <p className="text-[#444746]">No interview sessions for this role yet.</p>
+            </div>
+          )}
+          {roleSessions.map((session) => (
             <div 
               key={session.id}
               onClick={() => handleSessionClick(session)}

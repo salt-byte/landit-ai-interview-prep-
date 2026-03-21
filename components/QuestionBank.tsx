@@ -1,21 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TargetRole, SavedQuestion } from '../types';
-import { 
-  Search, 
-  Clock, 
-  ChevronRight, 
-  Filter, 
-  Briefcase, 
-  FileText, 
+import {
+  Search,
+  Clock,
+  ChevronRight,
+  Filter,
+  Briefcase,
+  FileText,
   MoreHorizontal,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Trash2
 } from 'lucide-react';
 
 interface QuestionBankProps {
   roles: TargetRole[];
   savedQuestions: SavedQuestion[];
   onSelectQuestion: (question: SavedQuestion) => void;
+  onDeleteQuestion?: (id: string) => void;
 }
 
 const QUESTION_TYPES = [
@@ -41,11 +43,23 @@ const getRoleEmoji = (company: string) => {
   return '💼';
 };
 
-const QuestionBank: React.FC<QuestionBankProps> = ({ roles, savedQuestions, onSelectQuestion }) => {
+const QuestionBank: React.FC<QuestionBankProps> = ({ roles, savedQuestions, onSelectQuestion, onDeleteQuestion }) => {
   const [selectedRole, setSelectedRole] = useState<TargetRole | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter questions based on role, types, and search query
   const filteredQuestions = savedQuestions.filter(q => {
@@ -199,9 +213,24 @@ const QuestionBank: React.FC<QuestionBankProps> = ({ roles, savedQuestions, onSe
                     {q.question}
                   </h3>
                 </div>
-                <button className="p-2 text-[#444746] hover:bg-[#F0F4F9] rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
+                <div className="relative flex-shrink-0" ref={openMenuId === q.id ? menuRef : null}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === q.id ? null : q.id); }}
+                    className="p-2 text-[#444746] hover:bg-[#F0F4F9] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                  {openMenuId === q.id && (
+                    <div className="absolute right-0 top-8 bg-white border border-[#E3E3E3] rounded-xl shadow-lg z-10 py-1 w-36 animate-in fade-in zoom-in-95 duration-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteQuestion?.(q.id); setOpenMenuId(null); }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#B3261E] hover:bg-[#FFDAD6] transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))

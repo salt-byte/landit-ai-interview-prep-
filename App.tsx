@@ -22,7 +22,7 @@ import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion } from './types';
-import { getRoles, updateRole, getSavedQuestions, saveQuestion } from './api';
+import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion } from './api';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
@@ -242,6 +242,13 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteQuestion = (id: string) => {
+    setSavedQuestions(prev => prev.filter(q => q.id !== id));
+    if (authMode === 'USER') {
+      deleteSavedQuestion(id).catch(console.error);
+    }
+  };
+
   const handleSelectSavedQuestion = (question: SavedQuestion) => {
     const role = roles.find(r => r.id === question.roleId);
     if (role) {
@@ -334,17 +341,19 @@ const App: React.FC = () => {
         );
       case 'QUESTION_BANK':
         return (
-          <QuestionBank 
-            roles={roles} 
-            savedQuestions={savedQuestions} 
-            onSelectQuestion={handleSelectSavedQuestion} 
+          <QuestionBank
+            roles={roles}
+            savedQuestions={savedQuestions}
+            onSelectQuestion={handleSelectSavedQuestion}
+            onDeleteQuestion={handleDeleteQuestion}
           />
         );
       case 'DOCS_REPORTS':
         return (
-          <InterviewReports 
-            roles={roles} 
+          <InterviewReports
+            roles={roles}
             onNavigate={setView}
+            useMockData={authMode === 'GUEST'}
           />
         );
       default:
