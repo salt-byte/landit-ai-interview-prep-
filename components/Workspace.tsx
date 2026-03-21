@@ -1135,27 +1135,73 @@ export const InterviewPrepBuilder: React.FC<{
         setIsAIEditMode(false);
       }
     } else {
-      setQuotedText(null); // Clear quote after sending
-      setTimeout(() => {
-        setChatHistory(prev => [...prev, { 
-          sender: 'AI', 
-          text: "I've analyzed your request for this specific question. I can help you refine your answer or provide more context. What would you like to do next?" 
-        }]);
-      }, 1000);
+      setQuotedText(null);
+      // Real Gemini call for chat refinement
+      const currentQ = selectedQuestionIndex !== null ? generatedQuestions[selectedQuestionIndex] : null;
+      const chatContext = currentQ ? "Current question: " + currentQ.q + "\nCurrent answer: " + (currentQ.a || "(no answer yet)") : "";
+
+      try {
+        const chatPrompt = "You are an interview prep AI assistant. The user is working on interview preparation for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a company") + ".\n\n" + chatContext + "\n\nUser message: " + userMsg + "\n\nRespond helpfully. If they ask to modify the answer, return the improved answer text directly. If they ask a question, answer it concisely. Keep responses under 200 words.";
+
+        const chatResponse = await gemini.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [{ parts: [{ text: chatPrompt }] }],
+        });
+
+        const aiReply = chatResponse.text || "I can help you refine your answer. Could you be more specific?";
+
+        // If the user asked to modify the answer and we have a selected question, update it
+        const modifyKeywords = ["shorter", "concise", "STAR", "format", "rewrite", "improve", "段", "简短", "修改", "分段"];
+        if (currentQ && selectedQuestionIndex !== null && modifyKeywords.some(k => userMsg.toLowerCase().includes(k))) {
+          const updatedQuestions = [...generatedQuestions];
+          updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: sanitizeText(aiReply) };
+          setGeneratedQuestions(updatedQuestions);
+          if (editorRef.current) {
+            editorRef.current.setContent(sanitizeText(aiReply));
+          }
+          setChatHistory(prev => [...prev, { sender: 'AI', text: "I've updated the answer based on your request." }]);
+        } else {
+          setChatHistory(prev => [...prev, { sender: 'AI', text: aiReply }]);
+        }
+      } catch (error) {
+        console.error("Chat error:", error);
+        setChatHistory(prev => [...prev, { sender: 'AI', text: "Sorry, I encountered an error. Please try again." }]);
+      }
     }
   };
 
-  const handleQuickPrompt = (prompt: string) => {
+  const handleQuickPrompt = async (prompt: string) => {
     if (generatedQuestions.length === 0) return;
-    const userMsg = prompt;
-    setChatHistory(prev => [...prev, { sender: 'USER', text: userMsg }]);
+    setChatHistory(prev => [...prev, { sender: 'USER', text: prompt }]);
     setChatInput('');
-    setTimeout(() => {
-      setChatHistory(prev => [...prev, { 
-        sender: 'AI', 
-        text: "I've analyzed your request for this specific question. I can help you refine your answer or provide more context. What would you like to do next?" 
-      }]);
-    }, 1000);
+
+    const currentQ = selectedQuestionIndex !== null ? generatedQuestions[selectedQuestionIndex] : null;
+
+    try {
+      const qPrompt = "You are an interview prep AI. The user clicked a quick action: \"" + prompt + "\".\n\nCurrent question: " + (currentQ?.q || "") + "\nCurrent answer: " + (currentQ?.a || "(none)") + "\n\nRole: " + (role?.title || "") + " at " + (role?.company || "") + "\n\nApply the requested change to the answer and return the improved answer directly. No explanations, just the improved answer text.";
+
+      const qResponse = await gemini.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [{ parts: [{ text: qPrompt }] }],
+      });
+
+      const improved = sanitizeText(qResponse.text || "");
+
+      if (currentQ && selectedQuestionIndex !== null && improved) {
+        const updatedQuestions = [...generatedQuestions];
+        updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improved };
+        setGeneratedQuestions(updatedQuestions);
+        if (editorRef.current) {
+          editorRef.current.setContent(improved);
+        }
+        setChatHistory(prev => [...prev, { sender: 'AI', text: "Done! I've updated the answer." }]);
+      } else {
+        setChatHistory(prev => [...prev, { sender: 'AI', text: improved || "I couldn't process that request." }]);
+      }
+    } catch (error) {
+      console.error("Quick prompt error:", error);
+      setChatHistory(prev => [...prev, { sender: 'AI', text: "Sorry, something went wrong. Please try again." }]);
+    }
   };
 
   const renderToolbar = () => {
