@@ -278,15 +278,28 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               <section className="text-center">
                  <div className="w-24 h-24 mx-auto rounded-full border-4 border-[#F0F4F9] shadow-sm overflow-hidden mb-4 relative group">
                     <img
-                      src={profile.profilePhoto}
+                      src={profile.profilePhoto || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop"}
                       alt={profile.fullName}
                       className="w-full h-full object-cover"
                     />
-                    {isEditing && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer">
-                        <Upload className="w-6 h-6 text-white" />
-                      </div>
-                    )}
+                    <label className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Upload className="w-6 h-6 text-white" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const base64 = ev.target?.result as string;
+                            updateField('profilePhoto', base64);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
                  </div>
 
                  {isEditing ? (
