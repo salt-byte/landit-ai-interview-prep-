@@ -1444,7 +1444,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       // Update session results with the note
       const updatedResults = [...sessionResults];
       if (updatedResults[index]) {
-        updatedResults[index] = { ...updatedResults[index], note: questionNotes[index] };
+        updatedResults[index] = { ...updatedResults[index], chat: [...(updatedResults[index].chat || []), { sender: 'USER', text: questionNotes[index] }] };
         setSessionResults(updatedResults);
       }
 
