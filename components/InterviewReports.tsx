@@ -17,7 +17,7 @@ import {
   User
 } from 'lucide-react';
 import { TargetRole, InterviewSession, AppView } from '../types';
-import { listInterviewSessions, getInterviewSessionDetail } from '../api';
+import { listInterviewSessions, getSessionDetail } from '../api';
 
 // --- Mock Data ---
 
@@ -270,7 +270,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
   const handleSessionClick = async (session: InterviewSession) => {
     if (!useMockData) {
       try {
-        const detail = await getInterviewSessionDetail(parseInt(session.id));
+        const detail = await getSessionDetail(parseInt(session.id));
         setSelectedSession(detail);
       } catch {
         setSelectedSession(session);
