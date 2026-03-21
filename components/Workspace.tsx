@@ -563,6 +563,7 @@ export const InterviewPrepBuilder: React.FC<{
   }, [initialQuestionId, savedQuestions]);
   const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState<'IDLE' | 'RECORDING' | 'PAUSED' | 'STOPPED'>('IDLE');
+  const recordingStatusRef = useRef<string>('IDLE');
   const [recordingTime, setRecordingTime] = useState(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [transcription, setTranscription] = useState('');
@@ -702,8 +703,8 @@ export const InterviewPrepBuilder: React.FC<{
     };
 
     recognition.onend = () => {
-      if (recordingStatus === 'RECORDING') {
-        recognition.start(); // Keep listening if we are still in recording status
+      if (recordingStatusRef.current === 'RECORDING') {
+        try { recognition.start(); } catch {}
       }
     };
 
@@ -717,13 +718,16 @@ export const InterviewPrepBuilder: React.FC<{
   };
 
   const stopRecording = () => {
+    recordingStatusRef.current = 'STOPPED';
+    setRecordingStatus('STOPPED');
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
     }
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
-    setRecordingStatus('STOPPED');
   };
 
   const handleTryAnswer = async () => {
@@ -733,6 +737,7 @@ export const InterviewPrepBuilder: React.FC<{
       startAudioAnalysis(stream);
       setIsRecordingInterface(true);
       setRecordingStatus('RECORDING');
+      recordingStatusRef.current = 'RECORDING';
       setRecordingTime(0);
       setTranscription('');
       startRecording();
@@ -839,9 +844,9 @@ export const InterviewPrepBuilder: React.FC<{
         </div>
         <div className="flex gap-2">
           {recordingStatus === 'RECORDING' ? (
-            <button aria-label="Pause recording" onClick={() => { setRecordingStatus('PAUSED'); if(recognitionRef.current) recognitionRef.current.stop(); }} className="px-3 py-1.5 bg-[#F0F4F9] text-[#1F1F1F] rounded-lg text-sm font-bold hover:bg-[#E3E3E3]">Pause</button>
+            <button aria-label="Pause recording" onClick={() => { setRecordingStatus('PAUSED'); recordingStatusRef.current = 'PAUSED'; if(recognitionRef.current) recognitionRef.current.stop(); }} className="px-3 py-1.5 bg-[#F0F4F9] text-[#1F1F1F] rounded-lg text-sm font-bold hover:bg-[#E3E3E3]">Pause</button>
           ) : (
-            <button aria-label="Resume recording" onClick={() => { setRecordingStatus('RECORDING'); startRecording(); }} className="px-3 py-1.5 bg-[#0B57D0] text-white rounded-lg text-sm font-bold hover:bg-[#0B67EF]">Resume</button>
+            <button aria-label="Resume recording" onClick={() => { setRecordingStatus('RECORDING'); recordingStatusRef.current = 'RECORDING'; startRecording(); }} className="px-3 py-1.5 bg-[#0B57D0] text-white rounded-lg text-sm font-bold hover:bg-[#0B67EF]">Resume</button>
           )}
           <button aria-label="Finish recording" onClick={handleStopRecording} className="px-3 py-1.5 bg-[#1F1F1F] text-white rounded-lg text-sm font-bold hover:bg-[#444746]">Finish</button>
           <button aria-label="Cancel recording" onClick={handleCancelRecording} className="px-3 py-1.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-lg text-sm font-bold hover:bg-[#F0F4F9]">Cancel</button>
