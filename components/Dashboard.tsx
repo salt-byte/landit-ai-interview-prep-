@@ -227,12 +227,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, onNavigate, o
              onClick={() => onNavigate('PROFILE')}
              className="w-20 h-20 rounded-full border-2 border-[#E3E3E3] overflow-hidden hover:border-[#0B57D0] transition-colors cursor-pointer flex-shrink-0"
            >
-             <img src={userProfile.avatar} alt={userProfile.name} className="w-full h-full object-cover" />
+             <img src={userProfile.profilePhoto} alt={userProfile.fullName} className="w-full h-full object-cover" />
            </div>
            
            <div className="flex-1 min-w-0">
              <div className="flex justify-between items-start mb-1">
-                <h2 className="text-xl font-bold text-[#1F1F1F] truncate">{userProfile.name}</h2>
+                <h2 className="text-xl font-bold text-[#1F1F1F] truncate">{userProfile.fullName}</h2>
                 <button 
                   onClick={() => onNavigate('PROFILE')}
                   className="flex items-center gap-1.5 text-xs font-bold text-[#1F1F1F] bg-[#F0F4F9] hover:bg-[#E3E3E3] px-3 py-1.5 rounded-full transition-all"
@@ -240,7 +240,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, onNavigate, o
                   <Edit3 className="w-3.5 h-3.5" /> Edit
                 </button>
              </div>
-             <p className="text-sm text-[#444746] mb-3 truncate">{userProfile.headline}</p>
+             <p className="text-sm text-[#444746] mb-3 truncate">{userProfile.targetRole}</p>
              
              <div className="w-full max-w-xs">
                 <div className="flex items-center justify-between mb-1.5">

@@ -292,7 +292,7 @@ const RoleList: React.FC<RoleListProps> = ({ roles, onSelectRole, onRoleCreate, 
                            </div>
                            <h4 className="text-[#1F1F1F] font-bold mb-2">Import from URL</h4>
                            <p className="text-sm text-[#444746] mb-6 max-w-sm mx-auto">
-                             Paste a job link (e.g. LinkedIn or a company career page). We’ll automatically extract the role details.
+                             Paste a job link (e.g. LinkedIn or a company career page). We'll automatically extract the role details.
                            </p>
                            
                            <div className="flex items-center gap-2 max-w-lg mx-auto">

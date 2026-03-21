@@ -29,31 +29,31 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onEdit, completionPe
         {/* Avatar */}
         <div className="w-24 h-24 rounded-full border-4 border-[#F0F4F9] shadow-sm mb-4 overflow-hidden">
           <img 
-            src={profile.avatar} 
-            alt={profile.name}
+            src={profile.profilePhoto}
+            alt={profile.fullName}
             className="w-full h-full object-cover"
           />
         </div>
 
         {/* Name & Title */}
-        <h2 className="text-xl font-medium text-[#1F1F1F]">{profile.name}</h2>
-        <p className="text-sm font-medium text-[#444746] mt-1">{profile.headline || 'No Headline'}</p>
-        
+        <h2 className="text-xl font-medium text-[#1F1F1F]">{profile.fullName}</h2>
+        <p className="text-sm font-medium text-[#444746] mt-1">{profile.targetRole || 'No Target Role'}</p>
+
         {/* Stats */}
         <div className="flex flex-wrap justify-center gap-2 mt-4 mb-6">
            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#F0F4F9] rounded-full text-xs font-medium text-[#444746]">
-             <GraduationCap className="w-3.5 h-3.5" /> {profile.educationLevel || 'Education'}
+             <GraduationCap className="w-3.5 h-3.5" /> {profile.education.length > 0 ? profile.education[0].degree : 'Education'}
            </div>
            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#F0F4F9] rounded-full text-xs font-medium text-[#444746]">
              <MapPin className="w-3.5 h-3.5" /> {profile.location || 'Location'}
            </div>
            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#F0F4F9] rounded-full text-xs font-medium text-[#444746]">
-             <Briefcase className="w-3.5 h-3.5" /> {profile.experience.length} Exp
+             <Briefcase className="w-3.5 h-3.5" /> {profile.workExperience.length} Exp
            </div>
         </div>
 
         <p className="text-sm text-[#444746] leading-relaxed mb-8 line-clamp-3">
-           {profile.bio || "Add a bio to tell AI about your background."}
+           {profile.email || "Complete your profile for better AI preparation."}
         </p>
       </div>
 
