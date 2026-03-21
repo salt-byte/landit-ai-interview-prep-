@@ -581,7 +581,7 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto bg-[#F0F4F9] p-6">
-        <div className="max-w-6xl mx-auto h-full">
+        <div className="h-full">
           {renderContent()}
         </div>
       </main>
