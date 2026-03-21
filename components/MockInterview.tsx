@@ -714,13 +714,27 @@ Instructions:
         }
       });
 
-      // Handle text responses (subtitles)
+      // Handle text responses (subtitles) — accumulate for end detection
+      let accumulatedText = '';
       session.on('text', (text: string) => {
         if (text) {
-          setDisplayedQuestion(text);
-          // Check for interview conclusion
-          if (text.toLowerCase().includes('that concludes our interview')) {
-            handleGeminiInterviewEnd();
+          accumulatedText += ' ' + text;
+          setDisplayedQuestion(prev => {
+            // If text seems like a new sentence, replace; otherwise append
+            if (text.length > 30 || text.endsWith('.') || text.endsWith('?')) {
+              return text;
+            }
+            return prev ? prev + ' ' + text : text;
+          });
+          // Check accumulated text for conclusion phrases
+          const lower = accumulatedText.toLowerCase();
+          if (lower.includes('concludes our interview') ||
+              lower.includes('conclude our interview') ||
+              lower.includes('end of our interview') ||
+              lower.includes('wrapping up') ||
+              lower.includes('that concludes')) {
+            accumulatedText = '';
+            setTimeout(() => handleGeminiInterviewEnd(), 2000);
           }
         }
       });
@@ -1242,17 +1256,11 @@ Instructions:
   // Handle finishing the interview via the Finish button (Gemini mode)
   const handleFinishInterviewGemini = () => {
     if (!useLocalMode && geminiSessionRef.current) {
-      // Tell Gemini to conclude
-      try {
-        geminiSessionRef.current.sendClientContent({
-          turns: [{ role: 'user', parts: [{ text: 'Please wrap up and conclude the interview now.' }] }]
-        });
-      } catch {}
-
-      // Give Gemini a moment to respond, then end
-      setTimeout(() => {
-        handleGeminiInterviewEnd();
-      }, 5000);
+      // End immediately — don't wait for Gemini to respond
+      handleGeminiInterviewEnd();
+    } else {
+      // Local mode fallback
+      setStep('FEEDBACK');
     }
   };
 
