@@ -550,9 +550,9 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-xl font-bold text-[#1F1F1F]">Transcript and Analysis</h2>
-                <button className="flex items-center gap-2 text-[#0B57D0] font-bold text-sm hover:bg-[#E8F0FE] px-4 py-2 rounded-full transition-colors">
-                  <PlayCircle className="w-4 h-4" /> View Recording
-                </button>
+                <span className="text-sm text-[#444746]">
+                  {selectedSession.transcript.length} Q&A recorded
+                </span>
               </div>
 
               <div className="space-y-10">
