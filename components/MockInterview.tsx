@@ -349,6 +349,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
   // Gemini Live API refs
   const geminiSessionRef = useRef<any>(null);
+  const geminiTranscriptRef = useRef<{role: string, text: string}[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioWorkletNodeRef = useRef<any>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
@@ -701,6 +702,7 @@ Instructions:
             parts: [{ text: systemPrompt }]
           },
           outputAudioTranscription: {},
+          inputAudioTranscription: {},
         },
         callbacks: {
           onopen: () => {
@@ -717,11 +719,21 @@ Instructions:
               }
             }
 
+            // Handle input transcription (what user said)
+            if (message.serverContent?.inputTranscription?.text) {
+              const userText = message.serverContent.inputTranscription.text;
+              if (userText.trim()) {
+                geminiTranscriptRef.current.push({ role: 'user', text: userText });
+                setTranscript(prev => prev + userText + ' ');
+              }
+            }
+
             // Handle output transcription (subtitles)
             if (message.serverContent?.outputTranscription?.text) {
               const text = message.serverContent.outputTranscription.text;
               accumulatedText += ' ' + text;
               setDisplayedQuestion(text);
+              geminiTranscriptRef.current.push({ role: 'ai', text });
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
@@ -770,22 +782,45 @@ Instructions:
       try { geminiSessionRef.current.close(); } catch {}
       geminiSessionRef.current = null;
     }
-    // Transition to feedback
+
+    // Build Q&A pairs from transcript
+    const transcript = geminiTranscriptRef.current;
+    const qaPairs: {question: string, answer: string, chat: any[]}[] = [];
+    let currentQ = '';
+    for (const entry of transcript) {
+      if (entry.role === 'ai') {
+        if (currentQ) {
+          // Previous Q had no answer
+          qaPairs.push({ question: currentQ, answer: '', chat: [] });
+        }
+        currentQ = entry.text;
+      } else if (entry.role === 'user' && currentQ) {
+        qaPairs.push({ question: currentQ, answer: entry.text, chat: [] });
+        currentQ = '';
+      }
+    }
+    if (currentQ) {
+      qaPairs.push({ question: currentQ, answer: '', chat: [] });
+    }
+
+    // Update sessionResults for feedback display
+    setSessionResults(qaPairs);
+
     setTimeout(() => {
       setIsFinishing(false);
       setStep('FEEDBACK');
       if (onSaveSession && workspace) {
-        const savedQuestions = sessionResults.map((res, idx) => ({
+        const savedQuestions = qaPairs.map((res, idx) => ({
           id: `live-${Date.now()}-${idx}`,
           roleId: workspace.id,
           type: settings.types[0] || 'General',
           question: res.question,
           answer: res.answer,
-          chatHistory: res.chat,
+          chatHistory: [],
           transcription: res.answer,
           lastModified: new Date().toISOString(),
           savedAt: new Date().toISOString(),
-          source: 'LIVE_INTERVIEW'
+          source: 'LIVE_INTERVIEW' as const
         }));
         onSaveSession(savedQuestions);
       }
@@ -813,16 +848,25 @@ Instructions:
     console.log('[LandIt] Gemini Live connected:', geminiConnected);
 
     if (geminiConnected && geminiSessionRef.current) {
-      // Gemini Live mode: start mic streaming and let Gemini drive the conversation
       console.log('[LandIt] Using Gemini Live voice mode');
       setUseLocalMode(false);
       setInterviewerState('SPEAKING');
+      geminiTranscriptRef.current = [];
 
-      // Start sending microphone audio to Gemini
+      // Create backend session for storage
+      try {
+        const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
+        const session = await createInterviewSession({
+          role_id: roleId,
+          interviewer_id: matchedInterviewer?.id || 'alex',
+        });
+        setSessionId(session.id);
+        console.log('[LandIt] Backend session created:', session.id);
+      } catch {
+        console.warn('[LandIt] Could not create backend session (data will not persist)');
+      }
+
       startMicStreaming(geminiSessionRef.current);
-
-      // Gemini will automatically start speaking based on system prompt
-      // (the system prompt tells it to introduce itself first)
       return;
     }
 
