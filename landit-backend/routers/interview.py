@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from jose import JWTError, jwt
+from jose import JWTError
 from database import get_db, AsyncSessionLocal
 from models.interview import InterviewSession, InterviewMessage, InterviewFeedback, SavedQuestion
 from models.role import TargetRole, RoleDimensionModel
@@ -18,7 +18,6 @@ from schemas.interview import (
     SavedQuestionCreate, SavedQuestionUpdate,
 )
 from services.llm import generate_session_feedback, get_next_interview_question
-from config import settings
 from services.memory_manager import (
     build_session_system_prompt,
     update_long_term_memory,
@@ -30,7 +29,7 @@ from services.computation import (
     compute_weakness_vector,
     build_gap_summary,
 )
-from deps import get_current_user_key
+from deps import get_current_user_key, verify_supabase_token
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
@@ -207,16 +206,8 @@ async def interview_websocket(
     """
     # Authenticate via query-param token (WebSocket can't set headers)
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-            options={"verify_aud": False},
-        )
-        ws_user_key = payload.get("sub")
-        if not ws_user_key:
-            raise JWTError("Missing sub claim")
-    except JWTError:
+        ws_user_key = await verify_supabase_token(token)
+    except (JWTError, Exception):
         await websocket.close(code=4001)
         return
 
