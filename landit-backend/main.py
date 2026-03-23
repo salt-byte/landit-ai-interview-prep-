@@ -10,7 +10,7 @@ from pathlib import Path
 
 from database import init_db
 from config import settings
-from routers import profile, roles, compute, prep, interview, dashboard
+from routers import auth, profile, roles, compute, prep, interview, dashboard
 
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ app.add_middleware(
 )
 
 # Mount routers
+app.include_router(auth.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(roles.router, prefix="/api")
 app.include_router(compute.router, prefix="/api")

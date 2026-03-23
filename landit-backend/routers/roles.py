@@ -11,11 +11,10 @@ from services.storage import upload_file, detect_file_type, delete_file
 from services.web_scraper import extract_jd_from_url
 from services.llm import extract_jd_dimension_model
 from services.computation import normalize_weights
+from deps import get_current_user_key
 from datetime import datetime
 
 router = APIRouter(prefix="/roles", tags=["roles"])
-
-USER_KEY = "default"
 
 
 def role_to_dict(role: TargetRole, sources=None) -> dict:
@@ -55,10 +54,13 @@ def role_to_dict(role: TargetRole, sources=None) -> dict:
 
 
 @router.get("")
-async def list_roles(db: AsyncSession = Depends(get_db)):
+async def list_roles(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     result = await db.execute(
         select(TargetRole)
-        .where(TargetRole.user_key == USER_KEY)
+        .where(TargetRole.user_key == user_key)
         .order_by(TargetRole.created_at.desc())
     )
     roles = result.scalars().all()
@@ -66,9 +68,13 @@ async def list_roles(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("")
-async def create_role(data: TargetRoleCreate, db: AsyncSession = Depends(get_db)):
+async def create_role(
+    data: TargetRoleCreate,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     role = TargetRole(
-        user_key=USER_KEY,
+        user_key=user_key,
         title=data.title,
         company=data.company,
         jd=data.jd,
@@ -96,8 +102,12 @@ async def create_role(data: TargetRoleCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{role_id}")
-async def get_role(role_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == USER_KEY))
+async def get_role(
+    role_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == user_key))
     role = result.scalar_one_or_none()
     if not role:
         raise HTTPException(404, "Role not found")
@@ -106,8 +116,13 @@ async def get_role(role_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{role_id}")
-async def update_role(role_id: int, data: TargetRoleUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == USER_KEY))
+async def update_role(
+    role_id: int,
+    data: TargetRoleUpdate,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == user_key))
     role = result.scalar_one_or_none()
     if not role:
         raise HTTPException(404, "Role not found")
@@ -140,8 +155,12 @@ async def update_role(role_id: int, data: TargetRoleUpdate, db: AsyncSession = D
 
 
 @router.delete("/{role_id}")
-async def delete_role(role_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == USER_KEY))
+async def delete_role(
+    role_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    result = await db.execute(select(TargetRole).where(TargetRole.id == role_id, TargetRole.user_key == user_key))
     role = result.scalar_one_or_none()
     if not role:
         raise HTTPException(404, "Role not found")

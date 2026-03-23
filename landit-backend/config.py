@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     zhipuai_api_key: str = ""
     app_secret_key: str = "landit-dev-secret-change-in-prod"
+    jwt_secret_key: str = "landit-jwt-secret-change-in-prod"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     debug: bool = True
     database_url: str = "sqlite+aiosqlite:///./landit.db"
     db_init_retries: int = 5

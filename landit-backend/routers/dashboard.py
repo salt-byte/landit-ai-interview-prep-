@@ -8,17 +8,19 @@ from database import get_db
 from models.interview import InterviewSession, SavedQuestion
 from models.role import TargetRole
 from models.user import UserProfile, Education, WorkExperience, Project
+from deps import get_current_user_key
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-USER_KEY = "default"
-
 
 @router.get("/stats")
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def get_dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     interview_count_result = await db.execute(
         select(func.count(InterviewSession.id)).where(
-            InterviewSession.user_key == USER_KEY,
+            InterviewSession.user_key == user_key,
             InterviewSession.status == "completed",
         )
     )
@@ -26,20 +28,20 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
 
     question_count_result = await db.execute(
         select(func.count(SavedQuestion.id)).where(
-            SavedQuestion.user_key == USER_KEY
+            SavedQuestion.user_key == user_key
         )
     )
     mock_questions = question_count_result.scalar() or 0
 
     role_count_result = await db.execute(
         select(func.count(TargetRole.id)).where(
-            TargetRole.user_key == USER_KEY
+            TargetRole.user_key == user_key
         )
     )
     roles_count = role_count_result.scalar() or 0
 
     profile_result = await db.execute(
-        select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        select(UserProfile).where(UserProfile.user_key == user_key)
     )
     profile = profile_result.scalar_one_or_none()
 

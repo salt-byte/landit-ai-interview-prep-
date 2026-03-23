@@ -5,6 +5,20 @@
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
+const TOKEN_KEY = 'landit_token';
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -19,7 +33,18 @@ async function request<T>(
     headers['Content-Type'] = 'application/json';
   }
 
+  // Inject JWT token if available
+  const token = getToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event('landit:unauthorized'));
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -27,6 +52,38 @@ async function request<T>(
   }
 
   return res.json();
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export async function login(email: string, password: string) {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  const data = await res.json();
+  setToken(data.access_token);
+  return data;
+}
+
+export async function register(email: string, password: string) {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  const data = await res.json();
+  setToken(data.access_token);
+  return data;
 }
 
 // ─── Profile ────────────────────────────────────────────────────────────────
@@ -201,9 +258,17 @@ export async function getInterviewFeedback(sessionId: string) {
   return request<any>(`/api/interview/sessions/${sessionId}/feedback`);
 }
 
+export async function updateTranscriptNote(sessionId: string, itemIndex: number, note: string) {
+  return request<any>(`/api/interview/sessions/${sessionId}/feedback/notes/${itemIndex}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note }),
+  });
+}
+
 export function createInterviewWS(sessionId: string): WebSocket {
   const wsBase = API_BASE.replace(/^http/, 'ws');
-  return new WebSocket(`${wsBase}/api/interview/sessions/${sessionId}/stream`);
+  const token = getToken() || '';
+  return new WebSocket(`${wsBase}/api/interview/sessions/${sessionId}/stream?token=${token}`);
 }
 
 // ─── Question Bank ──────────────────────────────────────────────────────────

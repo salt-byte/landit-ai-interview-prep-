@@ -17,7 +17,7 @@ import {
   User
 } from 'lucide-react';
 import { TargetRole, InterviewSession, AppView } from '../types';
-import { listInterviewSessions, getSessionDetail } from '../api';
+import { listInterviewSessions, getSessionDetail, updateTranscriptNote } from '../api';
 
 // --- Mock Data ---
 
@@ -233,16 +233,19 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
   }, [useMockData]);
 
   const handleSaveNote = (index: number) => {
-    // In a real app, this would save to the backend
-    // Here we just update the UI state to show it's saved
     setSavedNotes(prev => ({ ...prev, [index]: true }));
-    
-    // Update the mock session data in memory so it persists if we navigate back
+
+    // Persist to memory for immediate UI consistency
     if (selectedSession && selectedSession.transcript[index]) {
       selectedSession.transcript[index].note = questionNotes[index];
     }
 
-    // Hide "Saved" message after 2 seconds
+    // Persist to backend for real sessions
+    if (!useMockData && selectedSession) {
+      updateTranscriptNote(selectedSession.id, index, questionNotes[index] || '')
+        .catch(console.error);
+    }
+
     setTimeout(() => {
       setSavedNotes(prev => {
         const newState = { ...prev };

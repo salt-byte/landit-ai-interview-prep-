@@ -4,7 +4,7 @@ import { Eye, EyeOff, ArrowRight, Sparkles, User } from 'lucide-react';
 
 interface LoginProps {
   onGuest: () => void;
-  onSignIn: (email: string, password: string) => void;
+  onSignIn: (email: string, password: string, tab: 'signin' | 'signup') => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
@@ -23,9 +23,16 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       return;
     }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    setLoading(false);
-    onSignIn(email, password);
+    try {
+      await onSignIn(email, password, tab);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('400')) setError('Email already registered.');
+      else if (msg.includes('401')) setError('Invalid email or password.');
+      else setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

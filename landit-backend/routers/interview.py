@@ -5,9 +5,10 @@ Long-term memory: written after session end.
 """
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from jose import JWTError
 from database import get_db, AsyncSessionLocal
 from models.interview import InterviewSession, InterviewMessage, InterviewFeedback, SavedQuestion
 from models.role import TargetRole, RoleDimensionModel
@@ -17,6 +18,7 @@ from schemas.interview import (
     SavedQuestionCreate, SavedQuestionUpdate,
 )
 from services.llm import generate_session_feedback, get_next_interview_question
+from services.auth import decode_token
 from services.memory_manager import (
     build_session_system_prompt,
     update_long_term_memory,
@@ -28,10 +30,9 @@ from services.computation import (
     compute_weakness_vector,
     build_gap_summary,
 )
+from deps import get_current_user_key
 
 router = APIRouter(prefix="/interview", tags=["interview"])
-
-USER_KEY = "default"
 
 # Per-session state (in-memory for WebSocket duration)
 # In production, use Redis for multi-instance support
@@ -42,11 +43,15 @@ active_sessions: dict[int, dict] = {}
 async def create_session(
     data: InterviewSessionCreate,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
+    persona = INTERVIEWER_PERSONAS.get(data.interviewer_id, INTERVIEWER_PERSONAS["alex"])
     session = InterviewSession(
-        user_key=USER_KEY,
+        user_key=user_key,
         role_id=data.role_id,
         interviewer_id=data.interviewer_id,
+        interviewer_name=persona["name"],
+        interviewer_avatar=persona["avatar"],
         transcript_consent=data.transcript_consent,
         status="pending",
     )
@@ -57,10 +62,13 @@ async def create_session(
 
 
 @router.get("/sessions")
-async def list_sessions(db: AsyncSession = Depends(get_db)):
+async def list_sessions(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     result = await db.execute(
         select(InterviewSession)
-        .where(InterviewSession.user_key == USER_KEY)
+        .where(InterviewSession.user_key == user_key)
         .order_by(InterviewSession.created_at.desc())
         .limit(20)
     )
@@ -173,7 +181,11 @@ async def get_session_feedback(session_id: int, db: AsyncSession = Depends(get_d
 
 
 @router.websocket("/sessions/{session_id}/stream")
-async def interview_websocket(websocket: WebSocket, session_id: int):
+async def interview_websocket(
+    websocket: WebSocket,
+    session_id: int,
+    token: str = Query(...),
+):
     """
     WebSocket for live mock interview.
 
@@ -193,12 +205,22 @@ async def interview_websocket(websocket: WebSocket, session_id: int):
       {"type": "feedback_ready"}                  — feedback generated, fetch via REST
       {"type": "error", "content": "..."}
     """
+    # Authenticate via query-param token (WebSocket can't set headers)
+    try:
+        ws_user_key = decode_token(token)
+    except JWTError:
+        await websocket.close(code=4001)
+        return
+
     await websocket.accept()
 
     async with AsyncSessionLocal() as db:
-        # Load session
+        # Load session and verify ownership
         result = await db.execute(
-            select(InterviewSession).where(InterviewSession.id == session_id)
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.user_key == ws_user_key,
+            )
         )
         session = result.scalar_one_or_none()
         if not session:
@@ -421,27 +443,43 @@ async def _end_session(
     except Exception:
         feedback_data = {
             "overall_score": 70,
+            "overall_rating": "Good",
+            "summary": "The candidate completed the interview session.",
             "strengths": ["Completed the interview session"],
             "improvements": ["Add more specific examples with metrics"],
             "recommended_actions": ["Practice STAR method responses"],
             "dimension_scores": {"communication_clarity": 3.0},
+            "transcript_items": [],
         }
+
+    # Derive overall_rating if LLM didn't return it
+    score = feedback_data.get("overall_score", 70)
+    overall_rating = feedback_data.get("overall_rating") or (
+        "Excellent" if score >= 85 else "Good" if score >= 60 else "Needs Improvement"
+    )
+
+    # Update session fields
+    session.status = "completed"
+    session.ended_at = datetime.utcnow()
+    session.overall_rating = overall_rating
+    session.summary = feedback_data.get("summary", "")
+    if session.started_at and session.ended_at:
+        session.duration = int((session.ended_at - session.started_at).total_seconds())
 
     # Save feedback
     fb = InterviewFeedback(
         session_id=session_id,
-        user_key=USER_KEY,
-        overall_score=feedback_data.get("overall_score", 70),
+        user_key=session.user_key,
+        overall_score=score,
         strengths=feedback_data.get("strengths", []),
         improvements=feedback_data.get("improvements", []),
         recommended_actions=feedback_data.get("recommended_actions", []),
         transcript=transcript if session.transcript_consent else "",
         dimension_scores=feedback_data.get("dimension_scores", {}),
+        transcript_items=feedback_data.get("transcript_items", []),
     )
     db.add(fb)
 
-    session.status = "completed"
-    session.ended_at = datetime.utcnow()
     await db.commit()
     await db.refresh(fb)
 
@@ -462,6 +500,33 @@ async def _end_session(
     )
 
 
+# ─── Transcript Notes ────────────────────────────────────────────────────────
+
+@router.patch("/sessions/{session_id}/feedback/notes/{item_index}")
+async def update_transcript_note(
+    session_id: int,
+    item_index: int,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist a user's reflection note on a specific transcript Q&A item."""
+    result = await db.execute(
+        select(InterviewFeedback).where(InterviewFeedback.session_id == session_id)
+    )
+    fb = result.scalar_one_or_none()
+    if not fb:
+        raise HTTPException(404, "Feedback not found for this session")
+
+    items = list(fb.transcript_items or [])
+    if item_index < 0 or item_index >= len(items):
+        raise HTTPException(404, f"transcript_items index {item_index} out of range")
+
+    items[item_index] = {**items[item_index], "note": body.get("note", "")}
+    fb.transcript_items = items
+    await db.commit()
+    return {"ok": True}
+
+
 # ─── Question Bank CRUD ──────────────────────────────────────────────────────
 
 @router.get("/questions")
@@ -469,9 +534,10 @@ async def list_saved_questions(
     role_id: str | None = None,
     question_type: str | None = None,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
     """List saved questions, optionally filtered by role_id and/or type."""
-    query = select(SavedQuestion).where(SavedQuestion.user_key == USER_KEY)
+    query = select(SavedQuestion).where(SavedQuestion.user_key == user_key)
     if role_id:
         query = query.where(SavedQuestion.role_id == role_id)
     if question_type:
@@ -502,12 +568,13 @@ async def list_saved_questions(
 async def create_saved_question(
     data: SavedQuestionCreate,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
     """Save a question to the Question Bank."""
     # Check for duplicates
     existing = await db.execute(
         select(SavedQuestion).where(
-            SavedQuestion.user_key == USER_KEY,
+            SavedQuestion.user_key == user_key,
             SavedQuestion.role_id == data.role_id,
             SavedQuestion.question == data.question,
         )
@@ -516,7 +583,7 @@ async def create_saved_question(
         raise HTTPException(409, "This question is already saved for this role")
 
     q = SavedQuestion(
-        user_key=USER_KEY,
+        user_key=user_key,
         role_id=data.role_id,
         type=data.type,
         question=data.question,
@@ -548,12 +615,13 @@ async def update_saved_question(
     question_id: int,
     data: SavedQuestionUpdate,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
     """Update a saved question's answer, chat history, or transcription."""
     result = await db.execute(
         select(SavedQuestion).where(
             SavedQuestion.id == question_id,
-            SavedQuestion.user_key == USER_KEY,
+            SavedQuestion.user_key == user_key,
         )
     )
     q = result.scalar_one_or_none()
@@ -589,12 +657,13 @@ async def update_saved_question(
 async def delete_saved_question(
     question_id: int,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
     """Delete a saved question."""
     result = await db.execute(
         select(SavedQuestion).where(
             SavedQuestion.id == question_id,
-            SavedQuestion.user_key == USER_KEY,
+            SavedQuestion.user_key == user_key,
         )
     )
     q = result.scalar_one_or_none()

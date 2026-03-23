@@ -10,21 +10,20 @@ from models.dimension import UserDimensionScore, GapSnapshot
 from services.llm import generate_interview_prep, refine_prep_with_chat
 from services.computation import compute_match_score, build_gap_summary, build_profile_summary
 from schemas.compute import PrepGenerateRequest, PrepChatRequest
+from deps import get_current_user_key
 from datetime import datetime
 
 router = APIRouter(prefix="/prep", tags=["prep"])
 
-USER_KEY = "default"
 
-
-async def get_gap_summary_for_role(db: AsyncSession, role_id: int) -> str:
+async def get_gap_summary_for_role(db: AsyncSession, role_id: int, user_key: str) -> str:
     dim_result = await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )
     dim_model = dim_result.scalar_one_or_none()
 
     uds_result = await db.execute(
-        select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
+        select(UserDimensionScore).where(UserDimensionScore.user_key == user_key)
     )
     uds_list = uds_result.scalars().all()
     user_scores = {u.dimension: u.score for u in uds_list}
@@ -41,17 +40,18 @@ async def generate_prep(
     role_id: int,
     data: PrepGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
     result = await db.execute(select(TargetRole).where(TargetRole.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
         raise HTTPException(404, "Role not found")
 
-    gap_summary = await get_gap_summary_for_role(db, role_id)
+    gap_summary = await get_gap_summary_for_role(db, role_id, user_key)
 
     from models.user import UserProfile, WorkExperience
     profile_result = await db.execute(
-        select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        select(UserProfile).where(UserProfile.user_key == user_key)
     )
     profile = profile_result.scalar_one_or_none()
 

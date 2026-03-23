@@ -22,7 +22,7 @@ import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion, NavigationSource } from './types';
-import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole } from './api';
+import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole, login, register, getToken, clearToken } from './api';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
@@ -148,7 +148,9 @@ const EMPTY_PROFILE: UserProfile = {
 
 const App: React.FC = () => {
   // ── Auth state ──────────────────────────────────────────────────────────────
-  const [authMode, setAuthMode] = useState<'LOGIN' | 'GUEST' | 'USER'>('LOGIN');
+  const [authMode, setAuthMode] = useState<'LOGIN' | 'GUEST' | 'USER'>(() =>
+    getToken() ? 'USER' : 'LOGIN'
+  );
 
   const handleGuest = () => {
     setUserProfile(INITIAL_PROFILE);
@@ -157,14 +159,19 @@ const App: React.FC = () => {
     setAuthMode('GUEST');
   };
 
-  const handleSignIn = (_email: string, _password: string) => {
+  const handleSignIn = async (email: string, password: string, tab: 'signin' | 'signup') => {
+    if (tab === 'signup') {
+      await register(email, password);
+    } else {
+      await login(email, password);
+    }
     setUserProfile(EMPTY_PROFILE);
     setRoles([]);
     setSavedQuestions([]);
     setAuthMode('USER');
   };
 
-  // Load all data from Supabase when USER logs in
+  // Load all data from backend when USER logs in
   useEffect(() => {
     if (authMode === 'USER') {
       getProfile().then((p: any) => {
@@ -175,7 +182,15 @@ const App: React.FC = () => {
     }
   }, [authMode]);
 
+  // Auto-logout on 401 (token expired/invalid)
+  useEffect(() => {
+    const onUnauthorized = () => handleLogout();
+    window.addEventListener('landit:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('landit:unauthorized', onUnauthorized);
+  }, []);
+
   const handleLogout = () => {
+    clearToken();
     setAuthMode('LOGIN');
     setView('DASHBOARD');
     setSelectedRole(null);

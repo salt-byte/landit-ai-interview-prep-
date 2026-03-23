@@ -261,6 +261,8 @@ Transcript:
 Provide structured feedback. Return ONLY valid JSON:
 {{
   "overall_score": <int 0-100>,
+  "overall_rating": "Excellent" | "Good" | "Needs Improvement",
+  "summary": "2-3 sentence summary of the candidate's overall performance",
   "strengths": ["point 1", "point 2", "point 3"],
   "improvements": ["point 1", "point 2", "point 3"],
   "recommended_actions": ["specific action 1", "specific action 2"],
@@ -268,10 +270,21 @@ Provide structured feedback. Return ONLY valid JSON:
     "communication_clarity": <float 1-5>,
     "structured_thinking": <float 1-5>,
     "narrative_coherence": <float 1-5>
-  }}
-}}"""
+  }},
+  "transcript_items": [
+    {{
+      "question": "the interviewer question",
+      "answer": "the candidate answer",
+      "rating": "Strong" | "Pass" | "Needs Improvement",
+      "feedback": "one sentence of specific feedback on this answer"
+    }}
+  ]
+}}
 
-    raw = await _generate(prompt, max_tokens=1024)
+For overall_rating: use "Excellent" if overall_score >= 85, "Good" if >= 60, "Needs Improvement" otherwise.
+Extract each distinct Q&A exchange from the transcript into transcript_items."""
+
+    raw = await _generate(prompt, max_tokens=2048)
     return _parse_json(raw)
 
 

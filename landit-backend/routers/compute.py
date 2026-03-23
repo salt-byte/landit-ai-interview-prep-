@@ -17,11 +17,10 @@ from services.computation import (
 )
 from services.memory_manager import get_or_create_weakness_vector
 from config import DIMENSIONS, DIMENSION_LABELS
+from deps import get_current_user_key
 from datetime import datetime
 
 router = APIRouter(prefix="/compute", tags=["compute"])
-
-USER_KEY = "default"
 
 
 def get_user_scores_from_db(uds_list) -> dict[str, float]:
@@ -29,7 +28,11 @@ def get_user_scores_from_db(uds_list) -> dict[str, float]:
 
 
 @router.get("/gap-matrix/{role_id}")
-async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
+async def get_gap_matrix(
+    role_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     dim_model_result = await db.execute(
         select(RoleDimensionModel).where(RoleDimensionModel.role_id == role_id)
     )
@@ -38,7 +41,7 @@ async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Run /roles/{id}/analyze-jd first to generate dimension model")
 
     uds_result = await db.execute(
-        select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
+        select(UserDimensionScore).where(UserDimensionScore.user_key == user_key)
     )
     uds_list = uds_result.scalars().all()
     user_scores = get_user_scores_from_db(uds_list)
@@ -47,7 +50,7 @@ async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
 
     snapshot = GapSnapshot(
         role_id=role_id,
-        user_key=USER_KEY,
+        user_key=user_key,
         match_score=match_score,
         gap_data={g["dimension"]: g for g in gaps},
     )
@@ -64,9 +67,12 @@ async def get_gap_matrix(role_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/user-dimensions")
-async def get_user_dimensions(db: AsyncSession = Depends(get_db)):
+async def get_user_dimensions(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     result = await db.execute(
-        select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
+        select(UserDimensionScore).where(UserDimensionScore.user_key == user_key)
     )
     uds_list = result.scalars().all()
 
@@ -85,13 +91,16 @@ async def get_user_dimensions(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/extract-user-dimensions")
-async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
+async def extract_user_dimensions(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     from models.user import UserProfile, Education, WorkExperience, Project
     from services.llm import extract_dimension_scores
     from services.computation import build_profile_summary
 
     profile_result = await db.execute(
-        select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        select(UserProfile).where(UserProfile.user_key == user_key)
     )
     profile = profile_result.scalar_one_or_none()
     if not profile:
@@ -127,7 +136,7 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
 
         result = await db.execute(
             select(UserDimensionScore).where(
-                UserDimensionScore.user_key == USER_KEY,
+                UserDimensionScore.user_key == user_key,
                 UserDimensionScore.dimension == dim,
             )
         )
@@ -141,7 +150,7 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
                 uds.updated_at = datetime.utcnow()
         else:
             db.add(UserDimensionScore(
-                user_key=USER_KEY,
+                user_key=user_key,
                 dimension=dim,
                 score=score,
                 confidence=confidence,
@@ -153,8 +162,11 @@ async def extract_user_dimensions(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/weakness-vector")
-async def get_weakness_vector(db: AsyncSession = Depends(get_db)):
-    wv = await get_or_create_weakness_vector(db, USER_KEY)
+async def get_weakness_vector(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    wv = await get_or_create_weakness_vector(db, user_key)
     return {
         "vector": wv.vector,
         "questions_asked_count": len(wv.questions_asked),
@@ -164,11 +176,14 @@ async def get_weakness_vector(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/ability-curve")
-async def get_ability_curve(db: AsyncSession = Depends(get_db)):
+async def get_ability_curve(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
     result = await db.execute(
         select(InterviewFeedback, InterviewSession.started_at)
         .join(InterviewSession)
-        .where(InterviewSession.user_key == USER_KEY)
+        .where(InterviewSession.user_key == user_key)
         .order_by(InterviewFeedback.created_at.asc())
         .limit(20)
     )

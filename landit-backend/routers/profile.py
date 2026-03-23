@@ -13,21 +13,20 @@ from models.user import UserProfile, Education, WorkExperience, Project, Documen
 from schemas.user import UserProfileUpdate
 from services.resume_parser import extract_profile_from_resume_async
 from services.storage import upload_file, detect_file_type, delete_file, read_text_file
+from deps import get_current_user_key
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
-USER_KEY = "default"
 
-
-async def get_or_create_profile(db: AsyncSession) -> UserProfile:
+async def get_or_create_profile(db: AsyncSession, user_key: str) -> UserProfile:
     result = await db.execute(
-        select(UserProfile).where(UserProfile.user_key == USER_KEY)
+        select(UserProfile).where(UserProfile.user_key == user_key)
     )
     profile = result.scalar_one_or_none()
     if profile:
         return profile
 
-    profile = UserProfile(user_key=USER_KEY)
+    profile = UserProfile(user_key=user_key)
     db.add(profile)
     try:
         await db.commit()
@@ -36,7 +35,7 @@ async def get_or_create_profile(db: AsyncSession) -> UserProfile:
     except IntegrityError:
         await db.rollback()
         result = await db.execute(
-            select(UserProfile).where(UserProfile.user_key == USER_KEY)
+            select(UserProfile).where(UserProfile.user_key == user_key)
         )
         profile = result.scalar_one_or_none()
         if profile:
@@ -122,8 +121,11 @@ def profile_to_response(profile: UserProfile, edu, exp, proj) -> dict:
 
 
 @router.get("")
-async def get_profile(db: AsyncSession = Depends(get_db)):
-    profile = await get_or_create_profile(db)
+async def get_profile(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    profile = await get_or_create_profile(db, user_key)
     edu = (await db.execute(select(Education).where(Education.profile_id == profile.id))).scalars().all()
     exp = (await db.execute(select(WorkExperience).where(WorkExperience.profile_id == profile.id))).scalars().all()
     proj = (await db.execute(select(Project).where(Project.profile_id == profile.id))).scalars().all()
@@ -131,8 +133,12 @@ async def get_profile(db: AsyncSession = Depends(get_db)):
 
 
 @router.put("")
-async def update_profile(data: UserProfileUpdate, db: AsyncSession = Depends(get_db)):
-    profile = await get_or_create_profile(db)
+async def update_profile(
+    data: UserProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    profile = await get_or_create_profile(db, user_key)
 
     profile.full_name = data.full_name
     profile.profile_photo = data.profile_photo
@@ -206,8 +212,11 @@ async def update_profile(data: UserProfileUpdate, db: AsyncSession = Depends(get
 
 
 @router.get("/documents")
-async def list_documents(db: AsyncSession = Depends(get_db)):
-    profile = await get_or_create_profile(db)
+async def list_documents(
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    profile = await get_or_create_profile(db, user_key)
     result = await db.execute(
         select(Document).where(Document.profile_id == profile.id).order_by(Document.created_at.desc())
     )
@@ -229,8 +238,9 @@ async def upload_document(
     file: UploadFile = File(...),
     type_override: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
-    profile = await get_or_create_profile(db)
+    profile = await get_or_create_profile(db, user_key)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
     detected_type = type_override or detect_file_type(file.filename or "")
@@ -261,8 +271,9 @@ async def upload_document(
 async def upload_and_parse_resume(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
 ):
-    profile = await get_or_create_profile(db)
+    profile = await get_or_create_profile(db, user_key)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
     text = await read_text_file(file_path)
