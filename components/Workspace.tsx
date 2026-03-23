@@ -501,6 +501,16 @@ const sanitizeText = (text: string): string => {
     .trim();
 };
 
+/** Convert plain text with newlines into HTML paragraphs for TipTap editor */
+const textToHtml = (text: string): string => {
+  return text
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+};
+
 /** Parse backend Markdown prep document (### Q: / **Answer Framework:**) into Q&A pairs */
 const parsePrepContent = (content: string, limit: number): { q: string; a?: string }[] => {
   const results: { q: string; a?: string }[] = [];
@@ -1035,12 +1045,13 @@ export const InterviewPrepBuilder: React.FC<{
       });
 
       const answer = sanitizeText(response.text || "");
+      const answerHtml = textToHtml(answer);
       const updatedQuestions = [...generatedQuestions];
-      updatedQuestions[index] = { ...updatedQuestions[index], a: answer };
+      updatedQuestions[index] = { ...updatedQuestions[index], a: answerHtml };
       setGeneratedQuestions(updatedQuestions);
 
       if (editorRef.current) {
-        editorRef.current.setContent(answer);
+        editorRef.current.setContent(answerHtml);
       }
 
       setChatHistory(prev => [...prev, {
@@ -1158,11 +1169,12 @@ export const InterviewPrepBuilder: React.FC<{
         // If the user asked to modify the answer and we have a selected question, update it
         const modifyKeywords = ["shorter", "concise", "STAR", "format", "rewrite", "improve", "段", "简短", "修改", "分段"];
         if (currentQ && selectedQuestionIndex !== null && modifyKeywords.some(k => userMsg.toLowerCase().includes(k))) {
+          const improvedHtml = textToHtml(sanitizeText(aiReply));
           const updatedQuestions = [...generatedQuestions];
-          updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: sanitizeText(aiReply) };
+          updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improvedHtml };
           setGeneratedQuestions(updatedQuestions);
           if (editorRef.current) {
-            editorRef.current.setContent(sanitizeText(aiReply));
+            editorRef.current.setContent(improvedHtml);
           }
           setChatHistory(prev => [...prev, { sender: 'AI', text: "I've updated the answer based on your request." }]);
         } else {
@@ -1191,13 +1203,14 @@ export const InterviewPrepBuilder: React.FC<{
       });
 
       const improved = sanitizeText(qResponse.text || "");
+      const improvedHtml = textToHtml(improved);
 
       if (currentQ && selectedQuestionIndex !== null && improved) {
         const updatedQuestions = [...generatedQuestions];
-        updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improved };
+        updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improvedHtml };
         setGeneratedQuestions(updatedQuestions);
         if (editorRef.current) {
-          editorRef.current.setContent(improved);
+          editorRef.current.setContent(improvedHtml);
         }
         setChatHistory(prev => [...prev, { sender: 'AI', text: "Done! I've updated the answer." }]);
       } else {
@@ -1763,7 +1776,7 @@ export const InterviewPrepBuilder: React.FC<{
                           "{ (msg as any).quote }"
                         </div>
                       )}
-                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-white border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>
+                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm whitespace-pre-wrap ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-white border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>
                         {msg.text}
                       </div>
                       {((idx === 0 && msg.sender === 'AI') || msg.text.includes("I've transcribed your recording")) && (
