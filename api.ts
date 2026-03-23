@@ -1,22 +1,16 @@
 /**
  * API client for LandIt backend.
  * Base URL is configured via VITE_API_URL environment variable.
+ * Auth is handled by Supabase — tokens come from supabase.auth.getSession().
  */
+
+import { supabase } from './lib/supabase';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
 
-const TOKEN_KEY = 'landit_token';
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+async function getToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
 }
 
 async function request<T>(
@@ -33,8 +27,8 @@ async function request<T>(
     headers['Content-Type'] = 'application/json';
   }
 
-  // Inject JWT token if available
-  const token = getToken();
+  // Inject Supabase JWT token if available
+  const token = await getToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -42,8 +36,7 @@ async function request<T>(
   const res = await fetch(url, { ...options, headers });
 
   if (res.status === 401) {
-    clearToken();
-    window.dispatchEvent(new Event('landit:unauthorized'));
+    await supabase.auth.signOut();
   }
 
   if (!res.ok) {
@@ -52,38 +45,6 @@ async function request<T>(
   }
 
   return res.json();
-}
-
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-export async function login(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = await res.json();
-  setToken(data.access_token);
-  return data;
-}
-
-export async function register(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-  const data = await res.json();
-  setToken(data.access_token);
-  return data;
 }
 
 // ─── Profile ────────────────────────────────────────────────────────────────
@@ -265,9 +226,9 @@ export async function updateTranscriptNote(sessionId: string, itemIndex: number,
   });
 }
 
-export function createInterviewWS(sessionId: string): WebSocket {
+export async function createInterviewWS(sessionId: string): Promise<WebSocket> {
   const wsBase = API_BASE.replace(/^http/, 'ws');
-  const token = getToken() || '';
+  const token = await getToken() || '';
   return new WebSocket(`${wsBase}/api/interview/sessions/${sessionId}/stream?token=${token}`);
 }
 

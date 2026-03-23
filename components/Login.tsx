@@ -27,9 +27,11 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       await onSignIn(email, password, tab);
     } catch (err: any) {
       const msg = err?.message || '';
-      if (msg.includes('400')) setError('Email already registered.');
-      else if (msg.includes('401')) setError('Invalid email or password.');
-      else setError('Something went wrong. Please try again.');
+      if (msg.includes('already registered') || msg.includes('already been registered')) setError('Email already registered.');
+      else if (msg.includes('Invalid login credentials')) setError('Invalid email or password.');
+      else if (msg.includes('Password should be at least')) setError('Password must be at least 6 characters.');
+      else if (msg.includes('Unable to validate email')) setError('Please enter a valid email address.');
+      else setError(msg || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

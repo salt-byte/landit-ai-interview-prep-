@@ -22,7 +22,8 @@ import QuestionBank from './components/QuestionBank';
 import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion, NavigationSource } from './types';
-import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole, login, register, getToken, clearToken } from './api';
+import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole } from './api';
+import { supabase } from './lib/supabase';
 
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
@@ -148,9 +149,26 @@ const EMPTY_PROFILE: UserProfile = {
 
 const App: React.FC = () => {
   // ── Auth state ──────────────────────────────────────────────────────────────
-  const [authMode, setAuthMode] = useState<'LOGIN' | 'GUEST' | 'USER'>(() =>
-    getToken() ? 'USER' : 'LOGIN'
-  );
+  const [authMode, setAuthMode] = useState<'LOADING' | 'LOGIN' | 'GUEST' | 'USER'>('LOADING');
+
+  // Initialize auth state from Supabase session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthMode(session ? 'USER' : 'LOGIN');
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setAuthMode('USER');
+      } else {
+        setAuthMode('LOGIN');
+        setView('DASHBOARD');
+        setSelectedRole(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleGuest = () => {
     setUserProfile(INITIAL_PROFILE);
@@ -161,14 +179,16 @@ const App: React.FC = () => {
 
   const handleSignIn = async (email: string, password: string, tab: 'signin' | 'signup') => {
     if (tab === 'signup') {
-      await register(email, password);
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
     } else {
-      await login(email, password);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
     }
+    // onAuthStateChange will fire and set authMode to 'USER'
     setUserProfile(EMPTY_PROFILE);
     setRoles([]);
     setSavedQuestions([]);
-    setAuthMode('USER');
   };
 
   // Load all data from backend when USER logs in
@@ -182,18 +202,9 @@ const App: React.FC = () => {
     }
   }, [authMode]);
 
-  // Auto-logout on 401 (token expired/invalid)
-  useEffect(() => {
-    const onUnauthorized = () => handleLogout();
-    window.addEventListener('landit:unauthorized', onUnauthorized);
-    return () => window.removeEventListener('landit:unauthorized', onUnauthorized);
-  }, []);
-
-  const handleLogout = () => {
-    clearToken();
-    setAuthMode('LOGIN');
-    setView('DASHBOARD');
-    setSelectedRole(null);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    // onAuthStateChange will handle setting authMode to 'LOGIN'
   };
 
   // ── App state ───────────────────────────────────────────────────────────────
@@ -469,6 +480,15 @@ const App: React.FC = () => {
       <span className="flex-1 text-left">{label}</span>
     </button>
   );
+
+  // Show loading spinner while checking session
+  if (authMode === 'LOADING') {
+    return (
+      <div className="min-h-screen bg-[#F0F4F9] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-[#0B57D0]/30 border-t-[#0B57D0] rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   // Show login page until user authenticates
   if (authMode === 'LOGIN') {

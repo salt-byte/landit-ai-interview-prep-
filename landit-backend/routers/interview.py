@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from jose import JWTError
+from jose import JWTError, jwt
 from database import get_db, AsyncSessionLocal
 from models.interview import InterviewSession, InterviewMessage, InterviewFeedback, SavedQuestion
 from models.role import TargetRole, RoleDimensionModel
@@ -18,7 +18,7 @@ from schemas.interview import (
     SavedQuestionCreate, SavedQuestionUpdate,
 )
 from services.llm import generate_session_feedback, get_next_interview_question
-from services.auth import decode_token
+from config import settings
 from services.memory_manager import (
     build_session_system_prompt,
     update_long_term_memory,
@@ -207,7 +207,15 @@ async def interview_websocket(
     """
     # Authenticate via query-param token (WebSocket can't set headers)
     try:
-        ws_user_key = decode_token(token)
+        payload = jwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_aud": False},
+        )
+        ws_user_key = payload.get("sub")
+        if not ws_user_key:
+            raise JWTError("Missing sub claim")
     except JWTError:
         await websocket.close(code=4001)
         return
@@ -248,7 +256,7 @@ async def interview_websocket(
                 )
                 dim_model = dim_result.scalar_one_or_none()
                 uds_result = await db.execute(
-                    select(UserDimensionScore).where(UserDimensionScore.user_key == USER_KEY)
+                    select(UserDimensionScore).where(UserDimensionScore.user_key == ws_user_key)
                 )
                 uds_list = uds_result.scalars().all()
                 user_scores = {u.dimension: u.score for u in uds_list}
@@ -260,7 +268,7 @@ async def interview_websocket(
         # Build system prompt from long-term memory
         system_prompt = await build_session_system_prompt(
             db=db,
-            user_key=USER_KEY,
+            user_key=ws_user_key,
             interviewer_id=session.interviewer_id,
             role_title=role_title,
             company=company,

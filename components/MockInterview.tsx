@@ -883,7 +883,7 @@ Instructions:
       setSessionId(session.id);
       setWsStartSent(false);
 
-      const ws = createInterviewWS(session.id);
+      const ws = await createInterviewWS(session.id);
       wsRef.current = ws;
 
       ws.onmessage = (event) => {
