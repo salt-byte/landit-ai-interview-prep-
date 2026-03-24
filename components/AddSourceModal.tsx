@@ -35,6 +35,10 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'PARSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [parsedContent, setParsedContent] = useState('');
 
+  // Pre-upload: start uploading as soon as file is selected
+  const preUploadPromiseRef = useRef<Promise<any> | null>(null);
+  const preUploadTypeRef = useRef<string>('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,22 +49,34 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
 
       // Auto-suggest type
       const lowerName = file.name.toLowerCase();
-      if (lowerName.includes('resume') || lowerName.includes('cv')) setSelectedFileType('Resume');
-      else if (lowerName.includes('portfolio')) setSelectedFileType('Portfolio');
-      else if (lowerName.includes('sample')) setSelectedFileType('Work Sample');
-      else if (lowerName.includes('jd') || lowerName.includes('job')) setSelectedFileType('Job Description');
-      else setSelectedFileType('Notes');
+      let detectedType = 'Notes';
+      if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('简历')) detectedType = 'Resume';
+      else if (lowerName.includes('portfolio')) detectedType = 'Portfolio';
+      else if (lowerName.includes('sample')) detectedType = 'Work Sample';
+      else if (lowerName.includes('jd') || lowerName.includes('job')) detectedType = 'Job Description';
+      setSelectedFileType(detectedType);
+
+      // Start uploading immediately in the background (non-guest, non-role)
+      if (!isGuest && !roleId) {
+        preUploadTypeRef.current = detectedType;
+        setUploadStatus('UPLOADING');
+        if (detectedType === 'Resume') {
+          setUploadStatus('PARSING');
+          preUploadPromiseRef.current = uploadAndParseDocument(file);
+        } else {
+          preUploadPromiseRef.current = uploadDocument(file);
+        }
+      }
     }
   };
 
-  // Flow A: Upload File — calls real backend API (or creates local entry in GUEST mode)
+  // Flow A: Upload File — awaits pre-started upload or starts new one
   const handleUploadFile = async () => {
     if (!pendingFile || !pendingFileObj) return;
-    setUploadStatus('UPLOADING');
     try {
       if (isGuest) {
-        // GUEST mode: create a local-only entry without API call
-        await new Promise(r => setTimeout(r, 500)); // simulate brief delay
+        setUploadStatus('UPLOADING');
+        await new Promise(r => setTimeout(r, 500));
         const localFile: UploadedFile = {
           id: `local-${Date.now()}`,
           name: pendingFile.name,
@@ -73,21 +89,41 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         return;
       }
       if (roleId) {
+        setUploadStatus('UPLOADING');
         const result = await uploadRoleSource(roleId, pendingFileObj);
         setUploadStatus('SUCCESS');
         onAddSource(result);
-      } else if (selectedFileType === 'Resume') {
-        setUploadStatus('PARSING');
-        const result = await uploadAndParseDocument(pendingFileObj);
+      } else if (preUploadPromiseRef.current && preUploadTypeRef.current === selectedFileType) {
+        // Await the pre-started upload
+        if (uploadStatus !== 'PARSING') setUploadStatus('PARSING');
+        const result = await preUploadPromiseRef.current;
+        preUploadPromiseRef.current = null;
         setUploadStatus('SUCCESS');
-        onAddSource(result.document);
-        if (result.extracted && onProfileExtracted) {
-          onProfileExtracted(result.extracted);
+        if (selectedFileType === 'Resume') {
+          onAddSource(result.document);
+          if (result.extracted && onProfileExtracted) {
+            onProfileExtracted(result.extracted);
+          }
+        } else {
+          onAddSource({ id: String(result.id ?? Date.now()), name: result.name, type: result.type, date: result.date });
         }
       } else {
-        const result = await uploadDocument(pendingFileObj);
-        setUploadStatus('SUCCESS');
-        onAddSource({ id: String(result.id ?? Date.now()), name: result.name, type: result.type, date: result.date });
+        // Type changed or no pre-upload, start fresh
+        preUploadPromiseRef.current = null;
+        if (selectedFileType === 'Resume') {
+          setUploadStatus('PARSING');
+          const result = await uploadAndParseDocument(pendingFileObj);
+          setUploadStatus('SUCCESS');
+          onAddSource(result.document);
+          if (result.extracted && onProfileExtracted) {
+            onProfileExtracted(result.extracted);
+          }
+        } else {
+          setUploadStatus('UPLOADING');
+          const result = await uploadDocument(pendingFileObj);
+          setUploadStatus('SUCCESS');
+          onAddSource({ id: String(result.id ?? Date.now()), name: result.name, type: result.type, date: result.date });
+        }
       }
       setTimeout(handleClose, 800);
     } catch {
@@ -134,9 +170,12 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   const handleClose = () => {
     setStep('SELECT');
     setPendingFile(null);
+    setPendingFileObj(null);
     setLinkUrl('');
     setParsedContent('');
     setUploadStatus('IDLE');
+    preUploadPromiseRef.current = null;
+    preUploadTypeRef.current = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
     onClose();
   };
