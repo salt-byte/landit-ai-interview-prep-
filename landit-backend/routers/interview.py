@@ -60,6 +60,61 @@ async def create_session(
     return {"id": session.id, "status": session.status}
 
 
+@router.post("/sessions/{session_id}/finish")
+async def finish_session(
+    session_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user_key: str = Depends(get_current_user_key),
+):
+    """Finish a Gemini Live session: receive transcript, generate feedback."""
+    result = await db.execute(
+        select(InterviewSession).where(InterviewSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    # Build conversation_history from transcript entries
+    transcript_entries = data.get("transcript", [])
+    conversation_history = []
+    questions_asked = []
+    for entry in transcript_entries:
+        role = entry.get("role", "")
+        text = entry.get("text", "")
+        if role == "ai":
+            conversation_history.append({"role": "assistant", "content": text})
+            questions_asked.append(text)
+        elif role == "user":
+            conversation_history.append({"role": "user", "content": text})
+
+    # Resolve role info
+    role_title = ""
+    company = ""
+    gap_summary = ""
+    if session.role_id:
+        role_result = await db.execute(select(TargetRole).where(TargetRole.id == session.role_id))
+        role = role_result.scalar_one_or_none()
+        if role:
+            role_title = role.title
+            company = role.company
+
+    session.started_at = session.started_at or session.created_at
+    await _end_session(
+        db=db,
+        session=session,
+        conversation_history=conversation_history,
+        questions_asked=questions_asked,
+        role_title=role_title,
+        company=company,
+        session_id=session_id,
+        gap_summary=gap_summary,
+        user_scores={},
+    )
+
+    return {"status": "completed", "session_id": session_id}
+
+
 @router.get("/sessions")
 async def list_sessions(
     db: AsyncSession = Depends(get_db),

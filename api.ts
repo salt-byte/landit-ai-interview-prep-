@@ -219,6 +219,13 @@ export async function getInterviewFeedback(sessionId: string) {
   return request<any>(`/api/interview/sessions/${sessionId}/feedback`);
 }
 
+export async function finishSession(sessionId: number, transcript: {role: string, text: string}[]) {
+  return request<any>(`/api/interview/sessions/${sessionId}/finish`, {
+    method: 'POST',
+    body: JSON.stringify({ transcript }),
+  });
+}
+
 export async function updateTranscriptNote(sessionId: string, itemIndex: number, note: string) {
   return request<any>(`/api/interview/sessions/${sessionId}/feedback/notes/${itemIndex}`, {
     method: 'PATCH',

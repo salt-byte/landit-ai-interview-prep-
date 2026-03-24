@@ -43,7 +43,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { TargetRole, InterviewFeedback } from '../types';
-import { createInterviewSession, createInterviewWS, getInterviewFeedback } from '../api';
+import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession } from '../api';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 interface MockInterviewProps {
@@ -847,25 +847,42 @@ Instructions:
     // Update sessionResults for feedback display
     setSessionResults(qaPairs);
 
-    setTimeout(() => {
-      setIsFinishing(false);
-      setStep('FEEDBACK');
-      if (onSaveSession && workspace) {
-        const savedQuestions = qaPairs.map((res, idx) => ({
-          id: `live-${Date.now()}-${idx}`,
-          roleId: workspace.id,
-          type: settings.types[0] || 'General',
-          question: res.question,
-          answer: res.answer,
-          chatHistory: [],
-          transcription: res.answer,
-          lastModified: new Date().toISOString(),
-          savedAt: new Date().toISOString(),
-          source: 'LIVE_INTERVIEW' as const
-        }));
-        onSaveSession(savedQuestions);
-      }
-    }, 2000);
+    // Send transcript to backend for feedback generation
+    if (sessionId) {
+      finishSession(sessionId, transcript)
+        .then(() => getInterviewFeedback(String(sessionId)))
+        .then(fb => {
+          setRealFeedback(fb);
+          setIsFinishing(false);
+          setStep('FEEDBACK');
+        })
+        .catch(() => {
+          // Fallback: show feedback page without real data
+          setIsFinishing(false);
+          setStep('FEEDBACK');
+        });
+    } else {
+      setTimeout(() => {
+        setIsFinishing(false);
+        setStep('FEEDBACK');
+      }, 2000);
+    }
+
+    if (onSaveSession && workspace) {
+      const savedQuestions = qaPairs.map((res, idx) => ({
+        id: `live-${Date.now()}-${idx}`,
+        roleId: workspace.id,
+        type: settings.types[0] || 'General',
+        question: res.question,
+        answer: res.answer,
+        chatHistory: [],
+        transcription: res.answer,
+        lastModified: new Date().toISOString(),
+        savedAt: new Date().toISOString(),
+        source: 'LIVE_INTERVIEW' as const
+      }));
+      onSaveSession(savedQuestions);
+    }
   };
 
   // --- Start Interview Handler ---
