@@ -29,12 +29,8 @@ interface ProfileProps {
   completionPercentage: number;
 }
 
-// --- Mock Data (Files only) ---
-const INITIAL_FILES: UploadedFile[] = [
-  { id: '1', name: 'Claire_Liu_Resume_USC_PM.pdf', type: 'Resume', date: '2025-01-15' },
-  { id: '2', name: 'AI_Product_Case_Study.pdf', type: 'Portfolio', date: '2025-02-10' },
-  { id: '3', name: 'Data_Analysis_Sample.sql', type: 'Work Sample', date: '2025-02-12' },
-];
+// --- Initial file list (empty for new users) ---
+const INITIAL_FILES: UploadedFile[] = [];
 
 const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfile, completionPercentage }) => {
   const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);

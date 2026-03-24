@@ -68,7 +68,7 @@ def extract_profile_with_gemini(resume_text: str) -> dict:
 
     client = genai.Client(api_key=settings.gemini_api_key)
 
-    prompt = f"""You are a resume parser. Extract structured data from this resume text. Return ONLY valid JSON.
+    prompt = f"""You are a resume parser. Extract structured data from this resume text. The resume may be in any language (English, Chinese, etc.). Return ONLY valid JSON with all values in their original language.
 
 Return this exact schema (all fields required, use empty string "" or [] if missing):
 {{
