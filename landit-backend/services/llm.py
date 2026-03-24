@@ -221,20 +221,24 @@ async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
     """Extract job details from scraped page content."""
     prompt = f"""Extract job posting details from this web page content. Return ONLY valid JSON with ALL fields populated (use empty string if not found):
 {{
-  "title": "job title",
+  "title": "job title (clean, no internal codes)",
   "company": "company name",
-  "jd": "full job description text (responsibilities + requirements combined)",
-  "team_info": "team or department name if mentioned",
+  "jd": "ONLY the core job description: responsibilities and requirements. Do NOT include team introduction, company overview, or internship program descriptions here. Format cleanly with line breaks between sections. Remove any duplicated paragraphs.",
+  "team_info": "team or department name (short, e.g. 'Product Growth Team')",
   "location": "job location (city, state, remote, hybrid, etc.)",
   "employmentType": "Full-time, Part-time, Internship, or Contract",
-  "keyResponsibilities": "key responsibilities as bullet points, each starting with bullet",
-  "qualifications": "required and preferred qualifications as bullet points",
+  "keyResponsibilities": "key responsibilities as bullet points, each on a new line starting with •",
+  "qualifications": "required and preferred qualifications as bullet points, each on a new line starting with •",
   "companyOverview": "company description / about the company section",
-  "teamOverview": "team description if mentioned",
-  "additionalInfo": "salary, benefits, or other notable info"
+  "teamOverview": "team/department introduction paragraph (e.g. 'The TikTok product team aims to...'). Extract this SEPARATELY from the jd field.",
+  "additionalInfo": "salary, benefits, internship program details, or other notable info"
 }}
 
-IMPORTANT: If the page content is minimal (e.g. from a JavaScript-rendered site like Workday, Lever, Greenhouse), use the URL and any available hints to infer the job title, company, and other details. For the "jd" field, if the actual description is unavailable, write a realistic and helpful job description based on the role title and company that the candidate can use for interview prep. Clearly note it is inferred.
+IMPORTANT RULES:
+1. SEPARATE content into the right fields: team introductions go in "teamOverview", NOT in "jd". Company descriptions go in "companyOverview", NOT in "jd".
+2. DEDUPLICATE: if the same paragraph appears multiple times, include it only once.
+3. FORMAT the "jd" field cleanly — use line breaks between sections (Responsibilities, Requirements, etc.).
+4. If the page content is minimal (JS-rendered site), use the URL to infer details. For "jd", write a realistic description and note it is inferred.
 
 URL: {url}
 Content:
