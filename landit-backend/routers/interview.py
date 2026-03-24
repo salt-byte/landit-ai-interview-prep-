@@ -565,7 +565,7 @@ async def _end_session(
 
     await update_long_term_memory(
         db=db,
-        user_key=USER_KEY,
+        user_key=session.user_key,
         session_id=session_id,
         feedback=fb,
         weakness_vector=weakness_vector,
