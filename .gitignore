@@ -29,3 +29,4 @@ landit-backend/venv/
 landit-backend/__pycache__/
 landit-backend/*.db
 landit-backend/uploads/
+.vercel

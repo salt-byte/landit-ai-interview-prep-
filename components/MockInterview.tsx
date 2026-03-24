@@ -721,7 +721,7 @@ Instructions:
               }
             }
 
-            // Handle input transcription (what user said)
+            // Handle input transcription (what user said) — buffer until turn ends
             if (message.serverContent?.inputTranscription?.text) {
               const userText = message.serverContent.inputTranscription.text;
               if (userText.trim()) {
@@ -730,7 +730,7 @@ Instructions:
               }
             }
 
-            // Handle output transcription (subtitles)
+            // Handle output transcription (subtitles) — buffer until turn ends
             if (message.serverContent?.outputTranscription?.text) {
               const text = message.serverContent.outputTranscription.text;
 
