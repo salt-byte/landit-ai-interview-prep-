@@ -146,8 +146,8 @@ export const RoleContextBuilder: React.FC<{
 
   // Helper for Missing Indicator
   const isMissing = (val: string | undefined) => !val || val.trim() === '';
-  const MissingIndicator = ({ text = "Missing" }: { text?: string }) => (
-    <span className="inline-flex items-center gap-1 text-[10px] text-[#B3261E] font-bold uppercase tracking-wider bg-[#FFDAD6] px-2 py-0.5 rounded ml-2">
+  const MissingIndicator = ({ text = "Not provided" }: { text?: string }) => (
+    <span className="inline-flex items-center gap-1 text-[10px] text-[#444746] font-medium italic tracking-wide opacity-60">
       {text}
     </span>
   );
@@ -348,7 +348,7 @@ export const RoleContextBuilder: React.FC<{
                             />
                          ) : (
                             <div className="text-sm font-medium text-[#1F1F1F]">
-                               {isMissing(localRole.teamInfo) ? <MissingIndicator text="Missing Team"/> : localRole.teamInfo}
+                               {isMissing(localRole.teamInfo) ? <MissingIndicator text="Click Edit to add"/> : localRole.teamInfo}
                             </div>
                          )}
                       </div>
@@ -391,7 +391,7 @@ export const RoleContextBuilder: React.FC<{
                            />
                         ) : (
                            <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
-                              {isMissing(localRole.companyBackground) ? <MissingIndicator text="Missing Background"/> : localRole.companyBackground}
+                              {isMissing(localRole.companyBackground) ? <MissingIndicator text="Click Edit to add"/> : localRole.companyBackground}
                            </div>
                         )}
                       </div>
@@ -410,7 +410,7 @@ export const RoleContextBuilder: React.FC<{
                            />
                         ) : (
                            <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
-                              {isMissing(localRole.teamBackground) ? <MissingIndicator text="Missing Context"/> : localRole.teamBackground}
+                              {isMissing(localRole.teamBackground) ? <MissingIndicator text="Click Edit to add"/> : localRole.teamBackground}
                            </div>
                         )}
                       </div>
@@ -460,7 +460,7 @@ export const RoleContextBuilder: React.FC<{
                      />
                    ) : (
                      <p className="text-sm text-[#444746] leading-relaxed italic">
-                        {isMissing(localRole.additionalNotes) ? <MissingIndicator text="No notes added"/> : localRole.additionalNotes}
+                        {isMissing(localRole.additionalNotes) ? <MissingIndicator text="Click Edit to add notes"/> : localRole.additionalNotes}
                      </p>
                    )}
                 </section>
