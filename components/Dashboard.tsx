@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TargetRole, UserProfile, AppView, SavedQuestion } from '../types';
-import { Video, MessageSquare, Calendar as CalendarIcon, ArrowUpRight, ChevronLeft, ChevronRight, Edit2, HelpCircle, Edit3 } from 'lucide-react';
+import { Video, MessageSquare, Calendar as CalendarIcon, ArrowUpRight, ChevronLeft, ChevronRight, Edit2, HelpCircle, Edit3, User } from 'lucide-react';
 import { getDashboardStats, listInterviewSessions } from '../api';
 
 interface DashboardProps {
@@ -252,7 +252,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
              onClick={() => onNavigate('PROFILE')}
              className="w-20 h-20 rounded-full border-2 border-[#E3E3E3] overflow-hidden hover:border-[#0B57D0] transition-colors cursor-pointer flex-shrink-0"
            >
-             <img src={userProfile.profilePhoto} alt={userProfile.fullName} className="w-full h-full object-cover" />
+             {userProfile.profilePhoto
+               ? <img src={userProfile.profilePhoto} alt={userProfile.fullName} className="w-full h-full object-cover" />
+               : <div className="w-full h-full bg-[#F0F4F9] flex items-center justify-center"><User className="w-8 h-8 text-[#444746]" /></div>
+             }
            </div>
            
            <div className="flex-1 min-w-0">

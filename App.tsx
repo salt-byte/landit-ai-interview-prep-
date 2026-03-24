@@ -28,7 +28,7 @@ import { supabase } from './lib/supabase';
 // Moved from Profile.tsx to act as the single source of truth
 const INITIAL_PROFILE: UserProfile = {
   fullName: "Claire Liu",
-  profilePhoto: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=256&h=256&auto=format&fit=crop",
+  profilePhoto: "",
   targetRole: "Product Manager, Data Analyst",
   employmentType: "Full-time",
   email: "claire.liu@example.com",
@@ -133,7 +133,7 @@ const INITIAL_SAVED_QUESTIONS: SavedQuestion[] = [
 // Empty state for signed-in users (fresh start)
 const EMPTY_PROFILE: UserProfile = {
   fullName: "",
-  profilePhoto: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop",
+  profilePhoto: "",
   targetRole: "",
   employmentType: "",
   email: "",

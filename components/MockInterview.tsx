@@ -357,6 +357,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const audioQueueRef = useRef<Float32Array[]>([]);
   const isPlayingRef = useRef(false);
   const nextPlayTimeRef = useRef(0);
+  const currentAiTurnTextRef = useRef('');
+  const currentUserTurnTextRef = useRef('');
 
   // Local mode fallback refs (browser TTS/ASR)
   const recognitionRef = useRef<any>(null);
@@ -723,7 +725,7 @@ Instructions:
             if (message.serverContent?.inputTranscription?.text) {
               const userText = message.serverContent.inputTranscription.text;
               if (userText.trim()) {
-                geminiTranscriptRef.current.push({ role: 'user', text: userText });
+                currentUserTurnTextRef.current += userText;
                 setTranscript(prev => prev + userText + ' ');
               }
             }
@@ -731,9 +733,17 @@ Instructions:
             // Handle output transcription (subtitles)
             if (message.serverContent?.outputTranscription?.text) {
               const text = message.serverContent.outputTranscription.text;
+
+              // Flush accumulated user text when AI starts speaking
+              if (currentUserTurnTextRef.current.trim()) {
+                geminiTranscriptRef.current.push({ role: 'user', text: currentUserTurnTextRef.current.trim() });
+                currentUserTurnTextRef.current = '';
+              }
+
+              // Accumulate AI output for this turn (fixes one-char-at-a-time subtitle)
+              currentAiTurnTextRef.current += text;
               accumulatedText += ' ' + text;
-              setDisplayedQuestion(text);
-              geminiTranscriptRef.current.push({ role: 'ai', text });
+              setDisplayedQuestion(currentAiTurnTextRef.current);
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
@@ -746,8 +756,12 @@ Instructions:
               }
             }
 
-            // Handle turn completion
+            // Handle turn completion — flush accumulated AI text as one transcript entry
             if (message.serverContent?.turnComplete) {
+              if (currentAiTurnTextRef.current.trim()) {
+                geminiTranscriptRef.current.push({ role: 'ai', text: currentAiTurnTextRef.current.trim() });
+                currentAiTurnTextRef.current = '';
+              }
               setInterviewerState('LISTENING');
             }
 
@@ -781,6 +795,16 @@ Instructions:
     if (geminiSessionRef.current) {
       try { geminiSessionRef.current.close(); } catch {}
       geminiSessionRef.current = null;
+    }
+
+    // Flush any remaining accumulated text before building Q&A pairs
+    if (currentUserTurnTextRef.current.trim()) {
+      geminiTranscriptRef.current.push({ role: 'user', text: currentUserTurnTextRef.current.trim() });
+      currentUserTurnTextRef.current = '';
+    }
+    if (currentAiTurnTextRef.current.trim()) {
+      geminiTranscriptRef.current.push({ role: 'ai', text: currentAiTurnTextRef.current.trim() });
+      currentAiTurnTextRef.current = '';
     }
 
     // Build Q&A pairs from transcript
@@ -852,6 +876,8 @@ Instructions:
       setUseLocalMode(false);
       setInterviewerState('SPEAKING');
       geminiTranscriptRef.current = [];
+      currentAiTurnTextRef.current = '';
+      currentUserTurnTextRef.current = '';
 
       // Create backend session for storage
       try {

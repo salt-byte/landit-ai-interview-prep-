@@ -17,7 +17,8 @@ import {
   Globe,
   Phone,
   Mail,
-  Linkedin
+  Linkedin,
+  User
 } from 'lucide-react';
 import { UploadedFile, UserProfile } from '../types';
 import AddSourceModal from './AddSourceModal';
@@ -277,11 +278,10 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               {/* 0. Header (Avatar, Name, Target Role) */}
               <section className="text-center">
                  <div className="w-24 h-24 mx-auto rounded-full border-4 border-[#F0F4F9] shadow-sm overflow-hidden mb-4 relative group">
-                    <img
-                      src={profile.profilePhoto || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=256&h=256&auto=format&fit=crop"}
-                      alt={profile.fullName}
-                      className="w-full h-full object-cover"
-                    />
+                    {profile.profilePhoto
+                      ? <img src={profile.profilePhoto} alt={profile.fullName} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full bg-[#F0F4F9] flex items-center justify-center"><User className="w-10 h-10 text-[#444746]" /></div>
+                    }
                     <label className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                       <Upload className="w-6 h-6 text-white" />
                       <input

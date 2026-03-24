@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPin, Briefcase, GraduationCap } from 'lucide-react';
+import { MapPin, Briefcase, GraduationCap, User } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface ProfileCardProps {
@@ -28,11 +28,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onEdit, completionPe
       <div className="flex flex-col items-center text-center flex-1">
         {/* Avatar */}
         <div className="w-24 h-24 rounded-full border-4 border-[#F0F4F9] shadow-sm mb-4 overflow-hidden">
-          <img 
-            src={profile.profilePhoto}
-            alt={profile.fullName}
-            className="w-full h-full object-cover"
-          />
+          {profile.profilePhoto
+            ? <img src={profile.profilePhoto} alt={profile.fullName} className="w-full h-full object-cover" />
+            : <div className="w-full h-full bg-[#F0F4F9] flex items-center justify-center"><User className="w-10 h-10 text-[#444746]" /></div>
+          }
         </div>
 
         {/* Name & Title */}
