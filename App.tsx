@@ -376,6 +376,7 @@ const App: React.FC = () => {
             savedQuestions={savedQuestions}
             onSaveQuestion={handleSaveQuestion}
             initialQuestionId={selectedQuestionId}
+            userProfile={userProfile}
           />
         );
       case 'LIVE_INTERVIEW':
@@ -384,6 +385,7 @@ const App: React.FC = () => {
             workspace={selectedRole}
             roles={roles}
             onSelectRole={setSelectedRole}
+            userProfile={userProfile}
             onSaveSession={(questions) => {
               setSavedQuestions(prev => [...questions, ...prev]);
               if (authMode === 'USER') {

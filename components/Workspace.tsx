@@ -48,7 +48,7 @@ import {
   Undo
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion } from '../types';
+import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion, UserProfile } from '../types';
 import { deleteRoleSource, getGapMatrix, getWeaknessVector } from '../api';
 
 const gemini = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
@@ -566,7 +566,8 @@ export const InterviewPrepBuilder: React.FC<{
   savedQuestions?: SavedQuestion[];
   onSaveQuestion?: (question: SavedQuestion) => void;
   initialQuestionId?: string | null;
-}> = ({ role, roles, onSelectRole, onNavigate, settings, onUpdateSettings, savedQuestions = [], onSaveQuestion, initialQuestionId }) => {
+  userProfile?: UserProfile;
+}> = ({ role, roles, onSelectRole, onNavigate, settings, onUpdateSettings, savedQuestions = [], onSaveQuestion, initialQuestionId, userProfile }) => {
   const [editorState, setEditorState] = useState<EditorState>('EMPTY');
   const [generatedQuestions, setGeneratedQuestions] = useState<{q: string, a?: string}[]>([]);
   const [showRoleSelector, setShowRoleSelector] = useState(false);
@@ -984,6 +985,31 @@ export const InterviewPrepBuilder: React.FC<{
     }
   ];
 
+  // Build a concise profile summary for prompt injection
+  const buildProfileSummary = (): string => {
+    if (!userProfile) return "";
+    const parts: string[] = [];
+    if (userProfile.fullName) parts.push("Name: " + userProfile.fullName);
+    if (userProfile.workExperience?.length) {
+      parts.push("Work Experience:\n" + userProfile.workExperience.map(w =>
+        "- " + w.jobTitle + " at " + w.companyName + (w.startDate ? " (" + w.startDate + " – " + (w.endDate || "Present") + ")" : "") + (w.description ? ": " + w.description : "")
+      ).join("\n"));
+    }
+    if (userProfile.projects?.length) {
+      parts.push("Projects:\n" + userProfile.projects.map(p =>
+        "- " + p.projectName + (p.projectDescription ? ": " + p.projectDescription : "")
+      ).join("\n"));
+    }
+    if (userProfile.education?.length) {
+      parts.push("Education:\n" + userProfile.education.map(e =>
+        "- " + e.degree + " in " + e.fieldOfStudy + " at " + e.institutionName
+      ).join("\n"));
+    }
+    if (userProfile.skills?.technicalSkills) parts.push("Technical Skills: " + userProfile.skills.technicalSkills);
+    if (userProfile.skills?.softSkills) parts.push("Soft Skills: " + userProfile.skills.softSkills);
+    return parts.length > 0 ? parts.join("\n") : "";
+  };
+
   const generateQuestions = async () => {
     setEditorState('GENERATING');
 
@@ -1016,7 +1042,8 @@ export const InterviewPrepBuilder: React.FC<{
 
       // Step 2: Call Gemini directly from frontend (fast, direct connection)
       const jdText = role?.jd || "";
-      const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion types to cover: " + settings.types.join(", ") + ".\n\n" + (gapContext ? gapContext + "\n\n" : "") + "Job Description:\n" + jdText + "\n\nCRITICAL REQUIREMENTS:\n1. Every question MUST be specifically relevant to this job description. Reference specific responsibilities, tools, teams, or domain areas mentioned in the JD.\n2. For example, if the JD mentions PGC (Professional Generated Content), ask about PGC content strategy, creator partnerships, etc. — NOT generic PM questions.\n3. Questions should demonstrate that the interviewer has read the JD and is testing domain-specific knowledge.\n4. Return ONLY the questions, one per line.\n5. Do NOT include numbering, category labels, or prefixes.\n6. Each question should be a single, complete sentence.\n7. Focus on the candidate's weak areas if provided.";
+      const profileSummary = buildProfileSummary();
+      const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion types to cover: " + settings.types.join(", ") + ".\n\n" + (profileSummary ? "Candidate Profile:\n" + profileSummary + "\n\n" : "") + (gapContext ? gapContext + "\n\n" : "") + "Job Description:\n" + jdText + "\n\nCRITICAL REQUIREMENTS:\n1. Every question MUST be specifically relevant to this job description. Reference specific responsibilities, tools, teams, or domain areas mentioned in the JD.\n2. For example, if the JD mentions PGC (Professional Generated Content), ask about PGC content strategy, creator partnerships, etc. — NOT generic PM questions.\n3. Questions should demonstrate that the interviewer has read the JD and is testing domain-specific knowledge.\n4. For Behavioral & Experience questions, you MUST reference the candidate's actual work experience, projects, and skills from their profile. Ask them to elaborate on specific roles, projects, or achievements listed in their resume. Cross-reference their background with the JD requirements.\n5. Return ONLY the questions, one per line.\n6. Do NOT include numbering, category labels, or prefixes.\n7. Each question should be a single, complete sentence.\n8. Focus on the candidate's weak areas if provided.";
 
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
@@ -1059,7 +1086,8 @@ export const InterviewPrepBuilder: React.FC<{
 
     try {
       const question = generatedQuestions[index].q;
-      const prompt = "You are an expert interview coach. Write a sample interview answer for a " + (role?.title || "Product Manager") + " at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nJob Description:\n" + (role?.jd || "") + "\n\nSTRICT RULES:\n- Output ONLY the answer itself. No preamble, no meta-commentary, no \"Here's a sample answer\", no \"Sure\", no \"Okay\". The very first word must be part of the actual answer content.\n- Write as if you ARE the candidate speaking in the interview.\n- Use Markdown: **bold** for key terms, numbered lists for structure, bullet points for details.\n- Be concise but impactful. Use STAR framework where applicable.";
+      const profileSummary = buildProfileSummary();
+      const prompt = "You are an expert interview coach. Write a sample interview answer for a " + (role?.title || "Product Manager") + " at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nJob Description:\n" + (role?.jd || "") + (profileSummary ? "\n\nCandidate Profile:\n" + profileSummary : "") + "\n\nSTRICT RULES:\n- Output ONLY the answer itself. No preamble, no meta-commentary, no \"Here's a sample answer\", no \"Sure\", no \"Okay\". The very first word must be part of the actual answer content.\n- Write as if you ARE the candidate speaking in the interview.\n- Draw from the candidate's actual work experience, projects, and skills when crafting the answer. Reference specific companies, roles, and achievements from their profile.\n- Use Markdown: **bold** for key terms, numbered lists for structure, bullet points for details.\n- Be concise but impactful. Use STAR framework where applicable.";
 
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,

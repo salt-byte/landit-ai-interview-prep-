@@ -42,7 +42,7 @@ import {
   User,
   MoreHorizontal
 } from 'lucide-react';
-import { TargetRole, InterviewFeedback } from '../types';
+import { TargetRole, InterviewFeedback, UserProfile } from '../types';
 import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession } from '../api';
 import { GoogleGenAI, Modality } from "@google/genai";
 
@@ -52,6 +52,7 @@ interface MockInterviewProps {
   onSelectRole: (role: TargetRole | null) => void;
   onSaveSession?: (questions: any[]) => void;
   onNavigate?: (view: 'DASHBOARD' | 'WORKSPACE' | 'MOCK_INTERVIEW') => void;
+  userProfile?: UserProfile;
 }
 
 interface QuestionType {
@@ -302,7 +303,7 @@ const INTERVIEWER_STYLE_MAP: Record<string, string> = {
   sophia: 'Empathetic, behavioral-focused, and insightful. You assess emotional intelligence and cultural fit.',
 };
 
-const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelectRole, onSaveSession, onNavigate }) => {
+const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelectRole, onSaveSession, onNavigate, userProfile }) => {
   const [step, setStep] = useState<'SETTINGS' | 'INTERVIEWER_INTRO' | 'DEVICE_CHECK' | 'INTERVIEW' | 'FEEDBACK'>('SETTINGS');
   const [settings, setSettings] = useState({
     types: [] as string[],
@@ -667,6 +668,30 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
   // --- Gemini Live API: Session Management ---
 
+  const buildProfileSummary = (): string => {
+    if (!userProfile) return "";
+    const parts: string[] = [];
+    if (userProfile.fullName) parts.push("Name: " + userProfile.fullName);
+    if (userProfile.workExperience?.length) {
+      parts.push("Work Experience:\n" + userProfile.workExperience.map(w =>
+        "- " + w.jobTitle + " at " + w.companyName + (w.startDate ? " (" + w.startDate + " – " + (w.endDate || "Present") + ")" : "") + (w.description ? ": " + w.description : "")
+      ).join("\n"));
+    }
+    if (userProfile.projects?.length) {
+      parts.push("Projects:\n" + userProfile.projects.map(p =>
+        "- " + p.projectName + (p.projectDescription ? ": " + p.projectDescription : "")
+      ).join("\n"));
+    }
+    if (userProfile.education?.length) {
+      parts.push("Education:\n" + userProfile.education.map(e =>
+        "- " + e.degree + " in " + e.fieldOfStudy + " at " + e.institutionName
+      ).join("\n"));
+    }
+    if (userProfile.skills?.technicalSkills) parts.push("Technical Skills: " + userProfile.skills.technicalSkills);
+    if (userProfile.skills?.softSkills) parts.push("Soft Skills: " + userProfile.skills.softSkills);
+    return parts.length > 0 ? parts.join("\n") : "";
+  };
+
   const buildSystemPrompt = (interviewer: any): string => {
     const style = INTERVIEWER_STYLE_MAP[interviewer.id] || INTERVIEWER_STYLE_MAP['alex'];
     const roleTitle = workspace?.title || 'a general role';
@@ -676,18 +701,23 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       const qt = QUESTION_TYPES.find(q => q.id === t);
       return qt ? qt.label : t;
     }).join(', ');
+    const profileSummary = buildProfileSummary();
 
     return `You are ${interviewer.name}, ${interviewer.title} — a ${interviewer.role}.
 Style: ${style}
 You are conducting a mock interview for the role of ${roleTitle} at ${roleCompany}.
 
 Job Description: ${jd}
-
+${profileSummary ? `
+Candidate Profile:
+${profileSummary}
+` : ''}
 Instructions:
 - Start by introducing yourself briefly and asking the candidate to introduce themselves.
 - Ask one question at a time.
 - Listen to the candidate's response, then give brief feedback or a follow-up.
 - Cover these question types: ${questionTypes}
+- For Behavioral & Experience questions, reference the candidate's actual work experience, projects, and background from their profile. Ask them to elaborate on specific roles, achievements, or situations from their resume. Cross-reference their experience with the job description requirements.
 - Ask about 10 questions total.
 - Be conversational and natural, like a real interview.
 - When you've asked all questions, thank the candidate and say "That concludes our interview today."`;
