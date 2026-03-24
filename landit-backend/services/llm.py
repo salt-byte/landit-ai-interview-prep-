@@ -88,9 +88,9 @@ Resume:
 
 
 async def extract_dimension_scores(profile_text: str) -> dict:
-    """Layer 3: Map user experience -> 15 dimension scores (1-5) + evidence."""
+    """Layer 3: Map user experience -> 10 PM dimension scores (1-5) + evidence."""
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
-    prompt = f"""You are an expert career assessor. Score the candidate on 15 competency dimensions based on their background.
+    prompt = f"""You are an expert career assessor. Score the candidate on 10 PM competency dimensions based on their background.
 
 DIMENSIONS:
 {dims_str}
@@ -122,9 +122,9 @@ Candidate profile:
 
 
 async def extract_jd_dimension_model(jd_text: str, role_title: str, company: str) -> dict:
-    """Layer 3: Map JD -> 15 dimension required scores + weights."""
+    """Layer 3: Map JD -> 10 PM dimension required scores + weights."""
     dims_str = "\n".join([f"- {k}: {v}" for k, v in DIMENSION_LABELS.items()])
-    prompt = f"""You are an expert talent assessor. Analyze this job description and map it to 15 competency dimensions.
+    prompt = f"""You are an expert talent assessor. Analyze this job description and map it to 10 PM competency dimensions.
 
 Role: {role_title} at {company}
 
@@ -144,7 +144,7 @@ Return ONLY valid JSON:
   ...
 }}
 
-All 15 dimensions must be present. Set weight=0 for irrelevant dimensions.
+All 10 dimensions must be present. Set weight=0 for irrelevant dimensions.
 
 Job Description:
 {jd_text}"""
@@ -273,9 +273,16 @@ Provide structured feedback. Return ONLY valid JSON:
   "improvements": ["point 1", "point 2", "point 3"],
   "recommended_actions": ["specific action 1", "specific action 2"],
   "dimension_scores": {{
-    "communication_clarity": <float 1-5>,
-    "structured_thinking": <float 1-5>,
-    "narrative_coherence": <float 1-5>
+    "product_intuition": <float 1-5>,
+    "user_empathy": <float 1-5>,
+    "metrics_driven_thinking": <float 1-5>,
+    "structured_problem_solving": <float 1-5>,
+    "prioritization_tradeoffs": <float 1-5>,
+    "execution_delivery": <float 1-5>,
+    "strategic_thinking": <float 1-5>,
+    "cross_functional_leadership": <float 1-5>,
+    "stakeholder_communication": <float 1-5>,
+    "technical_fluency": <float 1-5>
   }},
   "transcript_items": [
     {{

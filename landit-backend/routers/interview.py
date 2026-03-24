@@ -510,7 +510,18 @@ async def _end_session(
             "strengths": ["Completed the interview session"],
             "improvements": ["Add more specific examples with metrics"],
             "recommended_actions": ["Practice STAR method responses"],
-            "dimension_scores": {"communication_clarity": 3.0},
+            "dimension_scores": {
+                "product_intuition": 3.0,
+                "user_empathy": 3.0,
+                "metrics_driven_thinking": 3.0,
+                "structured_problem_solving": 3.0,
+                "prioritization_tradeoffs": 3.0,
+                "execution_delivery": 3.0,
+                "strategic_thinking": 3.0,
+                "cross_functional_leadership": 3.0,
+                "stakeholder_communication": 3.0,
+                "technical_fluency": 3.0,
+            },
             "transcript_items": [],
         }
 

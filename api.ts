@@ -306,6 +306,10 @@ export async function getWeaknessVector() {
   return request<any>('/api/compute/weakness-vector');
 }
 
+export async function getDimensionScores() {
+  return request<any>('/api/compute/user-dimensions');
+}
+
 export async function getAbilityCurve() {
   return request<any>('/api/compute/ability-curve');
 }

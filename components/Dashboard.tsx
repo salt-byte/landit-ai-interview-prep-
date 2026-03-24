@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TargetRole, UserProfile, AppView, SavedQuestion } from '../types';
 import { Video, MessageSquare, Calendar as CalendarIcon, ArrowUpRight, ChevronLeft, ChevronRight, Edit2, HelpCircle, Edit3, User } from 'lucide-react';
-import { getDashboardStats, listInterviewSessions } from '../api';
+import { getDashboardStats, listInterviewSessions, getDimensionScores } from '../api';
 
 interface DashboardProps {
   userProfile: UserProfile;
@@ -17,6 +17,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
   const [stats, setStats] = useState({ liveInterviews: 0, mockQuestions: 0 });
   const [sessionDates, setSessionDates] = useState<Record<number, 'LIVE' | 'MOCK' | 'BOTH'>>({});
   const [sessionsByRole, setSessionsByRole] = useState<Record<string, number>>({});
+  const [dimensionScores, setDimensionScores] = useState<{dimension: string, label: string, score: number}[]>([]);
 
   useEffect(() => {
     if (isGuest) {
@@ -32,6 +33,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
           liveInterviews: data.live_interviews || 0,
           mockQuestions: data.mock_questions || 0,
         });
+      }).catch(() => {});
+
+      // Load dimension scores for radar chart
+      getDimensionScores().then((scores: any[]) => {
+        if (scores && scores.length > 0) {
+          setDimensionScores(scores.map((s: any) => ({
+            dimension: s.dimension,
+            label: s.label || s.dimension.replace(/_/g, ' '),
+            score: s.score || 0,
+          })));
+        }
       }).catch(() => {});
 
       // Load interview sessions to populate calendar
@@ -247,6 +259,68 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
             </div>
           </div>
         </div>
+
+        {/* Section 3: PM Competency Radar */}
+        {dimensionScores.length > 0 && (
+          <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4 flex-shrink-0">
+            <h3 className="font-bold text-[#1F1F1F] text-base mb-3">PM Competency Profile</h3>
+            <div className="flex items-center justify-center">
+              <svg viewBox="0 0 300 300" className="w-full max-w-[280px]">
+                {/* Background rings */}
+                {[1, 2, 3, 4, 5].map(level => {
+                  const r = (level / 5) * 110;
+                  return (
+                    <circle key={level} cx="150" cy="150" r={r} fill="none" stroke="#E3E3E3" strokeWidth={level === 5 ? 1.5 : 0.5} strokeDasharray={level < 5 ? "2 2" : "none"} />
+                  );
+                })}
+                {/* Axis lines + labels */}
+                {dimensionScores.map((d, i) => {
+                  const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                  const x2 = 150 + 110 * Math.cos(angle);
+                  const y2 = 150 + 110 * Math.sin(angle);
+                  const lx = 150 + 128 * Math.cos(angle);
+                  const ly = 150 + 128 * Math.sin(angle);
+                  const shortLabel = d.label.length > 12 ? d.label.slice(0, 11) + '…' : d.label;
+                  return (
+                    <g key={d.dimension}>
+                      <line x1="150" y1="150" x2={x2} y2={y2} stroke="#E3E3E3" strokeWidth="0.5" />
+                      <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" className="text-[7px] fill-[#444746] font-medium">{shortLabel}</text>
+                    </g>
+                  );
+                })}
+                {/* Data polygon */}
+                <polygon
+                  points={dimensionScores.map((d, i) => {
+                    const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                    const r = (d.score / 5) * 110;
+                    return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
+                  }).join(' ')}
+                  fill="rgba(11, 87, 208, 0.15)"
+                  stroke="#0B57D0"
+                  strokeWidth="2"
+                />
+                {/* Score dots */}
+                {dimensionScores.map((d, i) => {
+                  const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                  const r = (d.score / 5) * 110;
+                  return (
+                    <circle key={`dot-${i}`} cx={150 + r * Math.cos(angle)} cy={150 + r * Math.sin(angle)} r="3.5" fill="#0B57D0" stroke="white" strokeWidth="1.5" />
+                  );
+                })}
+              </svg>
+            </div>
+            {/* Score legend */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 px-2">
+              {dimensionScores.map(d => (
+                <div key={d.dimension} className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#444746] truncate mr-2">{d.label}</span>
+                  <span className="font-bold text-[#1F1F1F]">{d.score.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* UNIFIED RIGHT CARD: Profile + Roles */}
