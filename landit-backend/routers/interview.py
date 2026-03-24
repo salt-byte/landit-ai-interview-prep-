@@ -99,6 +99,14 @@ async def finish_session(
             role_title = role.title
             company = role.company
 
+    # Update interviewer if provided (fixes mismatch between session record and actual persona)
+    new_interviewer_id = data.get("interviewer_id")
+    if new_interviewer_id and new_interviewer_id in INTERVIEWER_PERSONAS:
+        persona = INTERVIEWER_PERSONAS[new_interviewer_id]
+        session.interviewer_id = new_interviewer_id
+        session.interviewer_name = persona["name"]
+        session.interviewer_avatar = persona["avatar"]
+
     session.started_at = session.started_at or session.created_at
     await _end_session(
         db=db,

@@ -219,10 +219,10 @@ export async function getInterviewFeedback(sessionId: string) {
   return request<any>(`/api/interview/sessions/${sessionId}/feedback`);
 }
 
-export async function finishSession(sessionId: number, transcript: {role: string, text: string}[]) {
+export async function finishSession(sessionId: number, transcript: {role: string, text: string}[], interviewerId?: string) {
   return request<any>(`/api/interview/sessions/${sessionId}/finish`, {
     method: 'POST',
-    body: JSON.stringify({ transcript }),
+    body: JSON.stringify({ transcript, interviewer_id: interviewerId }),
   });
 }
 

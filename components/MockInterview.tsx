@@ -854,7 +854,7 @@ Instructions:
 
     // Send transcript to backend for feedback generation
     if (sessionId) {
-      finishSession(sessionId, transcript)
+      finishSession(sessionId, transcript, matchedInterviewer?.id)
         .then(() => getInterviewFeedback(String(sessionId)))
         .then(fb => {
           setRealFeedback(fb);
