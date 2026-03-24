@@ -781,10 +781,12 @@ Instructions:
             if (message.serverContent?.outputTranscription?.text) {
               const text = message.serverContent.outputTranscription.text;
 
-              // Flush accumulated user text when AI starts speaking
+              // Flush accumulated user text when AI starts speaking → means new question
               if (currentUserTurnTextRef.current.trim()) {
                 geminiTranscriptRef.current.push({ role: 'user', text: currentUserTurnTextRef.current.trim() });
                 currentUserTurnTextRef.current = '';
+                // User just finished answering, AI is asking next question → increment counter
+                setCurrentQuestionIndex(prev => prev + 1);
               }
 
               // Accumulate AI output for this turn (fixes one-char-at-a-time subtitle)
@@ -1873,8 +1875,8 @@ Instructions:
                       handleFinishInterviewGemini();
                     } else if (!useLocalMode) {
                       // Gemini Live mode: ask AI to move to next question
+                      // Counter will auto-increment when AI starts speaking next question
                       handleEndQuestion();
-                      setCurrentQuestionIndex(prev => prev + 1);
                     } else {
                       handleEndQuestion();
                     }
@@ -2134,7 +2136,11 @@ Instructions:
               </div>
 
               <div className="space-y-10">
-                {sessionResults.map((res, idx) => {
+                {/* Use backend transcript_items if available, fall back to frontend sessionResults */}
+                {(fbTranscriptItems.length > 0 ? fbTranscriptItems.map((item: any) => ({
+                  question: item.question || '',
+                  answer: item.answer || '',
+                })) : sessionResults).map((res: any, idx: number) => {
                   const evalData = getMockEval(res.answer, idx);
                   const transcriptText = editedTranscripts[idx] !== undefined ? editedTranscripts[idx] : res.answer;
                   const note = questionNotes[idx] || '';
