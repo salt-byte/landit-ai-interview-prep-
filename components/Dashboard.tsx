@@ -147,7 +147,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
       
       {/* UNIFIED LEFT CARD: Metrics + Calendar */}
       <div 
-        className="bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] p-5 flex flex-col gap-6 overflow-hidden h-full"
+        className="bg-white rounded-[14px] border border-[rgba(0,0,0,0.04)] shadow-[0_6px_18px_rgba(21,28,45,0.06)] p-5 flex flex-col gap-4"
       >
         
         {/* Section 1: Metrics */}
@@ -180,7 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
         </div>
 
         {/* Section 2: Calendar (Secondary Container) */}
-        <div className="flex flex-col overflow-y-auto bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4">
+        <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4">
           <div className="flex items-end justify-between mb-3 flex-shrink-0">
             <div>
               <h3 className="font-bold text-[#1F1F1F] text-base flex items-center gap-2">
