@@ -152,35 +152,29 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
         
         {/* Section 1: Metrics */}
         <div className="grid grid-cols-2 gap-4 flex-shrink-0">
-          <div 
+          <div
             onClick={() => onNavigate('LIVE_INTERVIEW')}
-            className="bg-[#FAFAFA] p-4 rounded-xl border border-[#E3E3E3] hover:border-[#65558F] hover:shadow-sm transition-all cursor-pointer group relative overflow-hidden"
+            className="bg-[#FAFAFA] px-4 py-2.5 rounded-xl border border-[#E3E3E3] hover:border-[#65558F] hover:shadow-sm transition-all cursor-pointer group relative overflow-hidden flex items-center gap-3"
           >
-             <div className="flex justify-between items-start mb-3">
-                <div className="p-2.5 bg-[#F3E8FF] rounded-lg text-[#65558F] group-hover:scale-110 transition-transform">
-                  <Video className="w-5 h-5" />
-                </div>
-                <ArrowUpRight className="w-4 h-4 text-[#65558F] opacity-0 group-hover:opacity-100 transition-opacity" />
+             <div className="p-2 bg-[#F3E8FF] rounded-lg text-[#65558F] group-hover:scale-110 transition-transform flex-shrink-0">
+               <Video className="w-4 h-4" />
              </div>
-             <div>
-                <h3 className="text-3xl font-bold text-[#1F1F1F] mb-0.5">{stats.liveInterviews}</h3>
-                <p className="text-sm text-[#444746] font-medium leading-tight">Interviews Completed</p>
+             <div className="flex-1 min-w-0">
+                <h3 className="text-2xl font-bold text-[#1F1F1F] leading-tight">{stats.liveInterviews}</h3>
+                <p className="text-xs text-[#444746] font-medium">Interviews</p>
              </div>
           </div>
 
-          <div 
+          <div
             onClick={() => onNavigate('MOCK_PREP')}
-            className="bg-[#FAFAFA] p-4 rounded-xl border border-[#E3E3E3] hover:border-[#0B57D0] hover:shadow-sm transition-all cursor-pointer group relative overflow-hidden"
+            className="bg-[#FAFAFA] px-4 py-2.5 rounded-xl border border-[#E3E3E3] hover:border-[#0B57D0] hover:shadow-sm transition-all cursor-pointer group relative overflow-hidden flex items-center gap-3"
           >
-             <div className="flex justify-between items-start mb-3">
-                <div className="p-2.5 bg-[#D3E3FD] rounded-lg text-[#041E49] group-hover:scale-110 transition-transform">
-                  <MessageSquare className="w-5 h-5" />
-                </div>
-                <ArrowUpRight className="w-4 h-4 text-[#0B57D0] opacity-0 group-hover:opacity-100 transition-opacity" />
+             <div className="p-2 bg-[#D3E3FD] rounded-lg text-[#041E49] group-hover:scale-110 transition-transform flex-shrink-0">
+               <MessageSquare className="w-4 h-4" />
              </div>
-             <div>
-                <h3 className="text-3xl font-bold text-[#1F1F1F] mb-0.5">{stats.mockQuestions}</h3>
-                <p className="text-sm text-[#444746] font-medium leading-tight">Questions Prepared</p>
+             <div className="flex-1 min-w-0">
+                <h3 className="text-2xl font-bold text-[#1F1F1F] leading-tight">{stats.mockQuestions}</h3>
+                <p className="text-xs text-[#444746] font-medium">Questions</p>
              </div>
           </div>
         </div>
