@@ -360,6 +360,10 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const currentAiTurnTextRef = useRef('');
   const currentUserTurnTextRef = useRef('');
 
+  // Pre-connection state for Gemini Live
+  const [geminiPreconnected, setGeminiPreconnected] = useState(false);
+  const preconnectingRef = useRef(false);
+
   // Local mode fallback refs (browser TTS/ASR)
   const recognitionRef = useRef<any>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
@@ -408,6 +412,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       setMatchedInterviewer(matchInterviewer(settings.types, workspace));
     }
   }, [step, workspace, settings.types, matchedInterviewer]);
+
+  // Pre-connect Gemini Live API during device check to reduce startup latency
+  useEffect(() => {
+    if (step === 'DEVICE_CHECK' && matchedInterviewer && !geminiSessionRef.current && !preconnectingRef.current) {
+      preconnectingRef.current = true;
+      console.log('[LandIt] Pre-connecting Gemini Live during device check...');
+      connectGeminiLive(matchedInterviewer).then(ok => {
+        preconnectingRef.current = false;
+        setGeminiPreconnected(ok);
+        console.log('[LandIt] Gemini Live pre-connection:', ok ? 'success' : 'failed');
+      });
+    }
+  }, [step, matchedInterviewer]);
 
   const activeQuestions = React.useMemo(() => {
     if (!matchedInterviewer) return [];
@@ -866,9 +883,14 @@ Instructions:
       }
     }, 100);
 
-    // Try Gemini Live API first
-    console.log('[LandIt] Attempting Gemini Live connection...');
-    const geminiConnected = await connectGeminiLive(matchedInterviewer);
+    // Use pre-connected session if available, otherwise connect now
+    let geminiConnected = geminiPreconnected && !!geminiSessionRef.current;
+    if (!geminiConnected) {
+      console.log('[LandIt] No pre-connection, connecting Gemini Live now...');
+      geminiConnected = await connectGeminiLive(matchedInterviewer);
+    } else {
+      console.log('[LandIt] Using pre-connected Gemini Live session');
+    }
     console.log('[LandIt] Gemini Live connected:', geminiConnected);
 
     if (geminiConnected && geminiSessionRef.current) {
@@ -1326,6 +1348,8 @@ Instructions:
     setIsRecording(false);
     setMatchedInterviewer(null);
     setIsFinishing(false);
+    setGeminiPreconnected(false);
+    preconnectingRef.current = false;
   };
 
   // Handle finishing the interview via the Finish button (Gemini mode)
