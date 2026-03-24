@@ -1819,7 +1819,7 @@ Instructions:
                   }}
                   className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#1F1F1F] rounded-full font-bold text-sm hover:bg-gray-200 transition-all"
                 >
-                  {(!useLocalMode || currentQuestionIndex === activeQuestions.length - 1) ? (
+                  {currentQuestionIndex === activeQuestions.length - 1 ? (
                      <><Check className="w-4 h-4" /> Finish Interview</>
                   ) : (
                      <><ArrowRight className="w-4 h-4" /> Next Question</>
