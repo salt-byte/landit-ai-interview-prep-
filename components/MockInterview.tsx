@@ -789,15 +789,18 @@ Instructions:
                 setCurrentQuestionIndex(prev => prev + 1);
               }
 
-              // Accumulate AI output for this turn (fixes one-char-at-a-time subtitle)
+              // Accumulate AI output for this turn
               currentAiTurnTextRef.current += text;
               accumulatedText += ' ' + text;
 
-              // Show only the last sentence as subtitle (rolling window)
+              // Update subtitle only when a sentence boundary is reached
+              // This prevents word-by-word flickering — subtitle updates per sentence
               const fullText = currentAiTurnTextRef.current.trim();
-              const sentences = fullText.split(/(?<=[.?!。？！])\s*/);
-              const lastSentences = sentences.slice(-2).join(' ');
-              setDisplayedQuestion(lastSentences.length > 120 ? sentences.slice(-1).join('') : lastSentences);
+              if (/[.?!。？！,;:]$/.test(text.trim()) || text.includes('\n')) {
+                const sentences = fullText.split(/(?<=[.?!。？！])\s*/);
+                const lastSentences = sentences.slice(-2).join(' ');
+                setDisplayedQuestion(lastSentences.length > 120 ? sentences.slice(-1).join('') : lastSentences);
+              }
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
@@ -813,7 +816,13 @@ Instructions:
             // Handle turn completion — flush accumulated AI text as one transcript entry
             if (message.serverContent?.turnComplete) {
               if (currentAiTurnTextRef.current.trim()) {
-                geminiTranscriptRef.current.push({ role: 'ai', text: currentAiTurnTextRef.current.trim() });
+                // Final subtitle update for this turn
+                const finalText = currentAiTurnTextRef.current.trim();
+                const finalSentences = finalText.split(/(?<=[.?!。？！])\s*/);
+                const lastFinal = finalSentences.slice(-2).join(' ');
+                setDisplayedQuestion(lastFinal.length > 120 ? finalSentences.slice(-1).join('') : lastFinal);
+
+                geminiTranscriptRef.current.push({ role: 'ai', text: finalText });
                 currentAiTurnTextRef.current = '';
               }
               setInterviewerState('LISTENING');
