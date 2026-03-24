@@ -1059,14 +1059,16 @@ export const InterviewPrepBuilder: React.FC<{
 
     try {
       const question = generatedQuestions[index].q;
-      const prompt = "You are an expert interview coach. Provide a sample answer for this interview question for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nRole Context:\n" + (role?.jd || "").slice(0, 1000) + "\n\nRequirements:\n1. Give the answer DIRECTLY. Do NOT include any preamble, introduction, or repeat the question. Start with the actual answer immediately.\n2. Write as if you are the candidate speaking.\n3. Use STAR framework where applicable.\n4. Be concise but impactful.\n5. Use Markdown formatting: **bold** for key terms or section headers, numbered lists for main points, and clear paragraph breaks for readability.";
+      const prompt = "You are an expert interview coach. Write a sample interview answer for a " + (role?.title || "Product Manager") + " at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nJob Description:\n" + (role?.jd || "") + "\n\nSTRICT RULES:\n- Output ONLY the answer itself. No preamble, no meta-commentary, no \"Here's a sample answer\", no \"Sure\", no \"Okay\". The very first word must be part of the actual answer content.\n- Write as if you ARE the candidate speaking in the interview.\n- Use Markdown: **bold** for key terms, numbered lists for structure, bullet points for details.\n- Be concise but impactful. Use STAR framework where applicable.";
 
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
         contents: [{ parts: [{ text: prompt }] }],
       });
 
-      const answerHtml = markdownToHtml(response.text || "");
+      // Strip any preamble the AI might still add
+      const rawAnswer = (response.text || "").replace(/^(?:okay|sure|here(?:'s| is)|alright|certainly|of course)[^\n]*\n+/i, "");
+      const answerHtml = markdownToHtml(rawAnswer);
       const updatedQuestions = [...generatedQuestions];
       updatedQuestions[index] = { ...updatedQuestions[index], a: answerHtml };
       setGeneratedQuestions(updatedQuestions);
