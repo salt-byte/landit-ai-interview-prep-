@@ -1808,11 +1808,13 @@ Instructions:
 
                 <button
                   onClick={() => {
-                    if (!useLocalMode) {
-                      // Gemini Live mode: always allow finish
+                    if (!useLocalMode && currentQuestionIndex >= activeQuestions.length - 1) {
+                      // Gemini Live mode: last question -> finish
                       handleFinishInterviewGemini();
-                    } else if (currentQuestionIndex === activeQuestions.length - 1) {
+                    } else if (!useLocalMode) {
+                      // Gemini Live mode: ask AI to move to next question
                       handleEndQuestion();
+                      setCurrentQuestionIndex(prev => prev + 1);
                     } else {
                       handleEndQuestion();
                     }
