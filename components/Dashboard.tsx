@@ -46,8 +46,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
           } else {
             dates[day] = 'LIVE';
           }
-          // Count completed sessions per role
-          if (s.roleId && s.status === 'completed') {
+          // Count sessions per role (any status with feedback counts)
+          if (s.roleId) {
             const rid = String(s.roleId);
             roleCounts[rid] = (roleCounts[rid] || 0) + 1;
           }
