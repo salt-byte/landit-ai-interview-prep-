@@ -61,8 +61,9 @@ const QuestionBank: React.FC<QuestionBankProps> = ({ roles, savedQuestions, onSe
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter questions based on role, types, and search query
+  // Filter questions based on role, types, and search query (exclude live interview questions)
   const filteredQuestions = savedQuestions.filter(q => {
+    if ((q as any).source === 'LIVE_INTERVIEW') return false;
     if (selectedRole && q.roleId !== selectedRole.id) return false;
     if (selectedTypes.length > 0 && !selectedTypes.includes(q.type)) return false;
     if (searchQuery) {
@@ -95,7 +96,7 @@ const QuestionBank: React.FC<QuestionBankProps> = ({ roles, savedQuestions, onSe
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {roles.map(role => {
-            const roleQuestions = savedQuestions.filter(q => q.roleId === role.id);
+            const roleQuestions = savedQuestions.filter(q => q.roleId === role.id && (q as any).source !== 'LIVE_INTERVIEW');
             return (
               <div 
                 key={role.id}
