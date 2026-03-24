@@ -101,6 +101,27 @@ async def scrape_with_httpx(url: str) -> str:
         return f"Page returned minimal content. URL: {url}"
 
 
+def _extract_info_from_url(url: str) -> str:
+    """Extract useful hints from the URL path itself (company, title, ID)."""
+    parts = []
+    # Common patterns: workday, lever, greenhouse, ashby, etc.
+    lower = url.lower()
+    if "workday" in lower or "myworkdayjobs" in lower:
+        # e.g. .../Tencent_Careers/job/US-California/Cloud-Media-Services-Intern_R106872
+        segments = url.rstrip("/").split("/")
+        for seg in segments:
+            cleaned = seg.replace("-", " ").replace("_", " ").strip()
+            if cleaned and len(cleaned) > 2 and not cleaned.startswith("http"):
+                parts.append(cleaned)
+    elif "lever.co" in lower or "greenhouse.io" in lower or "ashbyhq.com" in lower:
+        segments = url.rstrip("/").split("/")
+        for seg in segments[-3:]:
+            cleaned = seg.replace("-", " ").replace("_", " ").strip()
+            if cleaned and len(cleaned) > 2:
+                parts.append(cleaned)
+    return f"URL hints: {' | '.join(parts)}" if parts else ""
+
+
 async def scrape_url(url: str) -> str:
     """Fetch URL content. Tries Tavily first, falls back to httpx."""
     # Strategy 1: Tavily API (handles anti-bot sites)
@@ -128,13 +149,17 @@ async def extract_jd_from_url(url: str) -> dict:
     """Full pipeline: fetch URL -> scrape -> LLM extract JD fields."""
     page_content = await scrape_url(url)
 
-    if page_content.startswith(("ACCESS_BLOCKED", "Failed", "HTTP Error")):
-        return {
-            "title": "",
-            "company": "",
-            "jd": page_content,
-            "team_info": "",
-        }
+    # If scraping failed or returned minimal content, enrich with URL hints
+    is_thin = (
+        page_content.startswith(("ACCESS_BLOCKED", "Failed", "HTTP Error", "Page returned minimal"))
+        or len(page_content.strip()) < 300
+    )
+
+    if is_thin:
+        url_hints = _extract_info_from_url(url)
+        if url_hints:
+            page_content = f"{url_hints}\n\n{page_content}"
+        logger.info("Thin scrape result, enriched with URL hints for LLM")
 
     result = await parse_jd_from_url_content(url, page_content)
     return result

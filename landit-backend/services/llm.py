@@ -234,6 +234,8 @@ async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
   "additionalInfo": "salary, benefits, or other notable info"
 }}
 
+IMPORTANT: If the page content is minimal (e.g. from a JavaScript-rendered site like Workday, Lever, Greenhouse), use the URL and any available hints to infer the job title, company, and other details. For the "jd" field, if the actual description is unavailable, write a realistic and helpful job description based on the role title and company that the candidate can use for interview prep. Clearly note it is inferred.
+
 URL: {url}
 Content:
 {page_content[:6000]}"""
