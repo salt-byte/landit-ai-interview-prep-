@@ -55,39 +55,39 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# 15-Dimension universal coordinate system
+# 10-Dimension PM Interview Scoring System
+# Based on Google/Meta/Amazon PM rubrics + AIPM skill taxonomy
+#
+# Maps to interview rounds:
+#   Product Sense  → product_intuition, user_empathy
+#   Analytical     → metrics_driven_thinking, structured_problem_solving
+#   Execution      → prioritization_tradeoffs, execution_delivery
+#   Strategy       → strategic_thinking, market_awareness
+#   Leadership     → cross_functional_leadership, stakeholder_communication
+#   Technical      → technical_fluency
+#
 DIMENSIONS = [
-    "problem_framing",
-    "structured_thinking",
-    "analytical_reasoning",
-    "execution_ownership",
-    "resource_orchestration",
-    "detail_orientation",
-    "communication_clarity",
-    "stakeholder_influence",
-    "cross_func_alignment",
-    "business_acumen",
-    "strategic_planning",
-    "market_awareness",
-    "narrative_coherence",
-    "persuasion_effectiveness",
-    "technical_proficiency",
+    "product_intuition",           # Product sense: can you design the right product? (Meta Product Sense round)
+    "user_empathy",                # User understanding: do you deeply understand user needs/pain? (conducting-user-interviews, analyzing-user-feedback)
+    "metrics_driven_thinking",     # Can you define success metrics, interpret data, diagnose metric changes? (writing-north-star-metrics, setting-okrs-goals)
+    "structured_problem_solving",  # Do you break down ambiguous problems systematically? (problem-definition, evaluating-trade-offs)
+    "prioritization_tradeoffs",    # Can you prioritize ruthlessly and articulate trade-offs? (prioritizing-roadmap, scoping-cutting)
+    "execution_delivery",          # Do you ship? Scope, plan, unblock, deliver. (shipping-products, writing-prds)
+    "strategic_thinking",          # Long-term vision, competitive positioning, growth strategy (competitive-analysis, designing-growth-loops, platform-strategy)
+    "cross_functional_leadership", # Can you lead without authority across eng/design/data? (cross-functional-collaboration, stakeholder-alignment)
+    "stakeholder_communication",   # Clear communication, storytelling, influence (written-communication, giving-presentations)
+    "technical_fluency",           # Can you go deep enough with engineers? (building-with-llms, managing-tech-debt, evaluating-new-technology)
 ]
 
 DIMENSION_LABELS = {
-    "problem_framing": "Problem Framing",
-    "structured_thinking": "Structured Thinking",
-    "analytical_reasoning": "Analytical Reasoning",
-    "execution_ownership": "Execution Ownership",
-    "resource_orchestration": "Resource Orchestration",
-    "detail_orientation": "Detail Orientation",
-    "communication_clarity": "Communication Clarity",
-    "stakeholder_influence": "Stakeholder Influence",
-    "cross_func_alignment": "Cross-func Alignment",
-    "business_acumen": "Business Acumen",
-    "strategic_planning": "Strategic Planning",
-    "market_awareness": "Market Awareness",
-    "narrative_coherence": "Narrative Coherence",
-    "persuasion_effectiveness": "Persuasion Effectiveness",
-    "technical_proficiency": "Technical Proficiency",
+    "product_intuition": "Product Intuition",
+    "user_empathy": "User Empathy",
+    "metrics_driven_thinking": "Metrics & Data Thinking",
+    "structured_problem_solving": "Structured Problem Solving",
+    "prioritization_tradeoffs": "Prioritization & Trade-offs",
+    "execution_delivery": "Execution & Delivery",
+    "strategic_thinking": "Strategic Thinking",
+    "cross_functional_leadership": "Cross-functional Leadership",
+    "stakeholder_communication": "Stakeholder Communication",
+    "technical_fluency": "Technical Fluency",
 }
