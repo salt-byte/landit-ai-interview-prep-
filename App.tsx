@@ -390,12 +390,13 @@ const App: React.FC = () => {
               setSavedQuestions(prev => [...questions, ...prev]);
               if (authMode === 'USER') {
                 questions.forEach((q: SavedQuestion) => {
+                  if (!q.roleId) return; // Skip if no roleId
                   saveQuestion({
                     roleId: q.roleId,
                     type: q.type,
                     question: q.question,
                     answer: q.answer,
-                    source: 'LIVE_INTERVIEW',
+                    source: (q as any).source || 'LIVE_INTERVIEW',
                     chatHistory: q.chatHistory,
                     transcription: q.transcription,
                   }).catch(console.error);
