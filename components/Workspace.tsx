@@ -1015,7 +1015,8 @@ export const InterviewPrepBuilder: React.FC<{
       }
 
       // Step 2: Call Gemini directly from frontend (fast, direct connection)
-      const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nFocus on these question types: " + settings.types.join(", ") + ".\n\n" + (gapContext ? gapContext + "\n\n" : "") + "Role Context:\n" + (role?.jd || "") + "\n\nRequirements:\n1. Return ONLY the questions, one per line.\n2. Do NOT include numbering, category labels, or prefixes.\n3. Each question should be a single, complete sentence.\n4. Focus on the candidate's weak areas if provided.";
+      const jdText = (role?.jd || "").slice(0, 3000);
+      const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion types to cover: " + settings.types.join(", ") + ".\n\n" + (gapContext ? gapContext + "\n\n" : "") + "Job Description:\n" + jdText + "\n\nCRITICAL REQUIREMENTS:\n1. Every question MUST be specifically relevant to this job description. Reference specific responsibilities, tools, teams, or domain areas mentioned in the JD.\n2. For example, if the JD mentions PGC (Professional Generated Content), ask about PGC content strategy, creator partnerships, etc. — NOT generic PM questions.\n3. Questions should demonstrate that the interviewer has read the JD and is testing domain-specific knowledge.\n4. Return ONLY the questions, one per line.\n5. Do NOT include numbering, category labels, or prefixes.\n6. Each question should be a single, complete sentence.\n7. Focus on the candidate's weak areas if provided.";
 
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
