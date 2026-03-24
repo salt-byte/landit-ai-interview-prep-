@@ -16,6 +16,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
   // Stats — loaded from backend or computed from props
   const [stats, setStats] = useState({ liveInterviews: 0, mockQuestions: 0 });
   const [sessionDates, setSessionDates] = useState<Record<number, 'LIVE' | 'MOCK' | 'BOTH'>>({});
+  const [sessionsByRole, setSessionsByRole] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (isGuest) {
@@ -36,6 +37,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
       // Load interview sessions to populate calendar
       listInterviewSessions().then((sessions: any[]) => {
         const dates: Record<number, 'LIVE' | 'MOCK' | 'BOTH'> = {};
+        const roleCounts: Record<string, number> = {};
         for (const s of sessions) {
           const d = new Date(s.date);
           const day = d.getDate();
@@ -44,8 +46,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
           } else {
             dates[day] = 'LIVE';
           }
+          // Count completed sessions per role
+          if (s.roleId && s.status === 'completed') {
+            const rid = String(s.roleId);
+            roleCounts[rid] = (roleCounts[rid] || 0) + 1;
+          }
         }
         setSessionDates(dates);
+        setSessionsByRole(roleCounts);
       }).catch(() => {});
     }
   }, [isGuest, savedQuestions]);
@@ -322,7 +330,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                   
                   <div className="flex items-center justify-between pt-3 border-t border-[#F0F4F9]">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-lg font-bold text-[#0B57D0]">{idx % 2 === 0 ? '2' : '0'}</span>
+                      <span className="text-lg font-bold text-[#0B57D0]">{sessionsByRole[String(role.id)] || 0}</span>
                       <span className="text-xs font-bold text-[#444746] uppercase tracking-wider">Interviews Completed</span>
                     </div>
                   </div>
