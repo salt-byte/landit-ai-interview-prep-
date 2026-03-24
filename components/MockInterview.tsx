@@ -860,13 +860,23 @@ Instructions:
     }
 
     // Build Q&A pairs from transcript
+    // Merge consecutive AI turns into one question, consecutive user turns into one answer
     const transcript = geminiTranscriptRef.current;
+    const merged: {role: string, text: string}[] = [];
+    for (const entry of transcript) {
+      if (merged.length > 0 && merged[merged.length - 1].role === entry.role) {
+        // Same role as previous — merge text
+        merged[merged.length - 1].text += ' ' + entry.text;
+      } else {
+        merged.push({ ...entry });
+      }
+    }
+
     const qaPairs: {question: string, answer: string, chat: any[]}[] = [];
     let currentQ = '';
-    for (const entry of transcript) {
+    for (const entry of merged) {
       if (entry.role === 'ai') {
         if (currentQ) {
-          // Previous Q had no answer
           qaPairs.push({ question: currentQ, answer: '', chat: [] });
         }
         currentQ = entry.text;
