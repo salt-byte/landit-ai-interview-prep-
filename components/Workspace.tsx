@@ -1015,7 +1015,7 @@ export const InterviewPrepBuilder: React.FC<{
       }
 
       // Step 2: Call Gemini directly from frontend (fast, direct connection)
-      const jdText = (role?.jd || "").slice(0, 3000);
+      const jdText = role?.jd || "";
       const prompt = "You are an expert interview coach. Generate " + settings.qty + " high-quality interview questions for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion types to cover: " + settings.types.join(", ") + ".\n\n" + (gapContext ? gapContext + "\n\n" : "") + "Job Description:\n" + jdText + "\n\nCRITICAL REQUIREMENTS:\n1. Every question MUST be specifically relevant to this job description. Reference specific responsibilities, tools, teams, or domain areas mentioned in the JD.\n2. For example, if the JD mentions PGC (Professional Generated Content), ask about PGC content strategy, creator partnerships, etc. — NOT generic PM questions.\n3. Questions should demonstrate that the interviewer has read the JD and is testing domain-specific knowledge.\n4. Return ONLY the questions, one per line.\n5. Do NOT include numbering, category labels, or prefixes.\n6. Each question should be a single, complete sentence.\n7. Focus on the candidate's weak areas if provided.";
 
       const response = await gemini.models.generateContent({
