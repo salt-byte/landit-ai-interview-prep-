@@ -760,7 +760,12 @@ Instructions:
               // Accumulate AI output for this turn (fixes one-char-at-a-time subtitle)
               currentAiTurnTextRef.current += text;
               accumulatedText += ' ' + text;
-              setDisplayedQuestion(currentAiTurnTextRef.current);
+
+              // Show only the last sentence as subtitle (rolling window)
+              const fullText = currentAiTurnTextRef.current.trim();
+              const sentences = fullText.split(/(?<=[.?!。？！])\s*/);
+              const lastSentences = sentences.slice(-2).join(' ');
+              setDisplayedQuestion(lastSentences.length > 120 ? sentences.slice(-1).join('') : lastSentences);
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
