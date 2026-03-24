@@ -489,26 +489,47 @@ export const RoleContextBuilder: React.FC<{
   );
 };
 
-const sanitizeText = (text: string): string => {
-  return text
-    .replace(/^#+\s+/gm, '') // Remove H1-H6
-    .replace(/\*\*/g, '')    // Remove bold
-    .replace(/__/g, '')      // Remove bold
-    .replace(/\*/g, '')      // Remove italics/bullets
-    .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-    .replace(/>\s+/g, '')    // Remove blockquotes
-    .replace(/\[(.*?)\]\((.*?)\)/g, '$1') // Remove links
-    .trim();
-};
+/** Convert Markdown text to HTML suitable for TipTap editor */
+const markdownToHtml = (text: string): string => {
+  const lines = text.split('\n');
+  const parts: string[] = [];
+  let inOl = false;
+  let inUl = false;
 
-/** Convert plain text with newlines into HTML paragraphs for TipTap editor */
-const textToHtml = (text: string): string => {
-  return text
-    .split(/\n{2,}/)
-    .map(p => p.trim())
-    .filter(Boolean)
-    .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
-    .join('');
+  const closeLists = () => {
+    if (inOl) { parts.push('</ol>'); inOl = false; }
+    if (inUl) { parts.push('</ul>'); inUl = false; }
+  };
+
+  const fmt = (s: string): string =>
+    s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+     .replace(/__(.+?)__/g, '<strong>$1</strong>')
+     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+     .replace(/\[(.*?)\]\(.*?\)/g, '$1');
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    if (!line.trim()) { closeLists(); continue; }
+
+    // Headings
+    const hm = line.match(/^(#{1,6})\s+(.+)/);
+    if (hm) { closeLists(); const lvl = Math.min(hm[1].length, 2); parts.push(`<h${lvl}>${fmt(hm[2])}</h${lvl}>`); continue; }
+
+    // Ordered list item
+    const olm = line.match(/^\d+[.)]\s+(.+)/);
+    if (olm) { if (!inOl) { closeLists(); parts.push('<ol>'); inOl = true; } parts.push(`<li>${fmt(olm[1])}</li>`); continue; }
+
+    // Unordered list item
+    const ulm = line.match(/^[-*+]\s+(.+)/);
+    if (ulm) { if (!inUl) { closeLists(); parts.push('<ul>'); inUl = true; } parts.push(`<li>${fmt(ulm[1])}</li>`); continue; }
+
+    // Regular paragraph
+    closeLists();
+    parts.push(`<p>${fmt(line.trim())}</p>`);
+  }
+  closeLists();
+  return parts.join('');
 };
 
 /** Parse backend Markdown prep document (### Q: / **Answer Framework:**) into Q&A pairs */
@@ -524,7 +545,7 @@ const parsePrepContent = (content: string, limit: number): { q: string; a?: stri
       .filter(l => !l.startsWith('#') && l.trim())
       .map(l => l.replace(/^\*\*(?:Answer Framework|Key Points|Sample Answer|Guidance):\*\*\s*/i, '').trim())
       .filter(l => l.length > 0);
-    const a = answerLines.length > 0 ? sanitizeText(answerLines.join('\n')) : undefined;
+    const a = answerLines.length > 0 ? markdownToHtml(answerLines.join('\n')) : undefined;
     results.push({ q, a });
     if (results.length >= limit) break;
   }
@@ -1037,15 +1058,14 @@ export const InterviewPrepBuilder: React.FC<{
 
     try {
       const question = generatedQuestions[index].q;
-      const prompt = "You are an expert interview coach. Provide a sample answer for this interview question for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nRole Context:\n" + (role?.jd || "").slice(0, 1000) + "\n\nRequirements:\n1. Write as if you are the candidate speaking.\n2. Use STAR framework where applicable.\n3. Be concise but impactful.\n4. Do NOT use Markdown symbols. Use plain text with paragraphs.";
+      const prompt = "You are an expert interview coach. Provide a sample answer for this interview question for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a tech company") + ".\n\nQuestion: " + question + "\n\nRole Context:\n" + (role?.jd || "").slice(0, 1000) + "\n\nRequirements:\n1. Give the answer DIRECTLY. Do NOT include any preamble, introduction, or repeat the question. Start with the actual answer immediately.\n2. Write as if you are the candidate speaking.\n3. Use STAR framework where applicable.\n4. Be concise but impactful.\n5. Use Markdown formatting: **bold** for key terms or section headers, numbered lists for main points, and clear paragraph breaks for readability.";
 
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
         contents: [{ parts: [{ text: prompt }] }],
       });
 
-      const answer = sanitizeText(response.text || "");
-      const answerHtml = textToHtml(answer);
+      const answerHtml = markdownToHtml(response.text || "");
       const updatedQuestions = [...generatedQuestions];
       updatedQuestions[index] = { ...updatedQuestions[index], a: answerHtml };
       setGeneratedQuestions(updatedQuestions);
@@ -1169,7 +1189,7 @@ export const InterviewPrepBuilder: React.FC<{
         // If the user asked to modify the answer and we have a selected question, update it
         const modifyKeywords = ["shorter", "concise", "STAR", "format", "rewrite", "improve", "段", "简短", "修改", "分段"];
         if (currentQ && selectedQuestionIndex !== null && modifyKeywords.some(k => userMsg.toLowerCase().includes(k))) {
-          const improvedHtml = textToHtml(sanitizeText(aiReply));
+          const improvedHtml = markdownToHtml(aiReply);
           const updatedQuestions = [...generatedQuestions];
           updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improvedHtml };
           setGeneratedQuestions(updatedQuestions);
@@ -1202,10 +1222,9 @@ export const InterviewPrepBuilder: React.FC<{
         contents: [{ parts: [{ text: qPrompt }] }],
       });
 
-      const improved = sanitizeText(qResponse.text || "");
-      const improvedHtml = textToHtml(improved);
+      const improvedHtml = markdownToHtml(qResponse.text || "");
 
-      if (currentQ && selectedQuestionIndex !== null && improved) {
+      if (currentQ && selectedQuestionIndex !== null && improvedHtml) {
         const updatedQuestions = [...generatedQuestions];
         updatedQuestions[selectedQuestionIndex] = { ...updatedQuestions[selectedQuestionIndex], a: improvedHtml };
         setGeneratedQuestions(updatedQuestions);
