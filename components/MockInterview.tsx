@@ -862,33 +862,27 @@ Instructions:
     }
 
     // Build Q&A pairs from transcript
-    // Merge consecutive AI turns into one question, consecutive user turns into one answer
+    // Only merge consecutive USER turns (user may speak in fragments)
+    // Keep each AI turn separate — backend LLM will do smart grouping
     const transcript = geminiTranscriptRef.current;
     const merged: {role: string, text: string}[] = [];
     for (const entry of transcript) {
-      if (merged.length > 0 && merged[merged.length - 1].role === entry.role) {
-        // Same role as previous — merge text
+      if (merged.length > 0 && merged[merged.length - 1].role === 'user' && entry.role === 'user') {
         merged[merged.length - 1].text += ' ' + entry.text;
       } else {
         merged.push({ ...entry });
       }
     }
 
+    // Pair each AI turn with the next user turn
     const qaPairs: {question: string, answer: string, chat: any[]}[] = [];
-    let currentQ = '';
-    for (const entry of merged) {
-      if (entry.role === 'ai') {
-        if (currentQ) {
-          qaPairs.push({ question: currentQ, answer: '', chat: [] });
-        }
-        currentQ = entry.text;
-      } else if (entry.role === 'user' && currentQ) {
-        qaPairs.push({ question: currentQ, answer: entry.text, chat: [] });
-        currentQ = '';
+    for (let i = 0; i < merged.length; i++) {
+      if (merged[i].role === 'ai') {
+        const answer = (i + 1 < merged.length && merged[i + 1].role === 'user')
+          ? merged[i + 1].text : '';
+        qaPairs.push({ question: merged[i].text, answer, chat: [] });
+        if (answer) i++; // skip the user entry we just consumed
       }
-    }
-    if (currentQ) {
-      qaPairs.push({ question: currentQ, answer: '', chat: [] });
     }
 
     // Update sessionResults for feedback display
