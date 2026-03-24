@@ -261,7 +261,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
         </div>
 
         {/* Section 3: PM Competency Radar */}
-        {dimensionScores.length > 0 && (
+        {(() => {
+          const dims = dimensionScores.length > 0 ? dimensionScores : [
+            { dimension: 'product_intuition', label: 'Product Intuition', score: 0 },
+            { dimension: 'user_empathy', label: 'User Empathy', score: 0 },
+            { dimension: 'metrics_driven_thinking', label: 'Metrics & Data', score: 0 },
+            { dimension: 'structured_problem_solving', label: 'Problem Solving', score: 0 },
+            { dimension: 'prioritization_tradeoffs', label: 'Prioritization', score: 0 },
+            { dimension: 'execution_delivery', label: 'Execution', score: 0 },
+            { dimension: 'strategic_thinking', label: 'Strategic Thinking', score: 0 },
+            { dimension: 'cross_functional_leadership', label: 'Leadership', score: 0 },
+            { dimension: 'stakeholder_communication', label: 'Communication', score: 0 },
+            { dimension: 'technical_fluency', label: 'Technical Fluency', score: 0 },
+          ];
+          const hasData = dimensionScores.length > 0;
+          return (
           <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4 flex-shrink-0">
             <h3 className="font-bold text-[#1F1F1F] text-base mb-3">PM Competency Profile</h3>
             <div className="flex items-center justify-center">
@@ -274,8 +288,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                   );
                 })}
                 {/* Axis lines + labels */}
-                {dimensionScores.map((d, i) => {
-                  const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                {dims.map((d, i) => {
+                  const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
                   const x2 = 150 + 110 * Math.cos(angle);
                   const y2 = 150 + 110 * Math.sin(angle);
                   const lx = 150 + 128 * Math.cos(angle);
@@ -290,8 +304,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                 })}
                 {/* Data polygon */}
                 <polygon
-                  points={dimensionScores.map((d, i) => {
-                    const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                  points={dims.map((d, i) => {
+                    const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
                     const r = (d.score / 5) * 110;
                     return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
                   }).join(' ')}
@@ -300,8 +314,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                   strokeWidth="2"
                 />
                 {/* Score dots */}
-                {dimensionScores.map((d, i) => {
-                  const angle = (Math.PI * 2 * i) / dimensionScores.length - Math.PI / 2;
+                {dims.map((d, i) => {
+                  const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
                   const r = (d.score / 5) * 110;
                   return (
                     <circle key={`dot-${i}`} cx={150 + r * Math.cos(angle)} cy={150 + r * Math.sin(angle)} r="3.5" fill="#0B57D0" stroke="white" strokeWidth="1.5" />
@@ -311,15 +325,19 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
             </div>
             {/* Score legend */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 px-2">
-              {dimensionScores.map(d => (
+              {dims.map(d => (
                 <div key={d.dimension} className="flex items-center justify-between text-[11px]">
                   <span className="text-[#444746] truncate mr-2">{d.label}</span>
-                  <span className="font-bold text-[#1F1F1F]">{d.score.toFixed(1)}</span>
+                  <span className={`font-bold ${hasData ? 'text-[#1F1F1F]' : 'text-[#C4C7C5]'}`}>{hasData ? d.score.toFixed(1) : '—'}</span>
                 </div>
               ))}
             </div>
+            {!hasData && (
+              <p className="text-center text-xs text-[#444746] mt-3 italic">Complete a live interview to see your scores</p>
+            )}
           </div>
-        )}
+          );
+        })()}
 
       </div>
 
