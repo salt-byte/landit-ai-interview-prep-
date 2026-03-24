@@ -11,7 +11,7 @@ class UserProfile(Base):
     user_key: Mapped[str] = mapped_column(String(64), unique=True, index=True, default="default")
 
     full_name: Mapped[str] = mapped_column(String(128), default="")
-    profile_photo: Mapped[str] = mapped_column(String(512), default="")
+    profile_photo: Mapped[str] = mapped_column(Text, default="")
     target_role: Mapped[str] = mapped_column(String(256), default="")
     employment_type: Mapped[str] = mapped_column(String(64), default="")
     email: Mapped[str] = mapped_column(String(256), default="")

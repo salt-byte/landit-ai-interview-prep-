@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     name            VARCHAR(128) NOT NULL DEFAULT '',
     headline        VARCHAR(256) NOT NULL DEFAULT '',
     bio             TEXT         NOT NULL DEFAULT '',
-    avatar_url      VARCHAR(512) NOT NULL DEFAULT '',
+    avatar_url      TEXT         NOT NULL DEFAULT '',
     target_roles    VARCHAR(256) NOT NULL DEFAULT '',
     location        VARCHAR(128) NOT NULL DEFAULT '',
     education_level VARCHAR(64)  NOT NULL DEFAULT '',

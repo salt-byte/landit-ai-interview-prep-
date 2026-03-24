@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Upload,
   FileText,
@@ -21,6 +21,7 @@ import {
   User
 } from 'lucide-react';
 import { UploadedFile, UserProfile } from '../types';
+import { getDocuments } from '../api';
 import AddSourceModal from './AddSourceModal';
 
 interface ProfileProps {
@@ -29,13 +30,19 @@ interface ProfileProps {
   completionPercentage: number;
 }
 
-// --- Initial file list (empty for new users) ---
-const INITIAL_FILES: UploadedFile[] = [];
-
 const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfile, completionPercentage }) => {
-  const [files, setFiles] = useState<UploadedFile[]>(INITIAL_FILES);
+  const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [showToast, setShowToast] = useState(false);
+
+  // Load documents from backend on mount
+  useEffect(() => {
+    getDocuments().then((docs: any[]) => {
+      if (docs && docs.length > 0) {
+        setFiles(docs.map((d: any) => ({ id: String(d.id), name: d.name, type: d.type, date: d.date })));
+      }
+    }).catch(() => {});
+  }, []);
 
   // --- Edit State ---
   const [tempProfile, setTempProfile] = useState<UserProfile>(globalProfile);
