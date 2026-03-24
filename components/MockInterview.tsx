@@ -925,11 +925,10 @@ Instructions:
 
       // Create backend session for storage
       try {
-        const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
-        const session = await createInterviewSession({
-          role_id: roleId,
-          interviewer_id: matchedInterviewer?.id || 'alex',
-        });
+        const session = await createInterviewSession(
+          workspace?.id,
+          matchedInterviewer?.id || 'alex',
+        );
         setSessionId(session.id);
         console.log('[LandIt] Backend session created:', session.id);
       } catch {
@@ -945,11 +944,10 @@ Instructions:
     setUseLocalMode(true);
 
     try {
-      const roleId = workspace?.id ? parseInt(workspace.id) : undefined;
-      const session = await createInterviewSession({
-        role_id: roleId,
-        interviewer_id: matchedInterviewer?.id || 'alex',
-      });
+      const session = await createInterviewSession(
+        workspace?.id,
+        matchedInterviewer?.id || 'alex',
+      );
       setSessionId(session.id);
       setWsStartSent(false);
 
