@@ -257,13 +257,16 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
 
   const getSessionsForRole = (roleId: string) => {
     if (useMockData) {
-      // Guest: map demo role IDs to mock sessions by company
       const role = roles.find(r => r.id === roleId);
       if (!role) return [];
       return MOCK_SESSIONS.filter(s => s.company.toLowerCase() === role.company.toLowerCase());
     }
-    return sessions.filter(s => s.roleId === roleId);
+    // Match by roleId (handle string/number type mismatch)
+    return sessions.filter(s => String(s.roleId) === String(roleId));
   };
+
+  // Sessions not linked to any role
+  const unlinkedSessions = useMockData ? [] : sessions.filter(s => !s.roleId || !roles.some(r => String(r.id) === String(s.roleId)));
 
   const handleRoleClick = (role: TargetRole) => {
     setSelectedRole(role);
@@ -322,6 +325,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
             ))}
           </div>
         ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {roles.map((role) => {
             const roleSess = getSessionsForRole(role.id);
@@ -339,7 +343,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
                     {roleSess.length} Interviews
                   </span>
                 </div>
-                
+
                 <h3 className="text-lg font-bold text-[#1F1F1F] mb-1 group-hover:text-[#0B57D0] transition-colors">
                   {role.title}
                 </h3>
@@ -348,6 +352,44 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
             );
           })}
         </div>
+
+        {/* Show sessions not linked to any role */}
+        {unlinkedSessions.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-lg font-bold text-[#1F1F1F] mb-4">Recent Sessions</h2>
+            <div className="space-y-4">
+              {unlinkedSessions.map((session) => (
+                <div
+                  key={session.id}
+                  onClick={() => { setSelectedSession(null); handleSessionClick(session); }}
+                  className="bg-white p-5 rounded-2xl border border-[#E3E3E3] shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center gap-4"
+                >
+                  <div className="w-10 h-10 bg-[#F0F4F9] rounded-full flex items-center justify-center overflow-hidden">
+                    {session.interviewer?.avatar
+                      ? <img src={session.interviewer.avatar} alt="" className="w-full h-full object-cover" />
+                      : <User className="w-5 h-5 text-[#444746]" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-[#1F1F1F] text-sm truncate">{session.roleTitle || 'Interview Session'}</p>
+                    <p className="text-xs text-[#444746]">{session.interviewer?.name} · {new Date(session.date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {session.overallRating && (
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        session.overallRating === 'Excellent' ? 'bg-green-50 text-green-700' :
+                        session.overallRating === 'Good' ? 'bg-blue-50 text-blue-700' :
+                        'bg-orange-50 text-orange-700'
+                      }`}>{session.overallRating}</span>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-[#444746]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </>
         )}
       </div>
     );
