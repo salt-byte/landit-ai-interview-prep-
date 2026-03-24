@@ -1875,32 +1875,35 @@ Instructions:
 
   // --- RENDER: FEEDBACK (INTERVIEW REPORT) ---
   if (step === 'FEEDBACK') {
-    // Mock Evaluation Data Generator
+    const fb = realFeedback as any;
+    const fbScore = fb?.overall_score ?? 70;
+    const fbRating = fbScore >= 85 ? 'Excellent' : fbScore >= 60 ? 'Good' : 'Needs Improvement';
+    const fbStars = Math.round(fbScore / 20); // 0-100 -> 0-5 stars
+    const fbSummary = fb?.summary || fb?.transcript || 'Interview completed. Detailed feedback is being generated.';
+    const fbStrengths: string[] = fb?.strengths || [];
+    const fbImprovements: string[] = fb?.improvements || [];
+    const fbTranscriptItems: any[] = fb?.transcript_items || [];
+
+    // Per-question evaluation: use real feedback transcript_items if available, else infer from answer length
     const getMockEval = (answer: string, index: number) => {
+      if (fbTranscriptItems[index]) {
+        const item = fbTranscriptItems[index];
+        return {
+          rating: item.rating || 'Pass',
+          feedback: item.feedback || '',
+        };
+      }
       const length = answer.length;
       let rating: 'Needs improvement' | 'Pass' | 'Strong' = 'Pass';
       if (length < 50) rating = 'Needs improvement';
       else if (length > 150) rating = 'Strong';
-
       return {
         rating,
         feedback: rating === 'Strong'
-          ? "Excellent answer with clear structure and impactful examples. You demonstrated a deep understanding of the core concepts."
+          ? "Excellent answer with clear structure and impactful examples."
           : rating === 'Pass'
-          ? "Good answer overall, but could benefit from more specific examples to back up your claims."
-          : "The answer was too brief. Try to use the STAR method to provide a more comprehensive response.",
-        suggestions: [
-          "Use the STAR method for behavioral questions.",
-          "Quantify your impact with specific metrics.",
-          "Maintain a confident and steady pace."
-        ],
-        scores: {
-          Clarity: rating === 'Strong' ? 90 : rating === 'Pass' ? 70 : 40,
-          Structure: rating === 'Strong' ? 85 : rating === 'Pass' ? 65 : 45,
-          'Example quality': rating === 'Strong' ? 95 : rating === 'Pass' ? 60 : 30,
-          Impact: rating === 'Strong' ? 88 : rating === 'Pass' ? 75 : 50,
-        },
-        duration: Math.floor(Math.random() * 60) + 30,
+          ? "Good answer overall, but could benefit from more specific examples."
+          : "The answer was too brief. Try using the STAR method.",
       };
     };
 
@@ -1963,13 +1966,11 @@ Instructions:
                 <div className="flex items-center gap-3 bg-[#F8F9FA] px-4 py-2 rounded-xl border border-[#E3E3E3]">
                   <span className="text-sm font-bold text-[#444746]">Overall Rating</span>
                   <div className="flex gap-1">
-                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
-                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
-                    <Star className="w-5 h-5 text-[#0B57D0] fill-current" />
-                    <Star className="w-5 h-5 text-[#0B57D0] fill-current opacity-30" />
-                    <Star className="w-5 h-5 text-[#0B57D0] fill-current opacity-30" />
+                    {[1,2,3,4,5].map(i => (
+                      <Star key={i} className={`w-5 h-5 text-[#0B57D0] fill-current ${i > fbStars ? 'opacity-30' : ''}`} />
+                    ))}
                   </div>
-                  <span className="text-sm font-bold text-[#0B57D0] ml-1">Good</span>
+                  <span className="text-sm font-bold text-[#0B57D0] ml-1">{fbRating}</span>
                 </div>
               </div>
 
@@ -2025,7 +2026,7 @@ Instructions:
               </div>
 
               <p className="text-[#444746] leading-relaxed mb-8 text-base">
-                Strong communication and clear structure in behavioral answers. However, technical explanations need clearer metrics and more specific examples to back up product decisions. You demonstrated good empathy but could improve on data-driven storytelling.
+                {fbSummary}
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -2034,14 +2035,14 @@ Instructions:
                     <CheckCircle2 className="w-4 h-4 text-[#2ECC71]" /> Strengths
                   </h4>
                   <ul className="space-y-3">
-                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
-                      <span className="w-1.5 h-1.5 bg-[#2ECC71] rounded-full mt-2 flex-shrink-0"></span>
-                      Clear communication style with confident delivery.
-                    </li>
-                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
-                      <span className="w-1.5 h-1.5 bg-[#2ECC71] rounded-full mt-2 flex-shrink-0"></span>
-                      Good use of the STAR method for behavioral questions.
-                    </li>
+                    {fbStrengths.length > 0 ? fbStrengths.map((s, i) => (
+                      <li key={i} className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                        <span className="w-1.5 h-1.5 bg-[#2ECC71] rounded-full mt-2 flex-shrink-0"></span>
+                        {s}
+                      </li>
+                    )) : (
+                      <li className="text-sm text-[#444746] italic">No strengths data available yet.</li>
+                    )}
                   </ul>
                 </div>
 
@@ -2050,14 +2051,14 @@ Instructions:
                     <AlertCircle className="w-4 h-4 text-[#E74C3C]" /> Areas to Improve
                   </h4>
                   <ul className="space-y-3">
-                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
-                      <span className="w-1.5 h-1.5 bg-[#E74C3C] rounded-full mt-2 flex-shrink-0"></span>
-                      Structure technical answers with more specific metrics.
-                    </li>
-                    <li className="flex gap-3 text-sm text-[#444746] leading-relaxed">
-                      <span className="w-1.5 h-1.5 bg-[#E74C3C] rounded-full mt-2 flex-shrink-0"></span>
-                      Provide more concrete examples of impact.
-                    </li>
+                    {fbImprovements.length > 0 ? fbImprovements.map((s, i) => (
+                      <li key={i} className="flex gap-3 text-sm text-[#444746] leading-relaxed">
+                        <span className="w-1.5 h-1.5 bg-[#E74C3C] rounded-full mt-2 flex-shrink-0"></span>
+                        {s}
+                      </li>
+                    )) : (
+                      <li className="text-sm text-[#444746] italic">No improvement data available yet.</li>
+                    )}
                   </ul>
                 </div>
               </div>
