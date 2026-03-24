@@ -294,7 +294,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                           const reader = new FileReader();
                           reader.onload = (ev) => {
                             const base64 = ev.target?.result as string;
-                            updateField('profilePhoto', base64);
+                            // Update both global and temp profile so avatar applies immediately
+                            onUpdateProfile(prev => ({ ...prev, profilePhoto: base64 }));
+                            setTempProfile(prev => ({ ...prev, profilePhoto: base64 }));
                           };
                           reader.readAsDataURL(file);
                         }}
