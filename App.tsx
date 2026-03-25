@@ -227,8 +227,21 @@ const App: React.FC = () => {
   const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([]);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
 
-  // Completion Logic - Hardcoded to 75% for Demo purposes as requested
-  const completionPercentage = 75;
+  // Completion Logic - calculated from actual profile data
+  const completionPercentage = (() => {
+    const checks = [
+      !!userProfile.fullName,
+      !!userProfile.targetRole,
+      !!userProfile.email,
+      !!userProfile.location,
+      userProfile.education.length > 0,
+      userProfile.workExperience.length > 0,
+      userProfile.projects.length > 0,
+      !!(userProfile.skills?.technicalSkills || userProfile.skills?.toolsAndTechnologies || userProfile.skills?.softSkills),
+    ];
+    const filled = checks.filter(Boolean).length;
+    return Math.round((filled / checks.length) * 100);
+  })();
 
   const handleSelectRole = (role: TargetRole) => {
     setSelectedRole(role);
