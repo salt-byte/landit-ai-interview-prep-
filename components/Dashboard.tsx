@@ -112,8 +112,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
     else if (type === 'MOCK') onNavigate('MOCK_PREP');
   };
 
-  // Profile Strength Logic
-  const profileStrength = 75;
+  // Profile Strength Logic — computed from actual profile data
+  const profileStrength = (() => {
+    const fields = [
+      userProfile.fullName, userProfile.targetRole, userProfile.email,
+      userProfile.location, userProfile.phoneNumber,
+      userProfile.skills?.technicalSkills, userProfile.skills?.toolsAndTechnologies, userProfile.skills?.softSkills,
+    ];
+    const filled = fields.filter((f: any) => f && f.trim()).length;
+    const base = (filled / fields.length) * 60;
+    let section = 0;
+    if (userProfile.education?.length) section += 15;
+    if (userProfile.workExperience?.length) section += 15;
+    if (userProfile.projects?.length) section += 10;
+    return Math.min(Math.round(base + section), 100);
+  })();
   const getStrengthColor = (val: number) => {
     if (val > 80) return 'bg-[#14AE5C]'; // Green
     if (val >= 60) return 'bg-[#FA7B17]'; // Orange
@@ -369,7 +382,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                    <span className={`text-xs font-bold ${getStrengthTextColor(profileStrength)} uppercase tracking-wider`}>{profileStrength}% Complete</span>
                 </div>
                 <div className="w-full h-1.5 bg-[#F0F4F9] rounded-full overflow-hidden">
-                  <div className={`h-full ${getStrengthColor(profileStrength)} w-[75%] rounded-full`}></div>
+                  <div className={`h-full ${getStrengthColor(profileStrength)} rounded-full`} style={{width: `${profileStrength}%`}}></div>
                 </div>
              </div>
            </div>

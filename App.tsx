@@ -227,20 +227,20 @@ const App: React.FC = () => {
   const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([]);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
 
-  // Completion Logic - calculated from actual profile data
+  // Completion Logic - computed from profile fields (matches backend calculate_completion)
   const completionPercentage = (() => {
-    const checks = [
-      !!userProfile.fullName,
-      !!userProfile.targetRole,
-      !!userProfile.email,
-      !!userProfile.location,
-      userProfile.education.length > 0,
-      userProfile.workExperience.length > 0,
-      userProfile.projects.length > 0,
-      !!(userProfile.skills?.technicalSkills || userProfile.skills?.toolsAndTechnologies || userProfile.skills?.softSkills),
+    const fields = [
+      userProfile.fullName, userProfile.targetRole, userProfile.email,
+      userProfile.location, userProfile.phoneNumber,
+      userProfile.skills?.technicalSkills, userProfile.skills?.toolsAndTechnologies, userProfile.skills?.softSkills,
     ];
-    const filled = checks.filter(Boolean).length;
-    return Math.round((filled / checks.length) * 100);
+    const filled = fields.filter(f => f && f.trim()).length;
+    const base = (filled / fields.length) * 60;
+    let section = 0;
+    if (userProfile.education?.length) section += 15;
+    if (userProfile.workExperience?.length) section += 15;
+    if (userProfile.projects?.length) section += 10;
+    return Math.min(Math.round(base + section), 100);
   })();
 
   const handleSelectRole = (role: TargetRole) => {
