@@ -793,13 +793,16 @@ Instructions:
               currentAiTurnTextRef.current += text;
               accumulatedText += ' ' + text;
 
-              // Update subtitle only when a sentence boundary is reached
-              // This prevents word-by-word flickering — subtitle updates per sentence
+              // Real-time captions: show current sentence being spoken
+              // Split into sentences, always show the last (in-progress) sentence
               const fullText = currentAiTurnTextRef.current.trim();
-              if (/[.?!。？！,;:]$/.test(text.trim()) || text.includes('\n')) {
-                const sentences = fullText.split(/(?<=[.?!。？！])\s*/);
-                const lastSentences = sentences.slice(-2).join(' ');
-                setDisplayedQuestion(lastSentences.length > 120 ? sentences.slice(-1).join('') : lastSentences);
+              const sentences = fullText.split(/(?<=[.?!。？！])\s+/);
+              const current = sentences[sentences.length - 1] || '';
+              // Show previous complete sentence + current in-progress sentence
+              if (sentences.length >= 2) {
+                setDisplayedQuestion(sentences[sentences.length - 2] + '\n' + current);
+              } else {
+                setDisplayedQuestion(current);
               }
 
               // Check for interview conclusion
