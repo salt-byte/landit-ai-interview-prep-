@@ -56,12 +56,11 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
       else if (lowerName.includes('jd') || lowerName.includes('job')) detectedType = 'Job Description';
       setSelectedFileType(detectedType);
 
-      // Start uploading immediately in the background (non-guest, non-role)
+      // Start uploading silently in the background (non-guest, non-role)
+      // Don't change uploadStatus — keep UI showing file preview until user clicks Upload
       if (!isGuest && !roleId) {
         preUploadTypeRef.current = detectedType;
-        setUploadStatus('UPLOADING');
         if (detectedType === 'Resume') {
-          setUploadStatus('PARSING');
           preUploadPromiseRef.current = uploadAndParseDocument(file);
         } else {
           preUploadPromiseRef.current = uploadDocument(file);
