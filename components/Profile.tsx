@@ -35,13 +35,18 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
   const [isEditing, setIsEditing] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
-  // Load documents from backend on mount
+  // Load documents from backend on mount (with retry for Render cold start)
   useEffect(() => {
-    getDocuments().then((docs: any[]) => {
-      if (docs && docs.length > 0) {
-        setFiles(docs.map((d: any) => ({ id: String(d.id), name: d.name, type: d.type, date: d.date })));
-      }
-    }).catch(() => {});
+    const loadDocs = (retries = 2) => {
+      getDocuments().then((docs: any[]) => {
+        if (docs && docs.length > 0) {
+          setFiles(docs.map((d: any) => ({ id: String(d.id), name: d.name, type: d.type, date: d.date })));
+        }
+      }).catch(() => {
+        if (retries > 0) setTimeout(() => loadDocs(retries - 1), 3000);
+      });
+    };
+    loadDocs();
   }, []);
 
   // --- Edit State ---
