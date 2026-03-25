@@ -1278,6 +1278,16 @@ export const InterviewPrepBuilder: React.FC<{
     return (
       <div className="px-6 py-4 border-b border-[#E3E3E3] flex items-center justify-between bg-white flex-shrink-0">
          <div className="flex items-center gap-4">
+           <button
+             onClick={() => {
+               setEditorState('SETTINGS');
+               setGeneratedQuestions([]);
+               setSelectedQuestionIndex(null);
+             }}
+             className="flex items-center gap-1 text-sm font-medium text-[#444746] hover:text-[#0B57D0] transition-colors"
+           >
+             <ChevronLeft className="w-4 h-4" /> Back
+           </button>
            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F0F4F9] rounded-lg text-sm font-bold text-[#1F1F1F]">
              <Briefcase className="w-4 h-4 text-[#0B57D0]" />
              {role?.title} @ {role?.company}
