@@ -8,7 +8,7 @@ from google import genai
 from config import settings, DIMENSIONS, DIMENSION_LABELS
 
 client = genai.Client(api_key=settings.gemini_api_key)
-MODEL = "gemini-3-flash-preview"
+MODEL = "gemini-2.5-flash"
 
 
 async def _generate(prompt: str, max_tokens: int = 4096, system: str = "") -> str:
