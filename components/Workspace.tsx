@@ -1280,7 +1280,7 @@ export const InterviewPrepBuilder: React.FC<{
          <div className="flex items-center gap-4">
            <button
              onClick={() => {
-               setEditorState('SETTINGS');
+               setEditorState('EMPTY');
                setGeneratedQuestions([]);
                setSelectedQuestionIndex(null);
              }}
