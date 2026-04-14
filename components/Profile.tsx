@@ -408,7 +408,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               </section>
 
               <section>
-                 <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Information</h3>
+                 <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Personal</h3>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                     <div>
                       <label className="text-xs text-[#444746] font-semibold mb-1 block">Target Role</label>
@@ -438,7 +438,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               <div ref={setSectionRef('EDUCATION')} data-tab-id="EDUCATION">
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Education</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight">Education</h3>
                    {isEditing && <button onClick={() => addItem('education')} className="p-1 hover:bg-[#F0F4F9] rounded-full"><Plus className="w-5 h-5 text-[#0B57D0]" /></button>}
                 </div>
                 <div className="space-y-8">
@@ -507,7 +507,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               <div ref={setSectionRef('WORK_EXPERIENCE')} data-tab-id="WORK_EXPERIENCE">
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Work Experience</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight">Work Experience</h3>
                    {isEditing && <button onClick={() => addItem('workExperience')} className="p-1 hover:bg-[#F0F4F9] rounded-full"><Plus className="w-5 h-5 text-[#0B57D0]" /></button>}
                 </div>
                 <div className="space-y-10">
@@ -569,7 +569,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
               <div ref={setSectionRef('PROJECTS')} data-tab-id="PROJECTS">
               <section>
                  <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Projects</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight">Projects</h3>
                    {isEditing && <button onClick={() => addItem('projects')} className="p-1 hover:bg-[#F0F4F9] rounded-full"><Plus className="w-5 h-5 text-[#0B57D0]" /></button>}
                 </div>
                 <div className="space-y-8">
@@ -624,7 +624,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
               <div ref={setSectionRef('SKILLS')} data-tab-id="SKILLS">
               <section>
-                 <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Skills</h3>
+                 <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Skills</h3>
                  <div className="space-y-4">
                     <div>
                       <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">

@@ -325,7 +325,7 @@ export const RoleContextBuilder: React.FC<{
 
                 <div ref={setRoleContextSectionRef('BASICS')} data-tab-id="BASICS">
                 <section>
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Info</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Basics</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                       <div className="md:col-span-2">
                          <label className="text-xs text-[#444746] font-semibold mb-1 block">Role Title</label>
@@ -376,7 +376,7 @@ export const RoleContextBuilder: React.FC<{
 
                 <div ref={setRoleContextSectionRef('JD')} data-tab-id="JD">
                 <section>
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Job Description</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">JD</h3>
                    {isEditing ? (
                      <textarea 
                        rows={12}
@@ -395,7 +395,7 @@ export const RoleContextBuilder: React.FC<{
 
                 <div ref={setRoleContextSectionRef('CONTEXT')} data-tab-id="CONTEXT">
                 <section>
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Context & Research</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Context</h3>
                    <div className="grid grid-cols-1 gap-8">
                       <div>
                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">
@@ -440,7 +440,7 @@ export const RoleContextBuilder: React.FC<{
 
                 <div ref={setRoleContextSectionRef('QUESTIONS')} data-tab-id="QUESTIONS">
                 <section>
-                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Interview Questions</h3>
+                    <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Questions</h3>
                     {isEditing ? (
                     <textarea 
                         rows={6}
@@ -471,7 +471,7 @@ export const RoleContextBuilder: React.FC<{
 
                 <div ref={setRoleContextSectionRef('NOTES')} data-tab-id="NOTES">
                 <section>
-                   <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Additional Notes</h3>
+                   <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">Notes</h3>
                    {isEditing ? (
                      <textarea 
                        rows={4}
