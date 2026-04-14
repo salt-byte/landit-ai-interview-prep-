@@ -45,6 +45,7 @@ import {
 import { TargetRole, InterviewFeedback, UserProfile } from '../types';
 import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession } from '../api';
 import { GoogleGenAI, Modality } from "@google/genai";
+import { buildActiveQuestions, QuestionTypeId } from '../lib/questions';
 
 interface MockInterviewProps {
   workspace: TargetRole | null;
@@ -130,69 +131,7 @@ const INTERVIEWERS_POOL = [
   }
 ];
 
-// --- Expanded Mock Questions (10 Questions per persona) ---
-const QUESTIONS_DB: Record<string, string[]> = {
-  alex: [
-    "Tell me about a time you had to handle a complex project with tight deadlines.",
-    "How do you approach learning new technologies when starting a new role?",
-    "Describe a conflict you had with a teammate and how you resolved it.",
-    "What is your process for breaking down a large, ambiguous problem?",
-    "Give me an example of a time you failed. What did you learn?",
-    "How do you prioritize features when resources are limited?",
-    "Explain a complex technical concept to someone without a technical background.",
-    "Describe a time you demonstrated leadership without formal authority.",
-    "How do you handle constructive criticism?",
-    "Where do you see yourself in 3-5 years?"
-  ],
-  victor: [
-    "Walk me through the ROI of your last major project.",
-    "I'm not convinced this solution scales. Defend your architecture choice.",
-    "What's the biggest risk in your proposed strategy, and how do you mitigate it?",
-    "Tell me about a time you disagreed with a senior stakeholder. What happened?",
-    "If we cut your timeline in half, what features would you drop and why?",
-    "Give me the data that supports your decision-making process.",
-    "Why should we hire you over someone with more experience?",
-    "Describe a situation where you had to make a tough decision with incomplete information.",
-    "How do you handle high-pressure situations?",
-    "What is your philosophy on 'done is better than perfect'?"
-  ],
-  emma: [
-    "Tell me about a time you supported a struggling team member.",
-    "How do you foster an inclusive environment in your team?",
-    "Describe a time you received difficult feedback. How did you react?",
-    "How do you handle disagreements within a cross-functional team?",
-    "What motivates you to do your best work?",
-    "Tell me about a time you had to adapt to a significant change at work.",
-    "How do you ensure everyone's voice is heard in a meeting?",
-    "Describe a time you went above and beyond for a customer or user.",
-    "How do you balance individual goals with team objectives?",
-    "What kind of culture helps you thrive?"
-  ],
-  adrian: [
-    "Deep dive into the most technically challenging bug you've solved.",
-    "Explain the trade-offs between SQL and NoSQL for this specific use case.",
-    "How would you design a system to handle 1 million concurrent users?",
-    "Walk me through your database schema design for a social media feed.",
-    "How do you optimize for latency in a distributed system?",
-    "Describe your experience with CI/CD pipelines.",
-    "What metrics do you track to ensure system health?",
-    "How do you approach testing in a microservices architecture?",
-    "Explain how you would secure a public-facing API.",
-    "What is the most innovative technical solution you've implemented?"
-  ],
-  sophia: [
-    "Tell me about a time you showed high emotional intelligence.",
-    "Describe a situation where you had to influence others.",
-    "How do you handle stress and burnout?",
-    "Tell me about a time you had to deliver bad news.",
-    "How do you build trust with a new team?",
-    "Describe a time you took initiative outside of your defined role.",
-    "How do you handle ambiguity?",
-    "What are your core values?",
-    "Tell me about a time you mentored someone.",
-    "How do you define success?"
-  ]
-};
+// QUESTIONS_DB removed — questions now come from lib/questions.ts (97-question bank, company-substituted)
 
 const MOCK_FEEDBACK: InterviewFeedback = {
   score: 85,
@@ -435,12 +374,16 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
   const activeQuestions = React.useMemo(() => {
     if (!matchedInterviewer) return [];
-    const base = QUESTIONS_DB[matchedInterviewer.id] || QUESTIONS_DB['alex'];
+    const targetCompany = workspace?.company || 'the company';
+    const typeIds = settings.types.length > 0
+      ? settings.types as QuestionTypeId[]
+      : ['behavioral' as QuestionTypeId];
+    const picked = buildActiveQuestions(typeIds, targetCompany, 9);
     return [
       "Please introduce yourself and walk me through your background.",
-      ...base.slice(0, 9)
+      ...picked,
     ];
-  }, [matchedInterviewer]);
+  }, [matchedInterviewer, settings.types, workspace?.company]);
 
 
   // Cleanup stream + WS + Gemini session on unmount
@@ -710,35 +653,34 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     return parts.length > 0 ? parts.join("\n") : "";
   };
 
-  const buildSystemPrompt = (interviewer: any): string => {
+  const buildSystemPrompt = (interviewer: any, questions: string[]): string => {
     const style = INTERVIEWER_STYLE_MAP[interviewer.id] || INTERVIEWER_STYLE_MAP['alex'];
     const roleTitle = workspace?.title || 'a general role';
     const roleCompany = workspace?.company || 'the company';
     const jd = workspace?.jd || 'No specific job description provided.';
-    const questionTypes = settings.types.map(t => {
-      const qt = QUESTION_TYPES.find(q => q.id === t);
-      return qt ? qt.label : t;
-    }).join(', ');
     const profileSummary = buildProfileSummary();
+
+    // Skip the self-intro (index 0) — the interviewer asks for that naturally
+    const questionList = questions.slice(1)
+      .map((q, i) => `${i + 1}. ${q}`)
+      .join('\n');
 
     return `You are ${interviewer.name}, ${interviewer.title} — a ${interviewer.role}.
 Style: ${style}
 You are conducting a mock interview for the role of ${roleTitle} at ${roleCompany}.
 
 Job Description: ${jd}
-${profileSummary ? `
-Candidate Profile:
-${profileSummary}
-` : ''}
+${profileSummary ? `\nCandidate Profile:\n${profileSummary}\n` : ''}
 Instructions:
-- Start by introducing yourself briefly and asking the candidate to introduce themselves.
-- Ask one question at a time.
-- Listen to the candidate's response, then give brief feedback or a follow-up.
-- Cover these question types: ${questionTypes}
-- For Behavioral & Experience questions, reference the candidate's actual work experience, projects, and background from their profile. Ask them to elaborate on specific roles, achievements, or situations from their resume. Cross-reference their experience with the job description requirements.
-- Ask about 10 questions total.
-- Be conversational and natural, like a real interview.
-- When you've asked all questions, thank the candidate and say "That concludes our interview today."`;
+- Start by briefly introducing yourself and asking the candidate to introduce themselves.
+- Ask ONE question at a time. Listen to the answer, give a short natural reaction, then move on.
+- For behavioral questions, reference the candidate's actual experience from their profile when possible.
+- Be conversational and natural — like a real interviewer, not a quiz show host.
+- After the self-introduction, ask the following 9 questions IN ORDER. Do not improvise new questions; use these exactly (you may rephrase slightly for conversational flow):
+
+${questionList}
+
+- After the 9th question is answered, thank the candidate and say exactly: "That concludes our interview today."`;
   };
 
   const connectGeminiLive = async (interviewer: any): Promise<boolean> => {
@@ -751,7 +693,7 @@ Instructions:
 
       const ai = new GoogleGenAI({ apiKey });
       const voiceName = INTERVIEWER_VOICE_MAP[interviewer.id] || 'Puck';
-      const systemPrompt = buildSystemPrompt(interviewer);
+      const systemPrompt = buildSystemPrompt(interviewer, activeQuestions);
       let accumulatedText = '';
 
       console.log('[LandIt] Connecting to Gemini Live with voice:', voiceName);
