@@ -166,9 +166,17 @@ async def generate_interview_prep(
     include_answers = mode == "QA"
     cat_list = ", ".join(categories)
     answer_instruction = (
-        "Include detailed answer frameworks using STAR method where applicable, key points, and pitfalls to avoid."
+        """INCLUDE ANSWERS. For each question, write a model answer that sounds like a real senior PM speaking — not a textbook.
+
+ANSWER RULES (follow strictly):
+A. DO NOT use STAR as a visible skeleton. STAR is a memory aid, not a response structure. A strong answer flows like a story, not a form. Never write "Situation:", "Task:", "Action:", "Result:" as labels.
+B. ONE SPECIFIC CASE, not a list of methods. Pick one real scenario and go deep on it. Do not list "1. I did X, 2. I also did Y, 3. Additionally Z." One thread, one decision, one outcome.
+C. INCLUDE FRICTION. Every strong answer must contain one moment where something didn't go as planned — a metric came back wrong, a stakeholder pushed back, a first solution failed. Answers that are too smooth are not credible.
+D. NUMBERS ANCHOR CREDIBILITY. At least one concrete number or constraint per answer — a %, a timeline, a team size, a metric delta. "We improved conversion" is weak. "Conversion went from 2.1% to 3.4% over 6 weeks" is strong.
+E. END WITH THE TRADE-OFF, not the victory. The best PM answers close with what they gave up or what they'd do differently — not "we achieved all our goals." That's what shows judgment.
+F. PITFALLS: After the model answer, add 2 pitfalls — specific behaviors that signal a weak candidate (e.g., "Describes a process without owning a decision" or "Lists frameworks without explaining why they chose one over another")."""
         if include_answers
-        else "List questions only - no answers."
+        else "LIST QUESTIONS ONLY — no answers, no hints."
     )
 
     prompt = f"""You are a senior PM interviewer at {company} preparing realistic interview questions for a {role_title} candidate.
@@ -217,14 +225,14 @@ QUESTION DESIGN RULES — follow these strictly:
 
 ---
 
-{"INCLUDE ANSWERS: For each question, provide: (a) a concise answer framework (STAR where applicable), (b) 3-5 key points a strong answer must cover, (c) 1-2 pitfalls that distinguish weak answers." if include_answers else "LIST QUESTIONS ONLY — no answers, no hints."}
+{answer_instruction}
 
 ---
 FORMAT:
 ## [Category Name]
 ### Q: [Scenario question — standalone, no "As a PM..." preamble]
 *Targets: [dimension label from gap summary]*
-{"\\n**Answer Framework:** [approach]\\n**Key Points:**\\n- point 1\\n- point 2\\n**Pitfalls:** [what weak answers do]" if include_answers else ""}
+{"\\n**Model Answer:** [prose narrative, 150-200 words, one story with friction and a number. No bullet lists. No STAR labels.]\\n\\n**Pitfalls:**\\n- [specific weak behavior 1]\\n- [specific weak behavior 2]" if include_answers else ""}
 
 Generate questions now. Cover all requested categories: {cat_list}. Write 3-5 sharp, scenario-driven questions per category."""
 
