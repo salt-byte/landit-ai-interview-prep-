@@ -561,7 +561,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
   // --- Gemini Live API: Audio Playback ---
 
-  const ensureAudioContext = (): AudioContext => {
+  const ensureAudioContext = (): AudioContext | null => {
+    if (isExitingRef.current) return null; // don't create new context after exit
     if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
       audioContextRef.current = new AudioContext({ sampleRate: 24000 });
     }
@@ -571,6 +572,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const playAudioChunk = (base64Data: string) => {
     try {
       const ctx = ensureAudioContext();
+      if (!ctx) return; // exiting — drop all incoming audio
 
       // Decode base64 to raw bytes
       const binaryStr = atob(base64Data);
@@ -1887,24 +1889,6 @@ Instructions:
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Center/Bottom Overlay: Current Question / Subtitle */}
-        <div
-          className="absolute bottom-28 left-0 right-0 z-20 flex flex-col items-center"
-          style={{
-            transform: `translate(${subtitlePos.x}px, ${subtitlePos.y}px)`,
-            cursor: isDraggingSubtitle ? 'grabbing' : 'grab',
-            opacity: isDraggingSubtitle ? 0.7 : 1,
-            transition: isDraggingSubtitle ? 'none' : 'opacity 0.2s'
-          }}
-          onMouseDown={handleSubtitleMouseDown}
-        >
-           <div className="max-w-2xl w-full mx-6 sm:mx-12 bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl p-6 text-center shadow-lg select-none transition-all hover:bg-white/25" style={{ minHeight: '4rem' }}>
-              <h2 className="text-lg md:text-2xl font-medium text-white leading-relaxed drop-shadow-md tracking-wide">
-                "{displayedQuestion}"
-              </h2>
-           </div>
         </div>
 
         {/* Bottom Control Bar */}
