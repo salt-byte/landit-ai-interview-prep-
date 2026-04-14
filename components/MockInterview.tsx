@@ -796,17 +796,19 @@ Instructions:
               currentAiTurnTextRef.current += text;
               accumulatedText += ' ' + text;
 
-              // Real-time captions: show current sentence being spoken
-              // Split into sentences, always show the last (in-progress) sentence
-              const fullText = currentAiTurnTextRef.current.trim();
-              const sentences = fullText.split(/(?<=[.?!。？！])\s+/);
-              const current = sentences[sentences.length - 1] || '';
-              // Show previous complete sentence + current in-progress sentence
-              if (sentences.length >= 2) {
-                setDisplayedQuestion(sentences[sentences.length - 2] + '\n' + current);
-              } else {
-                setDisplayedQuestion(current);
+              // Real-time captions: smooth rolling tail.
+              // Show the last ~140 chars of the current turn, trimmed to a
+              // word boundary so the caption only ever grows or shifts
+              // gradually. Avoids the visible "jump" caused by switching
+              // sentence windows on every period/question mark.
+              const fullText = currentAiTurnTextRef.current.replace(/\s+/g, ' ').trim();
+              const MAX = 140;
+              let tail = fullText.length > MAX ? fullText.slice(-MAX) : fullText;
+              if (fullText.length > MAX) {
+                const sp = tail.indexOf(' ');
+                if (sp > 0 && sp < 30) tail = tail.slice(sp + 1);
               }
+              setDisplayedQuestion(tail);
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
@@ -822,11 +824,16 @@ Instructions:
             // Handle turn completion — flush accumulated AI text as one transcript entry
             if (message.serverContent?.turnComplete) {
               if (currentAiTurnTextRef.current.trim()) {
-                // Final subtitle update for this turn
-                const finalText = currentAiTurnTextRef.current.trim();
-                const finalSentences = finalText.split(/(?<=[.?!。？！])\s*/);
-                const lastFinal = finalSentences.slice(-2).join(' ');
-                setDisplayedQuestion(lastFinal.length > 120 ? finalSentences.slice(-1).join('') : lastFinal);
+                const finalText = currentAiTurnTextRef.current.replace(/\s+/g, ' ').trim();
+                // Keep the same rolling-tail caption style as during streaming
+                // so the final frame doesn't visually jump.
+                const MAX = 140;
+                let tail = finalText.length > MAX ? finalText.slice(-MAX) : finalText;
+                if (finalText.length > MAX) {
+                  const sp = tail.indexOf(' ');
+                  if (sp > 0 && sp < 30) tail = tail.slice(sp + 1);
+                }
+                setDisplayedQuestion(tail);
 
                 geminiTranscriptRef.current.push({ role: 'ai', text: finalText });
                 currentAiTurnTextRef.current = '';
