@@ -456,7 +456,7 @@ export const RoleContextBuilder: React.FC<{
                     ) : (
                     <div className="space-y-2">
                         {(!localRole.interviewQuestions || localRole.interviewQuestions.length === 0) ? (
-                             <p className="text-sm text-[#444746] italic bg-[#F0F4F9] inline-block px-3 py-1 rounded">No interview questions added yet.</p>
+                             <MissingIndicator text="Click Edit to add questions"/>
                         ) : (
                             <ul className="list-disc pl-5 space-y-2">
                                 {localRole.interviewQuestions.map((q, i) => (
