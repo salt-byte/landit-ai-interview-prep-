@@ -360,8 +360,10 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const nextPlayTimeRef = useRef(0);
   const currentAiTurnTextRef = useRef('');
   const currentUserTurnTextRef = useRef('');
-  const aiTurnCompletedRef = useRef(false);     // true right after an AI turn ends
-  const subtitleUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiTurnCompletedRef = useRef(false);       // true right after an AI turn ends
+  const lastSubtitleUpdateRef = useRef(0);        // timestamp of last subtitle state update (throttle)
+  const isExitingRef = useRef(false);             // set true during exit to block async callbacks
+  const geminiEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // handle for the 2s end-detection timer
 
   // Pre-connection state for Gemini Live
   const [geminiPreconnected, setGeminiPreconnected] = useState(false);
@@ -805,11 +807,13 @@ Instructions:
               const sentences = fullText.split(/(?<=[.?!。？！])\s+/);
               const current = sentences[sentences.length - 1] || '';
 
-              // Debounce subtitle updates to ~150ms to prevent rapid flicker
-              if (subtitleUpdateTimerRef.current) clearTimeout(subtitleUpdateTimerRef.current);
-              subtitleUpdateTimerRef.current = setTimeout(() => {
+              // Throttle subtitle updates to at most once every 120ms (not debounce)
+              // This ensures smooth streaming display without waiting for silence
+              const now = Date.now();
+              if (now - lastSubtitleUpdateRef.current >= 120) {
+                lastSubtitleUpdateRef.current = now;
                 setDisplayedQuestion(current);
-              }, 150);
+              }
 
               // Check for interview conclusion
               const lower = accumulatedText.toLowerCase();
@@ -818,18 +822,17 @@ Instructions:
                   lower.includes('end of our interview') ||
                   lower.includes('that concludes')) {
                 accumulatedText = '';
-                setTimeout(() => handleGeminiInterviewEnd(), 2000);
+                // Use cancellable ref so exit can prevent this from firing
+                if (geminiEndTimerRef.current) clearTimeout(geminiEndTimerRef.current);
+                geminiEndTimerRef.current = setTimeout(() => handleGeminiInterviewEnd(), 2000);
               }
             }
 
             // Handle turn completion — flush accumulated AI text as one transcript entry
             if (message.serverContent?.turnComplete) {
               if (currentAiTurnTextRef.current.trim()) {
-                // Cancel any pending debounced subtitle update and show final sentence immediately
-                if (subtitleUpdateTimerRef.current) {
-                  clearTimeout(subtitleUpdateTimerRef.current);
-                  subtitleUpdateTimerRef.current = null;
-                }
+                // Force subtitle update immediately (bypass throttle) for the final sentence
+                lastSubtitleUpdateRef.current = 0;
                 const finalText = currentAiTurnTextRef.current.trim();
                 const finalSentences = finalText.split(/(?<=[.?!。？！])\s+/);
                 setDisplayedQuestion(finalSentences[finalSentences.length - 1] || finalText);
@@ -866,6 +869,9 @@ Instructions:
   };
 
   const handleGeminiInterviewEnd = () => {
+    // If user has already clicked "Confirm Exit", do not override their navigation
+    if (isExitingRef.current) return;
+
     setIsRecording(false);
     setIsFinishing(true);
     stopMicStreaming();
@@ -916,17 +922,19 @@ Instructions:
       finishSession(sessionId, transcript, matchedInterviewer?.id)
         .then(() => getInterviewFeedback(String(sessionId)))
         .then(fb => {
+          if (isExitingRef.current) return; // user exited while request was in-flight
           setRealFeedback(fb);
           setIsFinishing(false);
           setStep('FEEDBACK');
         })
         .catch(() => {
-          // Fallback: show feedback page without real data
+          if (isExitingRef.current) return;
           setIsFinishing(false);
           setStep('FEEDBACK');
         });
     } else {
       setTimeout(() => {
+        if (isExitingRef.current) return;
         setIsFinishing(false);
         setStep('FEEDBACK');
       }, 2000);
@@ -982,6 +990,7 @@ Instructions:
       currentAiTurnTextRef.current = '';
       currentUserTurnTextRef.current = '';
       aiTurnCompletedRef.current = false;  // first AI turn is the greeting, not a question transition
+      isExitingRef.current = false;        // clear any previous exit state
 
       // Create backend session for storage (non-blocking — don't delay mic start)
       createInterviewSession(workspace?.id, matchedInterviewer?.id || 'alex')
@@ -1411,6 +1420,13 @@ Instructions:
 
   // Handle ending the interview (for both modes)
   const handleExitInterview = () => {
+    // Block any pending async callbacks (finishSession Promise, end-detection timer)
+    isExitingRef.current = true;
+    if (geminiEndTimerRef.current) {
+      clearTimeout(geminiEndTimerRef.current);
+      geminiEndTimerRef.current = null;
+    }
+
     setShowExitConfirm(false);
 
     if (useLocalMode) {
@@ -1419,12 +1435,17 @@ Instructions:
         synthesisRef.current.cancel();
       }
     } else {
-      // Gemini mode: close session
+      // Gemini mode: close session and audio context
       stopMicStreaming();
       if (geminiSessionRef.current) {
         try { geminiSessionRef.current.close(); } catch {}
         geminiSessionRef.current = null;
       }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try { audioContextRef.current.close(); } catch {}
+        audioContextRef.current = null;
+      }
+      nextPlayTimeRef.current = 0;
     }
 
     setStep('SETTINGS');
@@ -1435,6 +1456,9 @@ Instructions:
     setIsFinishing(false);
     setGeminiPreconnected(false);
     preconnectingRef.current = false;
+
+    // Reset exit flag after state is committed (next tick)
+    setTimeout(() => { isExitingRef.current = false; }, 0);
   };
 
   // Handle finishing the interview via the Finish button (Gemini mode)
