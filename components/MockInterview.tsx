@@ -43,7 +43,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { TargetRole, InterviewFeedback, UserProfile } from '../types';
-import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession } from '../api';
+import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession, pingBackend } from '../api';
 import { GoogleGenAI, Modality } from "@google/genai";
 
 interface MockInterviewProps {
@@ -414,11 +414,14 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
     }
   }, [step, workspace, settings.types, matchedInterviewer]);
 
-  // Pre-connect Gemini Live API during device check to reduce startup latency
+  // Pre-connect Gemini Live API during device check to reduce startup latency.
+  // Also wake the Render backend in parallel so its cold start overlaps with
+  // device check time instead of blocking the first interview request.
   useEffect(() => {
     if (step === 'DEVICE_CHECK' && matchedInterviewer && !geminiSessionRef.current && !preconnectingRef.current) {
       preconnectingRef.current = true;
-      console.log('[LandIt] Pre-connecting Gemini Live during device check...');
+      console.log('[LandIt] Pre-connecting Gemini Live + warming backend during device check...');
+      pingBackend().then(ok => console.log('[LandIt] Backend warm-up:', ok ? 'ok' : 'failed'));
       connectGeminiLive(matchedInterviewer).then(ok => {
         preconnectingRef.current = false;
         setGeminiPreconnected(ok);
@@ -971,19 +974,31 @@ Instructions:
       currentAiTurnTextRef.current = '';
       currentUserTurnTextRef.current = '';
 
-      // Create backend session for storage
+      // Kick the model off immediately so it greets without waiting for
+      // mic audio to arrive — this is what eliminates the opening silence.
       try {
-        const session = await createInterviewSession(
-          workspace?.id,
-          matchedInterviewer?.id || 'alex',
-        );
-        setSessionId(session.id);
-        console.log('[LandIt] Backend session created:', session.id);
-      } catch {
-        console.warn('[LandIt] Could not create backend session (data will not persist)');
+        geminiSessionRef.current.sendClientContent({
+          turns: [{
+            role: 'user',
+            parts: [{ text: "Let's begin the interview now. Please greet me briefly and ask your first question." }],
+          }],
+          turnComplete: true,
+        });
+      } catch (err) {
+        console.warn('[LandIt] Failed to send opening trigger:', err);
       }
 
+      // Start mic immediately. Backend session creation runs in parallel
+      // so a cold Render instance never blocks the conversation.
       startMicStreaming(geminiSessionRef.current);
+
+      createInterviewSession(workspace?.id, matchedInterviewer?.id || 'alex')
+        .then(session => {
+          setSessionId(session.id);
+          console.log('[LandIt] Backend session created:', session.id);
+        })
+        .catch(() => console.warn('[LandIt] Could not create backend session (data will not persist)'));
+
       return;
     }
 

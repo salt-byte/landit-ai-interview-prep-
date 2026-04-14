@@ -51,6 +51,17 @@ async function request<T>(
 
 // ─── Profile ────────────────────────────────────────────────────────────────
 
+// Lightweight unauthenticated ping used to wake the Render instance during
+// device check so the first real request doesn't pay the cold-start cost.
+export async function pingBackend(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/health`, { method: 'GET' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function getProfile() {
   return request<any>('/api/profile');
 }
