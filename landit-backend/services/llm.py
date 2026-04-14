@@ -199,17 +199,21 @@ For each question you write, pick ONE gap dimension and design a scenario that s
 ---
 QUESTION DESIGN RULES — follow these strictly:
 
-1. ONE TOPIC PER QUESTION. No compound questions. No "...and how would you apply that to X?" No "...also walk me through Y." If you have two angles, write two separate questions.
+1. ONE TOPIC PER QUESTION. Test exactly one thing. No compound questions. No "...and how would you apply that to X?" No "...also walk me through Y." If you have two angles, write two separate questions.
 
-2. EVERY QUESTION MUST INCLUDE A REAL BUSINESS SCENARIO with a forced decision — not an abstract process question.
-   - Analytical: present a real data discrepancy with specific numbers (e.g., "CTR is up 18% but checkout conversion is down 12% week-over-week — what's your diagnosis and next step?")
-   - Prioritization: force a genuine trade-off with real constraints (e.g., "Engineering has 6 weeks and two options: fix the top user complaint affecting 40% of users, or ship the enterprise feature Sales says is blocking 3 deals worth $2M. Pick one and defend it.")
-   - Behavioral: name the stakeholder, the conflict, and the pressure. Both options the candidate faces must be defensible — avoid questions where the "right" answer is obvious.
-   - Strategy: frame a specific competitive or market threat with real stakes (e.g., "A well-funded competitor just dropped pricing to zero — your retention cohort shows 15% of users are trialing it. You have 90 days before Q3 renewals. What's your move?")
+2. KEEP QUESTIONS UNDER 30 WORDS. The candidate should talk more than the interviewer. State the scenario, then ask one sharp question. Cut all filler.
+   BAD (too long, compound): "Walk me through how you would identify user needs, prioritize features based on business impact, and communicate your roadmap to stakeholders."
+   GOOD (concise, one focus): "DAU up 12%, revenue per user down 8%. Is this a win? What do you do next?"
 
-3. PRIORITIZATION AND ANALYTICAL questions must include specific numbers or constraints. Vague questions like "how would you prioritize features?" are not allowed.
+3. EVERY QUESTION MUST INCLUDE A REAL BUSINESS SCENARIO with a forced decision — not an abstract process question.
+   - Analytical: data discrepancy with specific numbers (e.g., "CTR up 18%, checkout conversion down 12% WoW. What's your diagnosis?")
+   - Prioritization: forced choice with real constraints (e.g., "6 weeks of eng capacity. Fix top user complaint (40% affected) or ship the enterprise feature blocking $2M in deals. Pick one.")
+   - Behavioral: name the stakeholder, the conflict, the pressure. Both options must be defensible.
+   - Strategy: specific threat or opportunity with real stakes and a deadline.
 
-4. Questions must feel like they could actually be asked in a real interview at {company} for a candidate with this specific background — not generic PM interview questions pulled from a list.
+4. ANALYTICAL AND PRIORITIZATION questions must have specific numbers or hard constraints. Vague questions are not allowed.
+
+5. Questions must feel like they could actually be asked at a real interview at {company} for this candidate's background — not generic questions pulled from a list.
 
 ---
 
