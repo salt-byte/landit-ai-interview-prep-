@@ -351,7 +351,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   // Gemini Live API refs
   const geminiSessionRef = useRef<any>(null);
   const geminiTranscriptRef = useRef<{role: string, text: string}[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);     // 24kHz playback context
+  const micAudioContextRef = useRef<AudioContext | null>(null);   // 16kHz mic input context
   const audioWorkletNodeRef = useRef<any>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const isStreamingMicRef = useRef(false);
@@ -449,7 +450,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
         streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (wsRef.current) {
-        wsRef.current.close();
+        try { wsRef.current.close(); } catch {}
       }
       if (geminiSessionRef.current) {
         try { geminiSessionRef.current.close(); } catch {}
@@ -457,7 +458,10 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         try { audioContextRef.current.close(); } catch {}
       }
-      stopMicStreaming();
+      if (geminiEndTimerRef.current) {
+        clearTimeout(geminiEndTimerRef.current);
+      }
+      stopMicStreaming(); // also closes micAudioContextRef
     };
   }, []);
 
@@ -618,7 +622,12 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const startMicStreaming = (session: any) => {
     if (!streamRef.current || isStreamingMicRef.current) return;
 
+    // Close any previous mic context before creating a new one
+    if (micAudioContextRef.current && micAudioContextRef.current.state !== 'closed') {
+      try { micAudioContextRef.current.close(); } catch {}
+    }
     const audioCtx = new AudioContext({ sampleRate: 16000 });
+    micAudioContextRef.current = audioCtx;
     const source = audioCtx.createMediaStreamSource(streamRef.current);
 
     // Use ScriptProcessorNode for broad browser compatibility
@@ -666,10 +675,12 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const stopMicStreaming = () => {
     isStreamingMicRef.current = false;
     if (scriptProcessorRef.current) {
-      try {
-        scriptProcessorRef.current.disconnect();
-      } catch {}
+      try { scriptProcessorRef.current.disconnect(); } catch {}
       scriptProcessorRef.current = null;
+    }
+    if (micAudioContextRef.current && micAudioContextRef.current.state !== 'closed') {
+      try { micAudioContextRef.current.close(); } catch {}
+      micAudioContextRef.current = null;
     }
   };
 
@@ -896,6 +907,15 @@ Instructions:
       try { geminiSessionRef.current.close(); } catch {}
       geminiSessionRef.current = null;
     }
+    // Stop camera/mic — interview is over, no need to keep the stream open
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
 
     // Flush any remaining accumulated text before building Q&A pairs
     if (currentUserTurnTextRef.current.trim()) {
@@ -1071,15 +1091,6 @@ Instructions:
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const nextQuestion = () => {
-    if (currentQuestionIndex < activeQuestions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    } else {
-      setIsRecording(false);
-      setStep('FEEDBACK');
-    }
   };
 
   // --- Subtitle Dragging ---
@@ -1476,14 +1487,43 @@ Instructions:
       nextPlayTimeRef.current = 0;
     }
 
+    // Stop camera/mic stream so the browser indicator light turns off
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    // Close WS if it was open (local mode fallback)
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch {}
+      wsRef.current = null;
+    }
+
+    // Reset all interview state
     setStep('SETTINGS');
     setTimer(0);
     setSessionResults([]);
     setIsRecording(false);
+    setIsPaused(false);
+    setInterviewerState('IDLE');
+    setTranscript('');
+    setCurrentQuestionIndex(0);
+    setSessionId(null);
+    setUseLocalMode(false);
+    setFollowUpCount(0);
+    setAudioLevel(0);
     setMatchedInterviewer(null);
     setIsFinishing(false);
     setGeminiPreconnected(false);
+
+    // Reset all refs
     preconnectingRef.current = false;
+    geminiTranscriptRef.current = [];
+    currentAiTurnTextRef.current = '';
+    currentUserTurnTextRef.current = '';
+    aiTurnCompletedRef.current = false;
+    manualAdvanceRef.current = false;
+    lastSubtitleUpdateRef.current = 0;
+    nextPlayTimeRef.current = 0;
 
     // Reset exit flag after state is committed (next tick)
     setTimeout(() => { isExitingRef.current = false; }, 0);
