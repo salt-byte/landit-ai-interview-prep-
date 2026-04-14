@@ -1286,25 +1286,35 @@ Instructions:
   // Pause/Resume Logic
   const togglePause = () => {
     if (isPaused) {
+      // --- RESUME ---
       setIsPaused(false);
       if (useLocalMode) {
         startListeningLocal();
+        if (synthesisRef.current) synthesisRef.current.resume();
       } else {
-        // Gemini mode: resume mic streaming
+        // Resume audio playback — reset schedule so we don't try to catch up on stale buffers
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          nextPlayTimeRef.current = 0;
+          audioContextRef.current.resume();
+        }
+        // Restart mic
         if (geminiSessionRef.current) {
           startMicStreaming(geminiSessionRef.current);
         }
       }
     } else {
+      // --- PAUSE ---
       setIsPaused(true);
       if (useLocalMode) {
         stopListeningLocal();
-        if (synthesisRef.current?.speaking) {
-          synthesisRef.current.pause();
-        }
+        if (synthesisRef.current?.speaking) synthesisRef.current.pause();
       } else {
-        // Gemini mode: stop mic streaming (pauses input)
+        // Stop mic so Gemini stops receiving user audio
         stopMicStreaming();
+        // Suspend AudioContext to immediately silence all scheduled audio output
+        if (audioContextRef.current && audioContextRef.current.state === 'running') {
+          audioContextRef.current.suspend();
+        }
       }
     }
   };
