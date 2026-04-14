@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion, UserProfile } from '../types';
-import { TabBar, TabItem } from './TabBar';
+import { TabBar, TabItem, useScrollSpyTabs } from './TabBar';
 
 type RoleContextTab = 'BASICS' | 'JD' | 'CONTEXT' | 'QUESTIONS' | 'NOTES';
 
@@ -89,6 +89,10 @@ export const RoleContextBuilder: React.FC<{
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [roleContextTab, setRoleContextTab] = useState<RoleContextTab>('BASICS');
+  const { scrollContainerRef: roleContextScrollRef, setSectionRef: setRoleContextSectionRef, scrollToTab: scrollToRoleContextTab } = useScrollSpyTabs<RoleContextTab>(
+    ROLE_CONTEXT_TABS.map(t => t.id),
+    setRoleContextTab,
+  );
   
   // --- Card Height Logic (Reused from Profile/Dashboard) ---
   // Using h-full to fill the parent container which is already constrained by App.tsx padding
@@ -313,13 +317,13 @@ export const RoleContextBuilder: React.FC<{
             )}
           </div>
 
-          <TabBar<RoleContextTab> tabs={ROLE_CONTEXT_TABS} active={roleContextTab} onChange={setRoleContextTab} />
+          <TabBar<RoleContextTab> tabs={ROLE_CONTEXT_TABS} active={roleContextTab} onChange={scrollToRoleContextTab} />
 
           {/* Context Content */}
-          <div className="flex-1 overflow-y-auto px-10 pt-10 pb-20">
+          <div ref={roleContextScrollRef} className="flex-1 overflow-y-auto px-10 pt-10 pb-20">
              <div className="max-w-3xl mx-auto space-y-12">
 
-                {roleContextTab === 'BASICS' && (
+                <div ref={setRoleContextSectionRef('BASICS')} data-tab-id="BASICS">
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Info</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -368,9 +372,9 @@ export const RoleContextBuilder: React.FC<{
                       </div>
                    </div>
                 </section>
-                )}
+                </div>
 
-                {roleContextTab === 'JD' && (
+                <div ref={setRoleContextSectionRef('JD')} data-tab-id="JD">
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Job Description</h3>
                    {isEditing ? (
@@ -387,9 +391,9 @@ export const RoleContextBuilder: React.FC<{
                      </div>
                    )}
                 </section>
-                )}
+                </div>
 
-                {roleContextTab === 'CONTEXT' && (
+                <div ref={setRoleContextSectionRef('CONTEXT')} data-tab-id="CONTEXT">
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Context & Research</h3>
                    <div className="grid grid-cols-1 gap-8">
@@ -432,9 +436,9 @@ export const RoleContextBuilder: React.FC<{
                       </div>
                    </div>
                 </section>
-                )}
+                </div>
 
-                {roleContextTab === 'QUESTIONS' && (
+                <div ref={setRoleContextSectionRef('QUESTIONS')} data-tab-id="QUESTIONS">
                 <section>
                     <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Interview Questions</h3>
                     {isEditing ? (
@@ -463,9 +467,9 @@ export const RoleContextBuilder: React.FC<{
                     </div>
                     )}
                 </section>
-                )}
+                </div>
 
-                {roleContextTab === 'NOTES' && (
+                <div ref={setRoleContextSectionRef('NOTES')} data-tab-id="NOTES">
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Additional Notes</h3>
                    {isEditing ? (
@@ -482,7 +486,7 @@ export const RoleContextBuilder: React.FC<{
                      </p>
                    )}
                 </section>
-                )}
+                </div>
 
              </div>
           </div>

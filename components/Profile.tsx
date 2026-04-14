@@ -23,7 +23,7 @@ import {
 import { UploadedFile, UserProfile } from '../types';
 import { getDocuments } from '../api';
 import AddSourceModal from './AddSourceModal';
-import { TabBar, TabItem } from './TabBar';
+import { TabBar, TabItem, useScrollSpyTabs } from './TabBar';
 
 type ProfileTab = 'PERSONAL' | 'EDUCATION' | 'WORK_EXPERIENCE' | 'PROJECTS' | 'SKILLS';
 
@@ -67,6 +67,10 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
   // --- Add Source Modal State ---
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('PERSONAL');
+  const { scrollContainerRef, setSectionRef, scrollToTab } = useScrollSpyTabs<ProfileTab>(
+    PROFILE_TABS.map(t => t.id),
+    setActiveTab,
+  );
 
   // --- Color Logic for Completion ---
   let progressColor = 'bg-[#B3261E]'; // Red
@@ -291,13 +295,13 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
             )}
           </div>
 
-          <TabBar<ProfileTab> tabs={PROFILE_TABS} active={activeTab} onChange={setActiveTab} />
+          <TabBar<ProfileTab> tabs={PROFILE_TABS} active={activeTab} onChange={scrollToTab} />
 
           {/* Document Content */}
-          <div className="px-10 pt-10 pb-10 flex-1 overflow-y-auto">
+          <div ref={scrollContainerRef} className="px-10 pt-10 pb-10 flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto space-y-12">
 
-              {activeTab === 'PERSONAL' && (
+              <div ref={setSectionRef('PERSONAL')} data-tab-id="PERSONAL" className="space-y-12">
               <section className="text-center">
                  <div className="w-24 h-24 mx-auto rounded-full border-4 border-[#F0F4F9] shadow-sm overflow-hidden mb-4 relative group">
                     {profile.profilePhoto
@@ -402,9 +406,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                    </>
                  )}
               </section>
-              )}
 
-              {activeTab === 'PERSONAL' && (
               <section>
                  <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Information</h3>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -431,9 +433,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                     </div>
                  </div>
               </section>
-              )}
+              </div>
 
-              {activeTab === 'EDUCATION' && (
+              <div ref={setSectionRef('EDUCATION')} data-tab-id="EDUCATION">
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Education</h3>
@@ -500,9 +502,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
-              )}
+              </div>
 
-              {activeTab === 'WORK_EXPERIENCE' && (
+              <div ref={setSectionRef('WORK_EXPERIENCE')} data-tab-id="WORK_EXPERIENCE">
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Work Experience</h3>
@@ -562,9 +564,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
-              )}
+              </div>
 
-              {activeTab === 'PROJECTS' && (
+              <div ref={setSectionRef('PROJECTS')} data-tab-id="PROJECTS">
               <section>
                  <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Projects</h3>
@@ -618,9 +620,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
-              )}
+              </div>
 
-              {activeTab === 'SKILLS' && (
+              <div ref={setSectionRef('SKILLS')} data-tab-id="SKILLS">
               <section>
                  <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Skills</h3>
                  <div className="space-y-4">
@@ -665,7 +667,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                     </div>
                  </div>
               </section>
-              )}
+              </div>
 
             </div>
           </div>
