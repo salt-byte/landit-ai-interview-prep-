@@ -269,43 +269,56 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
 
         {/* Section 3: PM Competency Radar */}
         {(() => {
-          const dims = dimensionScores.length > 0 ? dimensionScores : [
-            { dimension: 'product_intuition', label: 'Product Intuition', score: 0 },
-            { dimension: 'user_empathy', label: 'User Empathy', score: 0 },
-            { dimension: 'metrics_driven_thinking', label: 'Metrics & Data', score: 0 },
-            { dimension: 'structured_problem_solving', label: 'Problem Solving', score: 0 },
-            { dimension: 'prioritization_tradeoffs', label: 'Prioritization', score: 0 },
-            { dimension: 'execution_delivery', label: 'Execution', score: 0 },
-            { dimension: 'strategic_thinking', label: 'Strategic Thinking', score: 0 },
-            { dimension: 'cross_functional_leadership', label: 'Leadership', score: 0 },
-            { dimension: 'stakeholder_communication', label: 'Communication', score: 0 },
-            { dimension: 'technical_fluency', label: 'Technical Fluency', score: 0 },
+          const DEMO_DIMENSION_SCORES = [
+            { dimension: 'product_intuition',          label: 'Product Intuition',    score: 3.6 },
+            { dimension: 'user_empathy',               label: 'User Empathy',         score: 4.2 },
+            { dimension: 'metrics_driven_thinking',    label: 'Metrics & Data',       score: 2.9 },
+            { dimension: 'structured_problem_solving', label: 'Problem Solving',      score: 3.8 },
+            { dimension: 'prioritization_tradeoffs',   label: 'Prioritization',       score: 3.2 },
+            { dimension: 'execution_delivery',         label: 'Execution',            score: 4.0 },
+            { dimension: 'strategic_thinking',         label: 'Strategic Thinking',   score: 2.7 },
+            { dimension: 'cross_functional_leadership',label: 'Leadership',           score: 3.5 },
+            { dimension: 'stakeholder_communication',  label: 'Communication',        score: 4.1 },
+            { dimension: 'technical_fluency',          label: 'Technical Fluency',    score: 2.5 },
+          ];
+          const DIMENSION_COLORS = [
+            '#1A73E8', '#D93025', '#F9AB00', '#1E8E3E', '#9334E6',
+            '#00A9A7', '#E8710A', '#C2185B', '#3F51B5', '#795548',
           ];
           const hasData = dimensionScores.length > 0;
+          const dims = hasData ? dimensionScores : DEMO_DIMENSION_SCORES;
+          const CX = 210;
+          const CY = 180;
+          const R_MAX = 115;
+          const R_LABEL = 138;
+          const polygonFill = hasData ? 'rgba(11, 87, 208, 0.15)' : 'rgba(154, 160, 166, 0.15)';
+          const polygonStroke = hasData ? '#0B57D0' : '#9AA0A6';
+          const dotFill = hasData ? '#0B57D0' : '#9AA0A6';
           return (
-          <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4 flex-shrink-0">
+          <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4">
             <h3 className="font-bold text-[#1F1F1F] text-base mb-3">PM Competency Profile</h3>
             <div className="flex items-center justify-center">
-              <svg viewBox="0 0 300 300" className="w-full max-w-[280px]">
+              <svg viewBox="0 0 420 380" className="w-full max-w-[360px]">
                 {/* Background rings */}
                 {[1, 2, 3, 4, 5].map(level => {
-                  const r = (level / 5) * 110;
+                  const r = (level / 5) * R_MAX;
                   return (
-                    <circle key={level} cx="150" cy="150" r={r} fill="none" stroke="#E3E3E3" strokeWidth={level === 5 ? 1.5 : 0.5} strokeDasharray={level < 5 ? "2 2" : "none"} />
+                    <circle key={level} cx={CX} cy={CY} r={r} fill="none" stroke="#E3E3E3" strokeWidth={level === 5 ? 1.5 : 0.5} strokeDasharray={level < 5 ? "2 2" : "none"} />
                   );
                 })}
                 {/* Axis lines + labels */}
                 {dims.map((d, i) => {
                   const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
-                  const x2 = 150 + 110 * Math.cos(angle);
-                  const y2 = 150 + 110 * Math.sin(angle);
-                  const lx = 150 + 128 * Math.cos(angle);
-                  const ly = 150 + 128 * Math.sin(angle);
-                  const shortLabel = d.label.length > 12 ? d.label.slice(0, 11) + '…' : d.label;
+                  const x2 = CX + R_MAX * Math.cos(angle);
+                  const y2 = CY + R_MAX * Math.sin(angle);
+                  const lx = CX + R_LABEL * Math.cos(angle);
+                  const ly = CY + R_LABEL * Math.sin(angle);
+                  const cosA = Math.cos(angle);
+                  const textAnchor = cosA > 0.2 ? 'start' : cosA < -0.2 ? 'end' : 'middle';
                   return (
                     <g key={d.dimension}>
-                      <line x1="150" y1="150" x2={x2} y2={y2} stroke="#E3E3E3" strokeWidth="0.5" />
-                      <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" className="text-[7px] fill-[#444746] font-medium">{shortLabel}</text>
+                      <line x1={CX} y1={CY} x2={x2} y2={y2} stroke="#E3E3E3" strokeWidth="0.5" />
+                      <text x={lx} y={ly} textAnchor={textAnchor} dominantBaseline="central" className="text-[11px] font-semibold" fill={DIMENSION_COLORS[i]}>{d.label}</text>
                     </g>
                   );
                 })}
@@ -313,34 +326,25 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                 <polygon
                   points={dims.map((d, i) => {
                     const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
-                    const r = (d.score / 5) * 110;
-                    return `${150 + r * Math.cos(angle)},${150 + r * Math.sin(angle)}`;
+                    const r = (d.score / 5) * R_MAX;
+                    return `${CX + r * Math.cos(angle)},${CY + r * Math.sin(angle)}`;
                   }).join(' ')}
-                  fill="rgba(11, 87, 208, 0.15)"
-                  stroke="#0B57D0"
+                  fill={polygonFill}
+                  stroke={polygonStroke}
                   strokeWidth="2"
                 />
                 {/* Score dots */}
                 {dims.map((d, i) => {
                   const angle = (Math.PI * 2 * i) / dims.length - Math.PI / 2;
-                  const r = (d.score / 5) * 110;
+                  const r = (d.score / 5) * R_MAX;
                   return (
-                    <circle key={`dot-${i}`} cx={150 + r * Math.cos(angle)} cy={150 + r * Math.sin(angle)} r="3.5" fill="#0B57D0" stroke="white" strokeWidth="1.5" />
+                    <circle key={`dot-${i}`} cx={CX + r * Math.cos(angle)} cy={CY + r * Math.sin(angle)} r="3.5" fill={dotFill} stroke="white" strokeWidth="1.5" />
                   );
                 })}
               </svg>
             </div>
-            {/* Score legend */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 px-2">
-              {dims.map(d => (
-                <div key={d.dimension} className="flex items-center justify-between text-[11px]">
-                  <span className="text-[#444746] truncate mr-2">{d.label}</span>
-                  <span className={`font-bold ${hasData ? 'text-[#1F1F1F]' : 'text-[#C4C7C5]'}`}>{hasData ? d.score.toFixed(1) : '—'}</span>
-                </div>
-              ))}
-            </div>
             {!hasData && (
-              <p className="text-center text-xs text-[#444746] mt-3 italic">Complete a live interview to see your scores</p>
+              <p className="text-center text-xs text-[#80868B] mt-2 italic">Demo scores — complete your first interview to see your real profile</p>
             )}
           </div>
           );
