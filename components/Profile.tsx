@@ -23,6 +23,17 @@ import {
 import { UploadedFile, UserProfile } from '../types';
 import { getDocuments } from '../api';
 import AddSourceModal from './AddSourceModal';
+import { TabBar, TabItem } from './TabBar';
+
+type ProfileTab = 'PERSONAL' | 'EDUCATION' | 'WORK_EXPERIENCE' | 'PROJECTS' | 'SKILLS';
+
+const PROFILE_TABS: TabItem<ProfileTab>[] = [
+  { id: 'PERSONAL', label: 'Personal' },
+  { id: 'EDUCATION', label: 'Education' },
+  { id: 'WORK_EXPERIENCE', label: 'Work Experience' },
+  { id: 'PROJECTS', label: 'Projects' },
+  { id: 'SKILLS', label: 'Skills' },
+];
 
 interface ProfileProps {
   profile: UserProfile;
@@ -55,6 +66,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
 
   // --- Add Source Modal State ---
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('PERSONAL');
 
   // --- Color Logic for Completion ---
   let progressColor = 'bg-[#B3261E]'; // Red
@@ -279,11 +291,13 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
             )}
           </div>
 
+          <TabBar<ProfileTab> tabs={PROFILE_TABS} active={activeTab} onChange={setActiveTab} />
+
           {/* Document Content */}
           <div className="px-10 pt-10 pb-10 flex-1 overflow-y-auto">
             <div className="max-w-3xl mx-auto space-y-12">
 
-              {/* 0. Header (Avatar, Name, Target Role) */}
+              {activeTab === 'PERSONAL' && (
               <section className="text-center">
                  <div className="w-24 h-24 mx-auto rounded-full border-4 border-[#F0F4F9] shadow-sm overflow-hidden mb-4 relative group">
                     {profile.profilePhoto
@@ -388,8 +402,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                    </>
                  )}
               </section>
+              )}
 
-              {/* 1. Basic Information */}
+              {activeTab === 'PERSONAL' && (
               <section>
                  <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Information</h3>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -416,8 +431,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                     </div>
                  </div>
               </section>
+              )}
 
-              {/* 2. Education */}
+              {activeTab === 'EDUCATION' && (
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Education</h3>
@@ -484,8 +500,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
+              )}
 
-              {/* 3. Work Experience */}
+              {activeTab === 'WORK_EXPERIENCE' && (
               <section>
                 <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Work Experience</h3>
@@ -545,8 +562,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
+              )}
 
-               {/* 4. Projects */}
+              {activeTab === 'PROJECTS' && (
               <section>
                  <div className="flex items-center justify-between mb-6 border-b border-[#F0F4F9] pb-3">
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider">Projects</h3>
@@ -600,8 +618,9 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                   ))}
                 </div>
               </section>
+              )}
 
-              {/* 5. Skills */}
+              {activeTab === 'SKILLS' && (
               <section>
                  <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Skills</h3>
                  <div className="space-y-4">
@@ -646,6 +665,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
                     </div>
                  </div>
               </section>
+              )}
 
             </div>
           </div>

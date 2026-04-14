@@ -49,6 +49,17 @@ import {
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion, UserProfile } from '../types';
+import { TabBar, TabItem } from './TabBar';
+
+type RoleContextTab = 'BASICS' | 'JD' | 'CONTEXT' | 'QUESTIONS' | 'NOTES';
+
+const ROLE_CONTEXT_TABS: TabItem<RoleContextTab>[] = [
+  { id: 'BASICS', label: 'Basics' },
+  { id: 'JD', label: 'JD' },
+  { id: 'CONTEXT', label: 'Context' },
+  { id: 'QUESTIONS', label: 'Questions' },
+  { id: 'NOTES', label: 'Notes' },
+];
 import { deleteRoleSource, getGapMatrix, getWeaknessVector } from '../api';
 
 const gemini = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
@@ -77,6 +88,7 @@ export const RoleContextBuilder: React.FC<{
   const [isEditing, setIsEditing] = useState(false);
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [roleContextTab, setRoleContextTab] = useState<RoleContextTab>('BASICS');
   
   // --- Card Height Logic (Reused from Profile/Dashboard) ---
   // Using h-full to fill the parent container which is already constrained by App.tsx padding
@@ -301,11 +313,13 @@ export const RoleContextBuilder: React.FC<{
             )}
           </div>
 
+          <TabBar<RoleContextTab> tabs={ROLE_CONTEXT_TABS} active={roleContextTab} onChange={setRoleContextTab} />
+
           {/* Context Content */}
           <div className="flex-1 overflow-y-auto px-10 pt-10 pb-20">
              <div className="max-w-3xl mx-auto space-y-12">
-                
-                {/* 1. Core Header Info */}
+
+                {roleContextTab === 'BASICS' && (
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Basic Info</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -354,8 +368,9 @@ export const RoleContextBuilder: React.FC<{
                       </div>
                    </div>
                 </section>
+                )}
 
-                {/* 2. Job Description */}
+                {roleContextTab === 'JD' && (
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Job Description</h3>
                    {isEditing ? (
@@ -372,8 +387,9 @@ export const RoleContextBuilder: React.FC<{
                      </div>
                    )}
                 </section>
+                )}
 
-                {/* 3. Deep Context */}
+                {roleContextTab === 'CONTEXT' && (
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-6 border-b border-[#F0F4F9] pb-2">Context & Research</h3>
                    <div className="grid grid-cols-1 gap-8">
@@ -416,8 +432,9 @@ export const RoleContextBuilder: React.FC<{
                       </div>
                    </div>
                 </section>
+                )}
 
-                {/* 4. Interview Questions */}
+                {roleContextTab === 'QUESTIONS' && (
                 <section>
                     <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Interview Questions</h3>
                     {isEditing ? (
@@ -446,8 +463,9 @@ export const RoleContextBuilder: React.FC<{
                     </div>
                     )}
                 </section>
+                )}
 
-                {/* 5. Additional Notes */}
+                {roleContextTab === 'NOTES' && (
                 <section>
                    <h3 className="text-xs font-bold text-[#444746] uppercase tracking-wider mb-4 border-b border-[#F0F4F9] pb-2">Additional Notes</h3>
                    {isEditing ? (
@@ -464,6 +482,7 @@ export const RoleContextBuilder: React.FC<{
                      </p>
                    )}
                 </section>
+                )}
 
              </div>
           </div>
