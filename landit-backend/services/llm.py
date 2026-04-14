@@ -171,26 +171,48 @@ async def generate_interview_prep(
         else "List questions only - no answers."
     )
 
-    prompt = f"""You are an expert interview coach preparing a candidate for: {role_title} at {company}.
+    prompt = f"""You are a senior PM interviewer at {company} preparing realistic interview questions for a {role_title} candidate.
 
-Candidate profile summary:
+---
+ROLE CONTEXT
+Role: {role_title} at {company}
+Categories to cover: {cat_list}
+Job description excerpt:
+{jd[:1500]}
+---
+CANDIDATE SENIORITY CALIBRATION (use ONLY to set difficulty level — do NOT use to construct question topics)
 {profile_summary}
+Skill gaps: {gap_summary}
+---
 
-Key skill gaps vs role requirements:
-{gap_summary}
+QUESTION DESIGN RULES — follow these strictly:
 
-Generate a comprehensive interview preparation guide covering these categories: {cat_list}.
+1. ONE TOPIC PER QUESTION. No compound questions. No "...and how would you apply that to X?" No "...also walk me through Y." If you have two angles, write two separate questions.
 
-{answer_instruction}
+2. EVERY QUESTION MUST INCLUDE A REAL BUSINESS SCENARIO. Do not ask about abstract processes ("how do you approach X"). Instead, give the candidate a concrete situation and force a decision.
+   - Analytical: present a real data discrepancy (e.g., "CTR is up 18% but conversion is down 12% — what's your diagnosis?")
+   - Prioritization: force a genuine trade-off with real constraints (e.g., "Engineering has 6 weeks — do you fix the top user complaint that affects 40% of users, or ship the enterprise feature that Sales says is blocking 3 deals?")
+   - Behavioral: name the stakeholder, the conflict, the pressure (e.g., "Your data shows the feature should launch, but legal flagged it 2 days before launch — what do you do?")
+   - Strategy: frame a real threat or opportunity with stakes (e.g., "A well-funded competitor just dropped pricing to zero — you have 90 days before renewals. What's your move?")
 
-Format in clean Markdown with:
-- ## for category headers
-- ### Q: for each question
-- **Answer Framework:** or **Key Points:** for guidance (if including answers)
-- Focus questions on the candidate's actual gaps and role-specific requirements
+3. DO NOT connect resume keywords with JD keywords. The candidate's background sets the depth level only. The question topic must come from realistic PM scenarios at {company}, not from the candidate's resume.
 
-Job Description context:
-{jd[:1500]}"""
+4. PRIORITIZATION AND ANALYTICAL questions must have specific numbers or constraints. Vague questions like "how would you prioritize features?" are not allowed.
+
+5. For BEHAVIORAL questions, the situation must have genuine tension — a real conflict between two valid options. Avoid questions where the "right" answer is obvious.
+
+---
+
+{"INCLUDE ANSWERS: For each question, provide a detailed answer framework using STAR method where appropriate, 3-5 key points a strong answer covers, and 1-2 pitfalls to avoid." if include_answers else "LIST QUESTIONS ONLY — no answers, no hints."}
+
+---
+
+FORMAT:
+## [Category Name]
+### Q: [Question text — must be a complete, standalone scenario. No preamble like "As a PM at {company}..." — just the scenario.]
+{"**Answer Framework:** [STAR or structured approach]\\n**Key Points:** [bullet list]\\n**Pitfalls:** [what weak answers do]" if include_answers else ""}
+
+Generate questions now. Cover all requested categories: {cat_list}. Aim for 3-5 sharp, scenario-driven questions per category."""
 
     return await _generate(prompt, max_tokens=4096)
 
