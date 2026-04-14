@@ -22,11 +22,13 @@ interface AddSourceModalProps {
   isGuest?: boolean;
 }
 
-const SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Cover Letter', 'Other'];
+const PROFILE_SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Cover Letter', 'Other'];
+const ROLE_SOURCE_TYPES = ['Job Description', 'Company & Team Overview', 'Product Overview', 'Industry Insights', 'Interview Experiences', 'Other'];
 
 const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted, roleId, isGuest }) => {
+  const SOURCE_TYPES = roleId ? ROLE_SOURCE_TYPES : PROFILE_SOURCE_TYPES;
   const [step, setStep] = useState<'SELECT' | 'UPLOAD' | 'LINK' | 'PREVIEW'>('SELECT');
-  const [selectedFileType, setSelectedFileType] = useState<string>('Resume');
+  const [selectedFileType, setSelectedFileType] = useState<string>(SOURCE_TYPES[0]);
   const [pendingFile, setPendingFile] = useState<{ name: string; size: string } | null>(null);
   const [pendingFileObj, setPendingFileObj] = useState<File | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
@@ -50,10 +52,18 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
       // Auto-suggest type
       const lowerName = file.name.toLowerCase();
       let detectedType = 'Other';
-      if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('简历')) detectedType = 'Resume';
-      else if (lowerName.includes('portfolio')) detectedType = 'Portfolio';
-      else if (lowerName.includes('sample')) detectedType = 'Work Sample';
-      else if (lowerName.includes('cover')) detectedType = 'Cover Letter';
+      if (roleId) {
+        if (lowerName.includes('jd') || lowerName.includes('job')) detectedType = 'Job Description';
+        else if (lowerName.includes('company') || lowerName.includes('team')) detectedType = 'Company & Team Overview';
+        else if (lowerName.includes('product')) detectedType = 'Product Overview';
+        else if (lowerName.includes('industry') || lowerName.includes('market')) detectedType = 'Industry Insights';
+        else if (lowerName.includes('interview') || lowerName.includes('glassdoor')) detectedType = 'Interview Experiences';
+      } else {
+        if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('简历')) detectedType = 'Resume';
+        else if (lowerName.includes('portfolio')) detectedType = 'Portfolio';
+        else if (lowerName.includes('sample')) detectedType = 'Work Sample';
+        else if (lowerName.includes('cover')) detectedType = 'Cover Letter';
+      }
       setSelectedFileType(detectedType);
 
       // Start uploading silently in the background (non-guest, non-role)
