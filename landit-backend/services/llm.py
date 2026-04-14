@@ -166,15 +166,28 @@ async def generate_interview_prep(
     include_answers = mode == "QA"
     cat_list = ", ".join(categories)
     answer_instruction = (
-        """INCLUDE ANSWERS. For each question, write a model answer that sounds like a real senior PM speaking — not a textbook.
+        """INCLUDE ANSWERS. For each question, write a model answer that sounds like a real senior PM speaking in an interview — not filling out a template.
 
-ANSWER RULES (follow strictly):
-A. DO NOT use STAR as a visible skeleton. STAR is a memory aid, not a response structure. A strong answer flows like a story, not a form. Never write "Situation:", "Task:", "Action:", "Result:" as labels.
-B. ONE SPECIFIC CASE, not a list of methods. Pick one real scenario and go deep on it. Do not list "1. I did X, 2. I also did Y, 3. Additionally Z." One thread, one decision, one outcome.
-C. INCLUDE FRICTION. Every strong answer must contain one moment where something didn't go as planned — a metric came back wrong, a stakeholder pushed back, a first solution failed. Answers that are too smooth are not credible.
-D. NUMBERS ANCHOR CREDIBILITY. At least one concrete number or constraint per answer — a %, a timeline, a team size, a metric delta. "We improved conversion" is weak. "Conversion went from 2.1% to 3.4% over 6 weeks" is strong.
-E. END WITH THE TRADE-OFF, not the victory. The best PM answers close with what they gave up or what they'd do differently — not "we achieved all our goals." That's what shows judgment.
-F. PITFALLS: After the model answer, add 2 pitfalls — specific behaviors that signal a weak candidate (e.g., "Describes a process without owning a decision" or "Lists frameworks without explaining why they chose one over another")."""
+ANSWER STRUCTURE: You may use the STAR framework as an internal guide, but apply it with correct proportions and depth. Here is how each part should work:
+
+S — Situation (1-2 sentences MAX): One sentence of context. What product, what stage, what constraint. Do NOT narrate the entire background. Do NOT repeat in Task.
+  BAD: "I was working at a company that operated across 12 markets, managing a cross-functional team of engineers, designers, and data scientists, during a challenging period when we were trying to..."
+  GOOD: "We were relaunching the checkout flow for a 3-month-old marketplace product with about 80K MAU."
+
+T — Task (skip if redundant with S, or merge into one sentence): State the specific decision or outcome you personally owned. If T would just restate S with different words, skip it entirely.
+
+A — Action (this is 70% of the answer — go deep here): Do NOT list multiple frameworks or methods (no "1. I ran user research 2. I built a prioritization matrix 3. I aligned stakeholders"). Instead: pick ONE key decision or action, explain WHY you made that specific choice over the alternatives, and show your reasoning process. Include the moment where something was harder than expected — a metric came back wrong, a stakeholder disagreed, your first solution didn't work.
+  BAD: "I conducted user research, ran A/B tests, built a prioritization matrix, and aligned all stakeholders through regular cross-functional meetings."
+  GOOD: "We ran two rounds of usability testing — the first showed users trusted the checkout, so I was set to ship. But when we added transaction data, abandonment was still 38%. That forced me to go back and talk to 6 users directly. Turns out the trust issue wasn't the UI — it was the return policy copy buried in a modal. I pushed to surface it inline, which engineering said would take 2 extra weeks. I made the call to delay."
+
+R — Result (1-2 sentences, must include a number AND a trade-off or learning): State what changed with a specific metric. Then add what you gave up, what surprised you, or what you'd do differently. Do NOT end with a generic win.
+  BAD: "The cross-functional collaboration improved, leading to a more streamlined launch process and better business outcomes."
+  GOOD: "Abandonment dropped from 38% to 24% in the first 4 weeks. We missed our original launch date by 2 weeks — in hindsight I should have pulled the return policy data earlier instead of assuming UX was the problem."
+
+After the model answer, add:
+**Pitfalls:**
+- [One specific weak behavior, e.g. "Lists 4 frameworks without explaining why they chose one over another"]
+- [One specific weak behavior, e.g. "Result is generic — 'things improved' with no metric or honest reflection"]"""
         if include_answers
         else "LIST QUESTIONS ONLY — no answers, no hints."
     )
@@ -232,7 +245,7 @@ FORMAT:
 ## [Category Name]
 ### Q: [Scenario question — standalone, no "As a PM..." preamble]
 *Targets: [dimension label from gap summary]*
-{"\\n**Model Answer:** [prose narrative, 150-200 words, one story with friction and a number. No bullet lists. No STAR labels.]\\n\\n**Pitfalls:**\\n- [specific weak behavior 1]\\n- [specific weak behavior 2]" if include_answers else ""}
+{"\\n**Model Answer:** [S in 1-2 sentences → A in depth: one decision, why, the friction point → R with one number + one trade-off or learning. 150-200 words total.]\\n\\n**Pitfalls:**\\n- [specific weak behavior 1]\\n- [specific weak behavior 2]" if include_answers else ""}
 
 Generate questions now. Cover all requested categories: {cat_list}. Write 3-5 sharp, scenario-driven questions per category."""
 
