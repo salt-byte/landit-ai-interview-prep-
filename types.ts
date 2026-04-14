@@ -37,6 +37,12 @@ export interface TargetRole {
   preparationNotes?: string;
   insights?: string;
 
+  // New Context structure (aligned with upload content types)
+  companyTeamOverview?: string;
+  productOverview?: string;
+  industryInsights?: string;
+  interviewExperiences?: string;
+
   // Legacy fields for backward compatibility
   interviewQuestions?: string[];
   companyBackground?: string;

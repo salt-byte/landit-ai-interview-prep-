@@ -50,7 +50,10 @@ import {
   Play,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Package,
+  TrendingUp,
+  Users
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion, UserProfile } from '../types';
@@ -404,38 +407,76 @@ export const RoleContextBuilder: React.FC<{
                    <div className="grid grid-cols-1 gap-8">
                       <div>
                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">
-                           <Briefcase className="w-4 h-4 text-[#0B57D0]" /> Company Background
+                           <Users className="w-4 h-4 text-[#0B57D0]" /> Company & Team Overview
                         </h4>
                         {isEditing ? (
-                           <textarea 
+                           <textarea
                              rows={5}
-                             value={localRole.companyBackground || ''}
-                             onChange={(e) => handleChange('companyBackground', e.target.value)}
-                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.companyBackground)}`}
-                             placeholder="Mission, culture, recent news..."
+                             value={localRole.companyTeamOverview || ''}
+                             onChange={(e) => handleChange('companyTeamOverview', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.companyTeamOverview)}`}
+                             placeholder="Company mission, culture, team size, tech stack, recent news..."
                            />
                         ) : (
                            <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
-                              {isMissing(localRole.companyBackground) ? <MissingIndicator text="Click Edit to add"/> : localRole.companyBackground}
+                              {isMissing(localRole.companyTeamOverview) ? <MissingIndicator text="Click Edit to add"/> : localRole.companyTeamOverview}
                            </div>
                         )}
                       </div>
 
                       <div>
                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">
-                           <User className="w-4 h-4 text-[#0B57D0]" /> Team Context
+                           <Package className="w-4 h-4 text-[#0B57D0]" /> Product Overview
                         </h4>
                         {isEditing ? (
-                           <textarea 
+                           <textarea
                              rows={5}
-                             value={localRole.teamBackground || ''}
-                             onChange={(e) => handleChange('teamBackground', e.target.value)}
-                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.teamBackground)}`}
-                             placeholder="Team size, tech stack, current challenges..."
+                             value={localRole.productOverview || ''}
+                             onChange={(e) => handleChange('productOverview', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.productOverview)}`}
+                             placeholder="Key products, users, differentiators, roadmap..."
                            />
                         ) : (
                            <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
-                              {isMissing(localRole.teamBackground) ? <MissingIndicator text="Click Edit to add"/> : localRole.teamBackground}
+                              {isMissing(localRole.productOverview) ? <MissingIndicator text="Click Edit to add"/> : localRole.productOverview}
+                           </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">
+                           <TrendingUp className="w-4 h-4 text-[#0B57D0]" /> Industry Insights
+                        </h4>
+                        {isEditing ? (
+                           <textarea
+                             rows={5}
+                             value={localRole.industryInsights || ''}
+                             onChange={(e) => handleChange('industryInsights', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.industryInsights)}`}
+                             placeholder="Market trends, competitive landscape, regulatory shifts..."
+                           />
+                        ) : (
+                           <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
+                              {isMissing(localRole.industryInsights) ? <MissingIndicator text="Click Edit to add"/> : localRole.industryInsights}
+                           </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2 flex items-center gap-2">
+                           <MessageSquare className="w-4 h-4 text-[#0B57D0]" /> Interview Experiences
+                        </h4>
+                        {isEditing ? (
+                           <textarea
+                             rows={5}
+                             value={localRole.interviewExperiences || ''}
+                             onChange={(e) => handleChange('interviewExperiences', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.interviewExperiences)}`}
+                             placeholder="Glassdoor notes, referral tips, interviewer style, common questions..."
+                           />
+                        ) : (
+                           <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
+                              {isMissing(localRole.interviewExperiences) ? <MissingIndicator text="Click Edit to add"/> : localRole.interviewExperiences}
                            </div>
                         )}
                       </div>
