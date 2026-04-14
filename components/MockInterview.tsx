@@ -364,6 +364,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const lastSubtitleUpdateRef = useRef(0);        // timestamp of last subtitle state update (throttle)
   const isExitingRef = useRef(false);             // set true during exit to block async callbacks
   const geminiEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // handle for the 2s end-detection timer
+  const manualAdvanceRef = useRef(false);         // user clicked Next Question — skip auto-increment this cycle
 
   // Pre-connection state for Gemini Live
   const [geminiPreconnected, setGeminiPreconnected] = useState(false);
@@ -789,12 +790,26 @@ Instructions:
               // (aiTurnCompletedRef is set by turnComplete below)
               if (aiTurnCompletedRef.current) {
                 aiTurnCompletedRef.current = false;
-                const userWords = currentUserTurnTextRef.current.trim().split(/\s+/);
-                // Require ≥5 words to avoid incrementing on ambient noise / single syllables
-                if (userWords.length >= 5) {
+
+                // Flush any accumulated user speech to transcript
+                if (currentUserTurnTextRef.current.trim()) {
                   geminiTranscriptRef.current.push({ role: 'user', text: currentUserTurnTextRef.current.trim() });
                   currentUserTurnTextRef.current = '';
-                  setCurrentQuestionIndex(prev => Math.min(prev + 1, activeQuestions.length - 1));
+                }
+
+                if (manualAdvanceRef.current) {
+                  // User clicked Next Question — counter already incremented manually, skip auto-increment
+                  manualAdvanceRef.current = false;
+                } else {
+                  // Natural AI turn transition — only increment if user gave a real answer (≥5 words)
+                  const userWords = geminiTranscriptRef.current.length > 0
+                    ? (geminiTranscriptRef.current[geminiTranscriptRef.current.length - 1]?.role === 'user'
+                        ? geminiTranscriptRef.current[geminiTranscriptRef.current.length - 1].text.trim().split(/\s+/)
+                        : [])
+                    : [];
+                  if (userWords.length >= 5) {
+                    setCurrentQuestionIndex(prev => Math.min(prev + 1, activeQuestions.length - 1));
+                  }
                 }
               }
 
@@ -991,6 +1006,7 @@ Instructions:
       currentUserTurnTextRef.current = '';
       aiTurnCompletedRef.current = false;  // first AI turn is the greeting, not a question transition
       isExitingRef.current = false;        // clear any previous exit state
+      manualAdvanceRef.current = false;    // clear any stale manual-advance flag
 
       // Create backend session for storage (non-blocking — don't delay mic start)
       createInterviewSession(workspace?.id, matchedInterviewer?.id || 'alex')
@@ -1412,8 +1428,8 @@ Instructions:
         });
       }
     } else {
-      // Gemini mode: increment question counter for UI display
-      // Gemini handles the actual conversation flow
+      // Gemini mode: manual advance — set flag so auto-detect skips its increment this cycle
+      manualAdvanceRef.current = true;
       setCurrentQuestionIndex(prev => Math.min(prev + 1, activeQuestions.length - 1));
     }
   };
