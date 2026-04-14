@@ -271,17 +271,18 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
 
         {/* Section 3: PM Competency Radar */}
         {(() => {
+          // Use exact backend DIMENSION_LABELS for demo so demo↔real transition is seamless
           const DEMO_DIMENSION_SCORES = [
-            { dimension: 'product_intuition',          label: 'Product Intuition',    score: 3.6 },
-            { dimension: 'user_empathy',               label: 'User Empathy',         score: 4.2 },
-            { dimension: 'metrics_driven_thinking',    label: 'Metrics & Data',       score: 2.9 },
-            { dimension: 'structured_problem_solving', label: 'Problem Solving',      score: 3.8 },
-            { dimension: 'prioritization_tradeoffs',   label: 'Prioritization',       score: 3.2 },
-            { dimension: 'execution_delivery',         label: 'Execution',            score: 4.0 },
-            { dimension: 'strategic_thinking',         label: 'Strategic Thinking',   score: 2.7 },
-            { dimension: 'cross_functional_leadership',label: 'Leadership',           score: 3.5 },
-            { dimension: 'stakeholder_communication',  label: 'Communication',        score: 4.1 },
-            { dimension: 'technical_fluency',          label: 'Technical Fluency',    score: 2.5 },
+            { dimension: 'product_intuition',          label: 'Product Intuition',           score: 3.6 },
+            { dimension: 'user_empathy',               label: 'User Empathy',                score: 4.2 },
+            { dimension: 'metrics_driven_thinking',    label: 'Metrics & Data Thinking',     score: 2.9 },
+            { dimension: 'structured_problem_solving', label: 'Structured Problem Solving',  score: 3.8 },
+            { dimension: 'prioritization_tradeoffs',   label: 'Prioritization & Trade-offs', score: 3.2 },
+            { dimension: 'execution_delivery',         label: 'Execution & Delivery',        score: 4.0 },
+            { dimension: 'strategic_thinking',         label: 'Strategic Thinking',          score: 2.7 },
+            { dimension: 'cross_functional_leadership',label: 'Cross-functional Leadership', score: 3.5 },
+            { dimension: 'stakeholder_communication',  label: 'Stakeholder Communication',   score: 4.1 },
+            { dimension: 'technical_fluency',          label: 'Technical Fluency',           score: 2.5 },
           ];
           const DIMENSION_COLORS = [
             '#1A73E8', '#D93025', '#F9AB00', '#1E8E3E', '#9334E6',
@@ -289,18 +290,20 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
           ];
           const hasData = dimensionScores.length > 0;
           const dims = hasData ? dimensionScores : DEMO_DIMENSION_SCORES;
-          const CX = 210;
-          const CY = 180;
-          const R_MAX = 115;
-          const R_LABEL = 138;
+          // Chart geometry — center shifted right so left-side labels have more room
+          const CX = 130;
+          const CY = 130;
+          const R_MAX = 100;
+          const R_LABEL = 118;
           const polygonFill = hasData ? 'rgba(11, 87, 208, 0.15)' : 'rgba(154, 160, 166, 0.15)';
           const polygonStroke = hasData ? '#0B57D0' : '#9AA0A6';
           const dotFill = hasData ? '#0B57D0' : '#9AA0A6';
           return (
           <div className="flex flex-col bg-[#F8FAFC] rounded-[10px] border border-[rgba(0,0,0,0.04)] p-4">
             <h3 className="font-bold text-[#1F1F1F] text-base mb-3">PM Competency Profile</h3>
-            <div className="flex items-center justify-center">
-              <svg viewBox="0 0 420 380" className="w-full max-w-[360px]">
+            {/* overflow-visible lets labels paint outside SVG bounds; wrapper padding gives them room */}
+            <div className="flex items-center justify-center px-20 py-2">
+              <svg viewBox="0 0 260 260" className="w-full max-w-[280px] overflow-visible" style={{overflow: 'visible'}}>
                 {/* Background rings */}
                 {[1, 2, 3, 4, 5].map(level => {
                   const r = (level / 5) * R_MAX;
@@ -320,7 +323,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
                   return (
                     <g key={d.dimension}>
                       <line x1={CX} y1={CY} x2={x2} y2={y2} stroke="#E3E3E3" strokeWidth="0.5" />
-                      <text x={lx} y={ly} textAnchor={textAnchor} dominantBaseline="central" className="text-[11px] font-semibold" fill={DIMENSION_COLORS[i]}>{d.label}</text>
+                      {/* fontSize in SVG user-units so it scales proportionally with the chart */}
+                      <text x={lx} y={ly} textAnchor={textAnchor} dominantBaseline="central" fontSize={9} fontWeight="600" fill={DIMENSION_COLORS[i]}>{d.label}</text>
                     </g>
                   );
                 })}
