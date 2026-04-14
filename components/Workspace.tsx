@@ -45,7 +45,12 @@ import {
   Bookmark,
   Mic,
   Quote,
-  Undo
+  Undo,
+  Pause,
+  Play,
+  CheckCircle2,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { TargetRole, WorkspaceTab, UploadedFile, RoleSource, AppView, SavedQuestion, UserProfile } from '../types';
@@ -575,8 +580,81 @@ const parsePrepContent = (content: string, limit: number): { q: string; a?: stri
   return results;
 };
 
+// AudioWave: own its own analyser + RAF lifecycle so pause/cancel cleanly
+// stops the wave (see v3 reference).
+const AudioWave: React.FC<{ stream: MediaStream | null; recordingStatus: string }> = ({ stream, recordingStatus }) => {
+  const [audioLevel, setAudioLevel] = useState(0);
+
+  useEffect(() => {
+    if (!stream || !stream.active) {
+      setAudioLevel(0);
+      return;
+    }
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    const audioContext = new AudioCtx();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.fftSize = 512;
+    const dataArray = new Float32Array(analyser.fftSize);
+
+    let smoothedLevel = 0;
+    let silenceDuration = 0;
+    let lastTime = performance.now();
+    let raf = 0;
+
+    const updateLevel = () => {
+      if (!stream.active) return;
+      analyser.getFloatTimeDomainData(dataArray);
+      let sumSquares = 0;
+      for (let i = 0; i < dataArray.length; i++) sumSquares += dataArray[i] * dataArray[i];
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      const db = 20 * Math.log10(rms || 1e-8);
+      const threshold = -45;
+      let targetLevel = 0;
+      if (db > threshold) {
+        targetLevel = Math.min(100, Math.max(0, ((db - threshold) / Math.abs(threshold)) * 100));
+        silenceDuration = 0;
+      } else {
+        const now = performance.now();
+        silenceDuration += (now - lastTime);
+        targetLevel = silenceDuration > 80 ? 0 : smoothedLevel;
+      }
+      lastTime = performance.now();
+      const alpha = targetLevel > smoothedLevel ? 0.4 : 0.15;
+      smoothedLevel = alpha * targetLevel + (1 - alpha) * smoothedLevel;
+      setAudioLevel(smoothedLevel);
+      raf = requestAnimationFrame(updateLevel);
+    };
+    updateLevel();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      audioContext.close().catch(() => {});
+    };
+  }, [stream]);
+
+  const isLive = recordingStatus === 'RECORDING';
+  return (
+    <div className="h-12 bg-[#F0F4F9] rounded-lg flex items-center justify-center border border-[#E3E3E3]">
+      <div className="flex items-end gap-[2px] h-5">
+        {[...Array(24)].map((_, i) => (
+          <div
+            key={i}
+            className="w-[2.5px] bg-[#2EBB63] rounded-full transition-all duration-100"
+            style={{
+              height: isLive ? `${Math.max(15, Math.min(100, audioLevel * (0.5 + Math.random() * 0.5)))}%` : '15%',
+              opacity: isLive ? 0.9 : 0.25,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // --- Interview Prep Builder Sub-Component (NEW) ---
-export const InterviewPrepBuilder: React.FC<{ 
+export const InterviewPrepBuilder: React.FC<{
   role: TargetRole | null;
   roles: TargetRole[];
   onSelectRole: (role: TargetRole | null) => void;
@@ -637,9 +715,16 @@ export const InterviewPrepBuilder: React.FC<{
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [audioLevel, setAudioLevel] = useState(0);
   const [showMergePrompt, setShowMergePrompt] = useState(false);
   const [pendingTranscription, setPendingTranscription] = useState('');
+  const [interimTranscription, setInterimTranscription] = useState('');
+  const [permError, setPermError] = useState<string | null>(null);
+  const transcriptionEndRef = useRef<HTMLDivElement>(null);
+
+  const updateRecordingStatus = (status: 'IDLE' | 'RECORDING' | 'PAUSED' | 'STOPPED') => {
+    recordingStatusRef.current = status;
+    setRecordingStatus(status);
+  };
   
   // State: Chat (Moved up)
   const [chatHistory, setChatHistory] = useState<{sender: 'AI'|'USER', text: string, quote?: string}[]>([]);
@@ -681,60 +766,10 @@ export const InterviewPrepBuilder: React.FC<{
   };
 
   // Voice recording logic
-  const startAudioAnalysis = (stream: MediaStream) => {
-    const audioContext = new AudioContext();
-    const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(stream);
-    microphone.connect(analyser);
-    analyser.fftSize = 512;
-    const dataArray = new Float32Array(analyser.fftSize);
-
-    let smoothedLevel = 0;
-    let silenceDuration = 0;
-    let lastTime = performance.now();
-
-    const updateLevel = () => {
-      if (!stream.active) return;
-      analyser.getFloatTimeDomainData(dataArray);
-      
-      let sumSquares = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sumSquares += dataArray[i] * dataArray[i];
-      }
-      const rms = Math.sqrt(sumSquares / dataArray.length);
-      
-      const db = 20 * Math.log10(rms || 1e-8);
-      const threshold = -45;
-      let targetLevel = 0;
-      
-      if (db > threshold) {
-        targetLevel = Math.min(100, Math.max(0, ((db - threshold) / Math.abs(threshold)) * 100));
-        silenceDuration = 0;
-      } else {
-        const now = performance.now();
-        silenceDuration += (now - lastTime);
-        if (silenceDuration > 80) {
-          targetLevel = 0;
-        } else {
-          targetLevel = smoothedLevel;
-        }
-      }
-      
-      lastTime = performance.now();
-
-      const alpha = targetLevel > smoothedLevel ? 0.4 : 0.15;
-      smoothedLevel = alpha * targetLevel + (1 - alpha) * smoothedLevel;
-
-      setAudioLevel(smoothedLevel);
-      requestAnimationFrame(updateLevel);
-    };
-    updateLevel();
-  };
-
   const startRecording = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Your browser does not support real-time transcription.");
+      setPermError("Your browser does not support real-time transcription.");
       return;
     }
 
@@ -744,37 +779,48 @@ export const InterviewPrepBuilder: React.FC<{
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      let interimTranscript = '';
+      if (recordingStatusRef.current !== 'RECORDING') return;
+      let interim = '';
+      let final = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          setTranscription(prev => prev + event.results[i][0].transcript + ' ');
+          final += event.results[i][0].transcript + ' ';
         } else {
-          interimTranscript += event.results[i][0].transcript;
+          interim += event.results[i][0].transcript;
         }
       }
-      if (editorRef.current) {
-        editorRef.current.setContent(transcription + interimTranscript);
+      if (final) setTranscription(prev => prev + final);
+      setInterimTranscription(interim);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn("Speech recognition error:", event.error);
+      if (event.error === 'not-allowed' || event.error === 'network') {
+        updateRecordingStatus('PAUSED');
+        setPermError(`Transcription paused: ${event.error}. Click Resume to retry.`);
       }
     };
 
     recognition.onend = () => {
-      if (recordingStatusRef.current === 'RECORDING') {
+      if (recordingStatusRef.current === 'RECORDING' && recognitionRef.current === recognition) {
         try { recognition.start(); } catch {}
       }
     };
 
-    recognition.start();
-    recognitionRef.current = recognition;
-    
-    // Start timer
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch {}
+
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     recordingTimerRef.current = setInterval(() => {
-      setRecordingTime(prev => prev + 1);
+      if (recordingStatusRef.current === 'RECORDING') {
+        setRecordingTime(prev => prev + 1);
+      }
     }, 1000);
   };
 
   const stopRecording = () => {
-    recordingStatusRef.current = 'STOPPED';
-    setRecordingStatus('STOPPED');
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;
@@ -783,22 +829,27 @@ export const InterviewPrepBuilder: React.FC<{
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
+    updateRecordingStatus('STOPPED');
   };
 
   const handleTryAnswer = async () => {
     try {
+      setPermError(null);
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Media devices API not supported');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      startAudioAnalysis(stream);
       setIsRecordingInterface(true);
-      setRecordingStatus('RECORDING');
-      recordingStatusRef.current = 'RECORDING';
+      updateRecordingStatus('RECORDING');
       setRecordingTime(0);
       setTranscription('');
+      setInterimTranscription('');
       startRecording();
-    } catch (error) {
-      console.error("Microphone access denied", error);
-      alert("Microphone access denied — enable in browser settings to use Try Answer.");
+    } catch (error: any) {
+      console.warn("Microphone access denied", error);
+      const msg = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError'
+        ? "Permission denied. Allow microphone access in browser settings."
+        : "Microphone unavailable — enable it to use Try Answer.";
+      setPermError(msg);
     }
   };
 
@@ -847,12 +898,14 @@ export const InterviewPrepBuilder: React.FC<{
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-    setAudioLevel(0);
-    
-    if (selectedQuestionIndex === null) return;
+
+    if (selectedQuestionIndex === null) {
+      setIsRecordingInterface(false);
+      return;
+    }
     const currentQ = generatedQuestions[selectedQuestionIndex];
     const existingNotes = currentQ?.a || '';
-    
+
     if (existingNotes.trim() && transcription.trim()) {
       setPendingTranscription(transcription);
       setShowMergePrompt(true);
@@ -875,12 +928,10 @@ export const InterviewPrepBuilder: React.FC<{
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-    setAudioLevel(0);
     setIsRecordingInterface(false);
     setTranscription('');
+    setInterimTranscription('');
     setRecordingTime(0);
-    // Show toast
-    alert("Recording canceled. No text saved.");
   };
 
   const formatTime = (seconds: number) => {
@@ -889,46 +940,89 @@ export const InterviewPrepBuilder: React.FC<{
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const RecordingWorkspace = () => (
-    <div className="flex-1 flex flex-col bg-[#F8F9FA] rounded-xl border border-[#E3E3E3] p-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-600 animate-pulse" aria-label="Recording status: active" />
-          <span className="text-sm font-bold text-red-600">Recording</span>
-          <span className="text-sm font-mono text-[#444746]">{formatTime(recordingTime)}</span>
-        </div>
-        <div className="flex gap-2">
-          {recordingStatus === 'RECORDING' ? (
-            <button aria-label="Pause recording" onClick={() => { setRecordingStatus('PAUSED'); recordingStatusRef.current = 'PAUSED'; if(recognitionRef.current) recognitionRef.current.stop(); }} className="px-3 py-1.5 bg-[#F0F4F9] text-[#1F1F1F] rounded-lg text-sm font-bold hover:bg-[#E3E3E3]">Pause</button>
-          ) : (
-            <button aria-label="Resume recording" onClick={() => { setRecordingStatus('RECORDING'); recordingStatusRef.current = 'RECORDING'; startRecording(); }} className="px-3 py-1.5 bg-[#0B57D0] text-white rounded-lg text-sm font-bold hover:bg-[#0B67EF]">Resume</button>
-          )}
-          <button aria-label="Finish recording" onClick={handleStopRecording} className="px-3 py-1.5 bg-[#1F1F1F] text-white rounded-lg text-sm font-bold hover:bg-[#444746]">Finish</button>
-          <button aria-label="Cancel recording" onClick={handleCancelRecording} className="px-3 py-1.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-lg text-sm font-bold hover:bg-[#F0F4F9]">Cancel</button>
-        </div>
-      </div>
-      <div className="flex-1 bg-white rounded-lg border border-[#E3E3E3] p-4 overflow-y-auto">
-        <p className="text-sm text-[#1F1F1F] leading-relaxed">{transcription || "Listening..."}</p>
-      </div>
-      <div className="mt-4 h-12 bg-[#F0F4F9] rounded-lg flex items-center justify-center border border-[#E3E3E3]">
-        {/* Simple waveform visualization matching Live Interview */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-end gap-[2px] h-5">
-            {[...Array(24)].map((_, i) => (
-              <div 
-                key={i} 
-                className="w-[2.5px] bg-[#2EBB63] rounded-full transition-all duration-75"
-                style={{ 
-                  height: `${Math.max(15, Math.min(100, audioLevel * (0.5 + Math.random() * 0.5)))}%`,
-                  opacity: recordingStatus === 'RECORDING' ? 1 : 0.3
-                }} 
-              />
-            ))}
+  // Render function (NOT a nested component) to avoid React remounting on every parent render.
+  const renderRecordingWorkspace = () => {
+    const isLive = recordingStatus === 'RECORDING';
+    return (
+      <div className="flex-1 flex flex-col bg-[#F8F9FA] rounded-xl border border-[#E3E3E3] p-6 animate-in fade-in duration-300">
+        {permError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <p className="text-xs">{permError}</p>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${isLive ? 'bg-red-600 animate-pulse' : 'bg-[#444746]'}`} aria-label="Recording status" />
+            <span className={`text-sm font-bold ${isLive ? 'text-red-600' : 'text-[#444746]'}`}>
+              {isLive ? 'Recording' : 'Paused'}
+            </span>
+            <span className="text-sm font-mono text-[#444746]">{formatTime(recordingTime)}</span>
+          </div>
+          <div className="flex gap-2">
+            {isLive ? (
+              <button
+                aria-label="Pause recording"
+                onClick={() => {
+                  updateRecordingStatus('PAUSED');
+                  if (recognitionRef.current) {
+                    try { recognitionRef.current.stop(); } catch {}
+                  }
+                }}
+                className="px-3 py-1.5 bg-[#F0F4F9] text-[#1F1F1F] rounded-lg text-sm font-bold hover:bg-[#E3E3E3] flex items-center gap-1.5"
+              >
+                <Pause className="w-3.5 h-3.5" /> Pause
+              </button>
+            ) : (
+              <button
+                aria-label="Resume recording"
+                onClick={() => {
+                  updateRecordingStatus('RECORDING');
+                  startRecording();
+                }}
+                className="px-3 py-1.5 bg-[#0B57D0] text-white rounded-lg text-sm font-bold hover:bg-[#0B67EF] flex items-center gap-1.5"
+              >
+                <Play className="w-3.5 h-3.5" /> Resume
+              </button>
+            )}
+            <button
+              aria-label="Finish recording"
+              onClick={handleStopRecording}
+              className="px-3 py-1.5 bg-[#1F1F1F] text-white rounded-lg text-sm font-bold hover:bg-[#444746] flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" /> Finish
+            </button>
+            <button
+              aria-label="Cancel recording"
+              onClick={handleCancelRecording}
+              className="px-3 py-1.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-lg text-sm font-bold hover:bg-[#F0F4F9] flex items-center gap-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Cancel
+            </button>
           </div>
         </div>
+
+        <div className="flex-1 bg-white rounded-lg border border-[#E3E3E3] p-4 overflow-y-auto">
+          <p className="text-sm text-[#1F1F1F] leading-relaxed whitespace-pre-wrap">
+            {transcription || interimTranscription ? (
+              <>
+                {transcription}
+                <span className="text-[#444746] opacity-50 italic">{interimTranscription}</span>
+              </>
+            ) : (
+              <span className="text-[#444746] italic opacity-60">Listening...</span>
+            )}
+          </p>
+          <div ref={transcriptionEndRef} />
+        </div>
+
+        <div className="mt-4">
+          <AudioWave stream={streamRef.current} recordingStatus={recordingStatus} />
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Autosave logic
   useEffect(() => {
@@ -1685,7 +1779,7 @@ export const InterviewPrepBuilder: React.FC<{
                     )}
 
                     {isRecordingInterface ? (
-                      <RecordingWorkspace />
+                      renderRecordingWorkspace()
                     ) : isGeneratingAnswer && !currentQuestion.a ? (
                       <div className="flex-1 flex flex-col items-center justify-center animate-pulse p-8">
                         <Loader2 className="w-8 h-8 text-[#0B57D0] animate-spin mb-4" />
