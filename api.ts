@@ -33,7 +33,9 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, { ...options, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+  const res = await fetch(url, { ...options, headers, signal: controller.signal }).finally(() => clearTimeout(timeout));
 
   if (res.status === 401) {
     await supabase.auth.signOut();

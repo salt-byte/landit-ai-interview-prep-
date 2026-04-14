@@ -48,6 +48,12 @@ async def read_text_file(file_path: str) -> str:
         except Exception:
             return ""
 
+    if path.suffix.lower() == ".docx":
+        try:
+            return await asyncio.to_thread(_read_docx_text, path)
+        except Exception:
+            return ""
+
     async with aiofiles.open(path, "r", errors="ignore") as f:
         return await f.read()
 
@@ -57,6 +63,19 @@ def _read_pdf_text(path: Path) -> str:
 
     reader = PdfReader(str(path))
     return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+
+
+def _read_docx_text(path: Path) -> str:
+    from docx import Document
+
+    doc = Document(str(path))
+    paragraphs = [p.text for p in doc.paragraphs]
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text:
+                    paragraphs.append(cell.text)
+    return "\n".join(paragraphs).strip()
 
 
 async def delete_file(file_path: str) -> bool:
