@@ -22,7 +22,7 @@ interface AddSourceModalProps {
   isGuest?: boolean;
 }
 
-const SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Notes', 'Job Description', 'Other'];
+const SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Cover Letter', 'Other'];
 
 const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted, roleId, isGuest }) => {
   const [step, setStep] = useState<'SELECT' | 'UPLOAD' | 'LINK' | 'PREVIEW'>('SELECT');
@@ -49,11 +49,11 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
 
       // Auto-suggest type
       const lowerName = file.name.toLowerCase();
-      let detectedType = 'Notes';
+      let detectedType = 'Other';
       if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('简历')) detectedType = 'Resume';
       else if (lowerName.includes('portfolio')) detectedType = 'Portfolio';
       else if (lowerName.includes('sample')) detectedType = 'Work Sample';
-      else if (lowerName.includes('jd') || lowerName.includes('job')) detectedType = 'Job Description';
+      else if (lowerName.includes('cover')) detectedType = 'Cover Letter';
       setSelectedFileType(detectedType);
 
       // Start uploading silently in the background (non-guest, non-role)
