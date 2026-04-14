@@ -179,40 +179,50 @@ Role: {role_title} at {company}
 Categories to cover: {cat_list}
 Job description excerpt:
 {jd[:1500]}
----
-CANDIDATE SENIORITY CALIBRATION (use ONLY to set difficulty level — do NOT use to construct question topics)
-{profile_summary}
-Skill gaps: {gap_summary}
----
 
+---
+CANDIDATE PROFILE:
+{profile_summary}
+
+HOW TO USE THE PROFILE:
+1. DOMAIN/CONTEXT: Use the candidate's industry and product domain (e-commerce, fintech, SaaS, consumer app, etc.) to set the scenario domain. If they have e-commerce PM experience, frame scenarios as "you're PM on a marketplace/checkout/growth team at {company}." Match the scenario domain to where they'd realistically land.
+2. DEPTH CALIBRATION: Use seniority and experience to calibrate expected answer depth — a 5-year senior PM vs. a 2-year APM should get different complexity and ambiguity.
+3. ASSUMED KNOWLEDGE: You can assume the candidate understands their domain. Do not explain basic terms they'd already know from their background.
+DO NOT name-drop resume keywords. Do NOT write "given your experience with X..." or "using your background in Y..." The resume informs scenario CONTEXT and FRAMING, not question WORDING.
+
+---
+SKILL GAPS (use to select which competency each question targets):
+{gap_summary}
+
+For each question you write, pick ONE gap dimension and design a scenario that specifically exposes that gap. Label each question with the dimension it targets.
+
+---
 QUESTION DESIGN RULES — follow these strictly:
 
 1. ONE TOPIC PER QUESTION. No compound questions. No "...and how would you apply that to X?" No "...also walk me through Y." If you have two angles, write two separate questions.
 
-2. EVERY QUESTION MUST INCLUDE A REAL BUSINESS SCENARIO. Do not ask about abstract processes ("how do you approach X"). Instead, give the candidate a concrete situation and force a decision.
-   - Analytical: present a real data discrepancy (e.g., "CTR is up 18% but conversion is down 12% — what's your diagnosis?")
-   - Prioritization: force a genuine trade-off with real constraints (e.g., "Engineering has 6 weeks — do you fix the top user complaint that affects 40% of users, or ship the enterprise feature that Sales says is blocking 3 deals?")
-   - Behavioral: name the stakeholder, the conflict, the pressure (e.g., "Your data shows the feature should launch, but legal flagged it 2 days before launch — what do you do?")
-   - Strategy: frame a real threat or opportunity with stakes (e.g., "A well-funded competitor just dropped pricing to zero — you have 90 days before renewals. What's your move?")
+2. EVERY QUESTION MUST INCLUDE A REAL BUSINESS SCENARIO with a forced decision — not an abstract process question.
+   - Analytical: present a real data discrepancy with specific numbers (e.g., "CTR is up 18% but checkout conversion is down 12% week-over-week — what's your diagnosis and next step?")
+   - Prioritization: force a genuine trade-off with real constraints (e.g., "Engineering has 6 weeks and two options: fix the top user complaint affecting 40% of users, or ship the enterprise feature Sales says is blocking 3 deals worth $2M. Pick one and defend it.")
+   - Behavioral: name the stakeholder, the conflict, and the pressure. Both options the candidate faces must be defensible — avoid questions where the "right" answer is obvious.
+   - Strategy: frame a specific competitive or market threat with real stakes (e.g., "A well-funded competitor just dropped pricing to zero — your retention cohort shows 15% of users are trialing it. You have 90 days before Q3 renewals. What's your move?")
 
-3. DO NOT connect resume keywords with JD keywords. The candidate's background sets the depth level only. The question topic must come from realistic PM scenarios at {company}, not from the candidate's resume.
+3. PRIORITIZATION AND ANALYTICAL questions must include specific numbers or constraints. Vague questions like "how would you prioritize features?" are not allowed.
 
-4. PRIORITIZATION AND ANALYTICAL questions must have specific numbers or constraints. Vague questions like "how would you prioritize features?" are not allowed.
-
-5. For BEHAVIORAL questions, the situation must have genuine tension — a real conflict between two valid options. Avoid questions where the "right" answer is obvious.
+4. Questions must feel like they could actually be asked in a real interview at {company} for a candidate with this specific background — not generic PM interview questions pulled from a list.
 
 ---
 
-{"INCLUDE ANSWERS: For each question, provide a detailed answer framework using STAR method where appropriate, 3-5 key points a strong answer covers, and 1-2 pitfalls to avoid." if include_answers else "LIST QUESTIONS ONLY — no answers, no hints."}
+{"INCLUDE ANSWERS: For each question, provide: (a) a concise answer framework (STAR where applicable), (b) 3-5 key points a strong answer must cover, (c) 1-2 pitfalls that distinguish weak answers." if include_answers else "LIST QUESTIONS ONLY — no answers, no hints."}
 
 ---
-
 FORMAT:
 ## [Category Name]
-### Q: [Question text — must be a complete, standalone scenario. No preamble like "As a PM at {company}..." — just the scenario.]
-{"**Answer Framework:** [STAR or structured approach]\\n**Key Points:** [bullet list]\\n**Pitfalls:** [what weak answers do]" if include_answers else ""}
+### Q: [Scenario question — standalone, no "As a PM..." preamble]
+*Targets: [dimension label from gap summary]*
+{"\\n**Answer Framework:** [approach]\\n**Key Points:**\\n- point 1\\n- point 2\\n**Pitfalls:** [what weak answers do]" if include_answers else ""}
 
-Generate questions now. Cover all requested categories: {cat_list}. Aim for 3-5 sharp, scenario-driven questions per category."""
+Generate questions now. Cover all requested categories: {cat_list}. Write 3-5 sharp, scenario-driven questions per category."""
 
     return await _generate(prompt, max_tokens=4096)
 
