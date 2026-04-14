@@ -36,8 +36,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, roles, savedQuestion
       }).catch(() => {});
 
       // Load dimension scores for radar chart
-      getDimensionScores().then((scores: any[]) => {
-        if (scores && scores.length > 0) {
+      // Backend returns { dimensions: [...] }
+      getDimensionScores().then((res: any) => {
+        const scores = res?.dimensions ?? res ?? [];
+        if (Array.isArray(scores) && scores.length > 0) {
           setDimensionScores(scores.map((s: any) => ({
             dimension: s.dimension,
             label: s.label || s.dimension.replace(/_/g, ' '),
