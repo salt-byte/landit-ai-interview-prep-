@@ -385,19 +385,59 @@ export const RoleContextBuilder: React.FC<{
                 <div ref={setRoleContextSectionRef('JD')} data-tab-id="JD">
                 <section>
                    <h3 className="text-lg font-bold text-[#1F1F1F] tracking-tight mb-6 border-b border-[#F0F4F9] pb-3">JD</h3>
-                   {isEditing ? (
-                     <textarea 
-                       rows={12}
-                       value={localRole.jd}
-                       onChange={(e) => handleChange('jd', e.target.value)}
-                       className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.jd)}`}
-                       placeholder="Paste the full job description here..."
-                     />
-                   ) : (
-                     <div className="text-sm text-[#1F1F1F] leading-relaxed whitespace-pre-wrap bg-[#FAFAFA] p-6 rounded-xl border border-[#F0F4F9]">
-                       {localRole.jd}
-                     </div>
-                   )}
+
+                   <div className="space-y-6">
+                      <div>
+                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2">Full Job Description</h4>
+                         {isEditing ? (
+                           <textarea
+                             rows={12}
+                             value={localRole.jd}
+                             onChange={(e) => handleChange('jd', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.jd)}`}
+                             placeholder="Paste the full job description here..."
+                           />
+                         ) : (
+                           <div className="text-sm text-[#1F1F1F] leading-relaxed whitespace-pre-wrap bg-[#FAFAFA] p-6 rounded-xl border border-[#F0F4F9]">
+                             {localRole.jd}
+                           </div>
+                         )}
+                      </div>
+
+                      <div>
+                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2">Key Responsibilities</h4>
+                         {isEditing ? (
+                           <textarea
+                             rows={6}
+                             value={localRole.keyResponsibilities || ''}
+                             onChange={(e) => handleChange('keyResponsibilities', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.keyResponsibilities)}`}
+                             placeholder="What you will own / deliver on this role..."
+                           />
+                         ) : (
+                           <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
+                             {isMissing(localRole.keyResponsibilities) ? <MissingIndicator text="Click Edit to add"/> : localRole.keyResponsibilities}
+                           </div>
+                         )}
+                      </div>
+
+                      <div>
+                         <h4 className="text-sm font-semibold text-[#1F1F1F] mb-2">Qualifications</h4>
+                         {isEditing ? (
+                           <textarea
+                             rows={6}
+                             value={localRole.qualifications || ''}
+                             onChange={(e) => handleChange('qualifications', e.target.value)}
+                             className={`w-full text-sm p-3 rounded-lg outline-none resize-none border leading-relaxed ${getFieldStyles(localRole.qualifications)}`}
+                             placeholder="Required + preferred qualifications — skills, years, domain expertise..."
+                           />
+                         ) : (
+                           <div className="text-sm text-[#444746] leading-relaxed whitespace-pre-wrap">
+                             {isMissing(localRole.qualifications) ? <MissingIndicator text="Click Edit to add"/> : localRole.qualifications}
+                           </div>
+                         )}
+                      </div>
+                   </div>
                 </section>
                 </div>
 
