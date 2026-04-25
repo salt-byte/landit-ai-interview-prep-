@@ -197,12 +197,15 @@ async def _gemini_call_async(prompt: str, max_tokens: int) -> dict:
         raise ValueError("GEMINI_API_KEY not set")
 
     client = genai.Client(api_key=settings.gemini_api_key)
+    # IMPORTANT: Gemini 2.5 Flash has "thinking" mode enabled by default which
+    # adds 5-15s of latency. We disable it here for fast structured extraction.
     response = await client.aio.models.generate_content(
         model=_FAST_MODEL,
         contents=prompt,
         config={
             "max_output_tokens": max_tokens,
             "response_mime_type": "application/json",
+            "thinking_config": {"thinking_budget": 0},
         },
     )
     return json.loads(_strip_json_fence(response.text))
