@@ -165,6 +165,13 @@ async def generate_interview_prep(
     """Layer 5: Generate interview Q&A tailored to role + user gap."""
     include_answers = mode == "QA"
     cat_list = ", ".join(categories)
+    # Extracted out of the f-string below: Python 3.11 disallows backslashes in
+    # f-string expression parts. (Relaxed in 3.12, but Render runs 3.11.)
+    answer_format_block = (
+        "\n**Model Answer:** [S in 1-2 sentences → A in depth: one decision, why, the friction point → R with one number + one trade-off or learning. 150-200 words total.]\n\n**Pitfalls:**\n- [specific weak behavior 1]\n- [specific weak behavior 2]"
+        if include_answers
+        else ""
+    )
     answer_instruction = (
         """INCLUDE ANSWERS. For each question, write a model answer that sounds like a real senior PM speaking in an interview — not filling out a template.
 
@@ -245,7 +252,7 @@ FORMAT:
 ## [Category Name]
 ### Q: [Scenario question — standalone, no "As a PM..." preamble]
 *Targets: [dimension label from gap summary]*
-{"\\n**Model Answer:** [S in 1-2 sentences → A in depth: one decision, why, the friction point → R with one number + one trade-off or learning. 150-200 words total.]\\n\\n**Pitfalls:**\\n- [specific weak behavior 1]\\n- [specific weak behavior 2]" if include_answers else ""}
+{answer_format_block}
 
 Generate questions now. Cover all requested categories: {cat_list}. Write 3-5 sharp, scenario-driven questions per category."""
 
