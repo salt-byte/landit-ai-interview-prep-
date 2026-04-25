@@ -134,13 +134,105 @@ Resume text:
     return _normalize_output(data)
 
 
+# ── Parallel async path: split into two smaller Gemini calls ─────────────────
+# Why split: a single resume parse outputs ~2-3K tokens of JSON and takes 20-30s.
+# We split the prompt into "basics" (small, ~5s) and "history" (large, ~20s) and
+# run them concurrently, so total time ≈ max(5s, 20s) instead of their sum.
+
+_BASICS_PROMPT = """You are a resume parser. Extract ONLY contact info and skills from this resume.
+Return ONLY valid JSON, all values in their original language. Use "" for missing fields.
+
+{{
+  "fullName": "person's full name",
+  "targetRole": "job title or target role inferred from resume",
+  "employmentType": "Full-time or Internship",
+  "email": "email address",
+  "phoneNumber": "phone number",
+  "location": "city, state/country",
+  "personalWebsite": "personal website URL",
+  "linkedInProfile": "LinkedIn URL",
+  "skills": {{
+    "technicalSkills": "comma-separated technical skills (SQL, Python, etc.)",
+    "toolsAndTechnologies": "comma-separated tools (Figma, Tableau, etc.)",
+    "softSkills": "comma-separated soft skills"
+  }}
+}}
+
+Resume text:
+{text}"""
+
+
+_HISTORY_PROMPT = """You are a resume parser. Extract ONLY education, work experience, and projects from this resume.
+Return ONLY valid JSON, all values in their original language. Use [] if a section is missing.
+
+{{
+  "education": [
+    {{
+      "institutionName": "school name",
+      "degree": "degree type (B.S., M.S., etc.)",
+      "fieldOfStudy": "major/field",
+      "startDate": "start year or date",
+      "endDate": "end year or date",
+      "gpa": "GPA if mentioned",
+      "relevantCoursework": "courses if mentioned",
+      "additionalDetails": "honors, focus area, etc."
+    }}
+  ],
+  "workExperience": [
+    {{
+      "companyName": "company name",
+      "jobTitle": "job title",
+      "startDate": "start date",
+      "endDate": "end date or Present",
+      "description": "bullet points of responsibilities, each starting with bullet character"
+    }}
+  ],
+  "projects": [
+    {{
+      "projectName": "project name",
+      "projectDescription": "brief description",
+      "startDate": "start date if found",
+      "endDate": "end date if found",
+      "projectLink": "URL if found"
+    }}
+  ]
+}}
+
+Resume text:
+{text}"""
+
+
+def _strip_json_fence(raw: str) -> str:
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    return raw.strip()
+
+
+async def _gemini_call_async(prompt: str, max_tokens: int) -> dict:
+    from google import genai
+    from config import settings
+
+    if not settings.gemini_api_key:
+        raise ValueError("GEMINI_API_KEY not set")
+
+    client = genai.Client(api_key=settings.gemini_api_key)
+    response = await client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config={"max_output_tokens": max_tokens},
+    )
+    return json.loads(_strip_json_fence(response.text))
+
+
 # ── Public entrypoint ─────────────────────────────────────────────────────────
 
 def extract_profile_from_resume(resume_text: str) -> dict:
-    """Sync version: Gemini first, basic fallback."""
+    """Sync version: single Gemini call. Used as fallback if async path fails."""
     try:
         result = extract_profile_with_gemini(resume_text)
-        logger.info("Resume parsed with Gemini 2.0 Flash")
+        logger.info("Resume parsed with Gemini 2.0 Flash (single call)")
         return result
     except Exception as e:
         logger.warning("Gemini parsing failed (%s), returning empty profile", e)
@@ -148,5 +240,15 @@ def extract_profile_from_resume(resume_text: str) -> dict:
 
 
 async def extract_profile_from_resume_async(resume_text: str) -> dict:
-    """Async version: runs in thread pool."""
-    return await asyncio.to_thread(extract_profile_from_resume, resume_text)
+    """Async parallel version: 2 concurrent Gemini calls (basics + history)."""
+    text = resume_text[:8000]
+    try:
+        basics, history = await asyncio.gather(
+            _gemini_call_async(_BASICS_PROMPT.format(text=text), max_tokens=512),
+            _gemini_call_async(_HISTORY_PROMPT.format(text=text), max_tokens=2048),
+        )
+        logger.info("Resume parsed with Gemini 2.0 Flash (parallel)")
+        return _normalize_output({**basics, **history})
+    except Exception as e:
+        logger.warning("Parallel resume parsing failed (%s), falling back to single call", e)
+        return await asyncio.to_thread(extract_profile_from_resume, resume_text)

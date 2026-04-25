@@ -1,12 +1,13 @@
-import React, { useState, useRef } from 'react';
-import { 
-  Upload, 
-  FileText, 
-  X, 
-  Loader2, 
-  Globe, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Upload,
+  FileText,
+  X,
+  Loader2,
+  Globe,
   Check,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 import { UploadedFile, RoleSource, UserProfile } from '../types';
 import { uploadAndParseDocument, uploadDocument, uploadRoleSource, addLinkSource } from '../api';
@@ -25,6 +26,31 @@ interface AddSourceModalProps {
 const PROFILE_SOURCE_TYPES = ['Resume', 'Portfolio', 'Work Sample', 'Cover Letter', 'Other'];
 const ROLE_SOURCE_TYPES = ['Job Description', 'Company & Team Overview', 'Product Overview', 'Industry Insights', 'Interview Experiences', 'Other'];
 
+// Time-keyed parse stages — message rotates as elapsed seconds cross each threshold.
+// We never claim 100% until the request actually returns.
+const RESUME_PARSE_STAGES: { atSec: number; message: string; sub: string }[] = [
+  { atSec: 0,  message: 'Uploading your file…',           sub: 'Securely transferring to our servers' },
+  { atSec: 3,  message: 'Reading document content…',      sub: 'Extracting text from your resume' },
+  { atSec: 7,  message: 'AI is analyzing your experience…', sub: 'Identifying companies, roles, and dates' },
+  { atSec: 14, message: 'Mapping your skills…',           sub: 'Recognizing technical, tools, and soft skills' },
+  { atSec: 20, message: 'Structuring your projects…',     sub: 'Pulling out projects and outcomes' },
+  { atSec: 28, message: 'Almost done — finalizing…',      sub: 'Polishing the structured profile' },
+  { atSec: 40, message: 'Just a few more seconds…',       sub: 'Long resumes take a bit more time' },
+];
+
+const SIMPLE_UPLOAD_STAGES: { atSec: number; message: string; sub: string }[] = [
+  { atSec: 0, message: 'Uploading your file…', sub: 'Securely transferring to our servers' },
+  { atSec: 5, message: 'Saving to your library…', sub: 'Indexing for future reference' },
+];
+
+function pickStage(stages: { atSec: number; message: string; sub: string }[], elapsedSec: number) {
+  let current = stages[0];
+  for (const s of stages) {
+    if (elapsedSec >= s.atSec) current = s;
+  }
+  return current;
+}
+
 const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddSource, onProfileExtracted, roleId, isGuest }) => {
   const SOURCE_TYPES = roleId ? ROLE_SOURCE_TYPES : PROFILE_SOURCE_TYPES;
   const [step, setStep] = useState<'SELECT' | 'UPLOAD' | 'LINK' | 'PREVIEW'>('SELECT');
@@ -36,6 +62,40 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   // Parsing/Upload State
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'PARSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [parsedContent, setParsedContent] = useState('');
+
+  // Fake-but-believable progress: tracks elapsed seconds since we entered a working state,
+  // and eases a percentage from 0 → 95. Jumps to 100 on SUCCESS.
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [fakeProgress, setFakeProgress] = useState(0);
+  const workStartRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const isWorking = uploadStatus === 'UPLOADING' || uploadStatus === 'PARSING';
+    if (isWorking) {
+      if (workStartRef.current == null) workStartRef.current = Date.now();
+      const tick = () => {
+        const start = workStartRef.current;
+        if (start == null) return;
+        const sec = (Date.now() - start) / 1000;
+        setElapsedSec(sec);
+        // Ease toward 95%: fast at first, slow near the end. 1 - e^(-t/15) gives a nice curve.
+        const eased = 95 * (1 - Math.exp(-sec / 15));
+        setFakeProgress(eased);
+      };
+      tick();
+      const id = setInterval(tick, 200);
+      return () => clearInterval(id);
+    }
+    if (uploadStatus === 'SUCCESS') {
+      setFakeProgress(100);
+      return;
+    }
+    if (uploadStatus === 'IDLE' || uploadStatus === 'ERROR') {
+      workStartRef.current = null;
+      setElapsedSec(0);
+      setFakeProgress(0);
+    }
+  }, [uploadStatus]);
 
   // Pre-upload: start uploading as soon as file is selected
   const preUploadPromiseRef = useRef<Promise<any> | null>(null);
@@ -103,8 +163,9 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         setUploadStatus('SUCCESS');
         onAddSource(result);
       } else if (preUploadPromiseRef.current && preUploadTypeRef.current === selectedFileType) {
-        // Await the pre-started upload
-        if (uploadStatus !== 'PARSING') setUploadStatus('PARSING');
+        // Pre-upload already started in the background when the file was selected;
+        // by the time the user clicks Upload, we're realistically in the parsing phase.
+        setUploadStatus('PARSING');
         const result = await preUploadPromiseRef.current;
         preUploadPromiseRef.current = null;
         setUploadStatus('SUCCESS');
@@ -265,29 +326,60 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                   {uploadStatus === 'SUCCESS' ? (
-                     <div className="w-16 h-16 bg-[#E6F4EA] rounded-full flex items-center justify-center text-[#137333] mb-2 animate-in zoom-in duration-300">
-                       <Check className="w-8 h-8" />
-                     </div>
-                   ) : (
-                     <div className="relative">
-                       <Loader2 className="w-12 h-12 text-[#0B57D0] animate-spin" />
-                     </div>
-                   )}
-                   
-                   <div className="text-center">
-                     <h4 className="text-lg font-bold text-[#1F1F1F] mb-1">
-                       {uploadStatus === 'UPLOADING' && 'Uploading...'}
-                       {uploadStatus === 'PARSING' && 'Parsing file...'}
-                       {uploadStatus === 'SUCCESS' && 'Done!'}
-                     </h4>
-                     <p className="text-sm text-[#444746]">
-                       {uploadStatus === 'UPLOADING' && 'Please wait while we upload your document.'}
-                       {uploadStatus === 'PARSING' && 'Extracting text and insights...'}
-                       {uploadStatus === 'SUCCESS' && 'File uploaded and added to your profile.'}
-                     </p>
-                   </div>
+                <div className="flex flex-col items-center justify-center py-10 px-2 space-y-5">
+                  {uploadStatus === 'SUCCESS' ? (
+                    <div className="w-16 h-16 bg-[#E6F4EA] rounded-full flex items-center justify-center text-[#137333] animate-in zoom-in duration-300">
+                      <Check className="w-8 h-8" />
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-full bg-[#F0F4F9] flex items-center justify-center">
+                        <Sparkles className="w-7 h-7 text-[#0B57D0] animate-pulse" />
+                      </div>
+                      <Loader2 className="w-20 h-20 text-[#0B57D0]/50 animate-spin absolute -top-2 -left-2" />
+                    </div>
+                  )}
+
+                  <div className="text-center">
+                    {(() => {
+                      if (uploadStatus === 'SUCCESS') {
+                        return (
+                          <>
+                            <h4 className="text-lg font-bold text-[#1F1F1F] mb-1">Done!</h4>
+                            <p className="text-sm text-[#444746]">File added to your profile.</p>
+                          </>
+                        );
+                      }
+                      const isResumeParse = uploadStatus === 'PARSING' && selectedFileType === 'Resume';
+                      const stages = isResumeParse ? RESUME_PARSE_STAGES : SIMPLE_UPLOAD_STAGES;
+                      const stage = pickStage(stages, elapsedSec);
+                      return (
+                        <>
+                          <h4 className="text-lg font-bold text-[#1F1F1F] mb-1 transition-opacity duration-300">
+                            {stage.message}
+                          </h4>
+                          <p className="text-sm text-[#444746] transition-opacity duration-300">
+                            {stage.sub}
+                          </p>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Progress bar — fake but believable. Eases to 95%, jumps to 100% on success. */}
+                  <div className="w-full max-w-xs">
+                    <div className="h-1.5 bg-[#F0F4F9] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#0B57D0] to-[#5B8DEF] rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${fakeProgress}%` }}
+                      />
+                    </div>
+                    {uploadStatus !== 'SUCCESS' && (
+                      <p className="text-xs text-[#C4C7C5] mt-2 text-center tabular-nums">
+                        {Math.round(fakeProgress)}% · {Math.floor(elapsedSec)}s
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
