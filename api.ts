@@ -77,9 +77,10 @@ export async function uploadDocument(file: File, typeOverride?: string) {
   });
 }
 
-export async function uploadAndParseDocument(file: File) {
+export async function uploadAndParseDocument(file: File, extractedText?: string) {
   const formData = new FormData();
   formData.append('file', file);
+  if (extractedText) formData.append('extracted_text', extractedText);
 
   return request<any>('/api/profile/documents/upload-and-parse', {
     method: 'POST',

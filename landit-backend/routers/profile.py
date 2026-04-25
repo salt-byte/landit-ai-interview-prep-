@@ -270,13 +270,18 @@ async def upload_document(
 @router.post("/documents/upload-and-parse")
 async def upload_and_parse_resume(
     file: UploadFile = File(...),
+    extracted_text: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
     user_key: str = Depends(get_current_user_key),
 ):
     profile = await get_or_create_profile(db, user_key)
 
     file_path, file_size = await upload_file(file, subfolder="profile")
-    text = await read_text_file(file_path)
+    # If the client pre-extracted text (e.g. via pdf.js), skip backend PDF parsing.
+    if extracted_text and extracted_text.strip():
+        text = extracted_text
+    else:
+        text = await read_text_file(file_path)
     parse_error = None
     extracted = {}
 

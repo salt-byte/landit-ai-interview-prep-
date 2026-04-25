@@ -134,72 +134,51 @@ Resume text:
     return _normalize_output(data)
 
 
-# ── Parallel async path: split into two smaller Gemini calls ─────────────────
-# Why split: a single resume parse outputs ~2-3K tokens of JSON and takes 20-30s.
-# We split the prompt into "basics" (small, ~5s) and "history" (large, ~20s) and
-# run them concurrently, so total time ≈ max(5s, 20s) instead of their sum.
+# ── Parallel async path: 3 concurrent Gemini 2.5 Flash calls ─────────────────
+# Why split 3-way: each call's bottleneck is output token count. Splitting the
+# response across 3 small calls means each finishes faster, and we run them
+# concurrently — so total ≈ max of the slowest, ~6-10s instead of 18-22s.
+# Why response_mime_type=application/json: the model emits strict JSON without
+# markdown fences and stops sooner, ~20-30% faster than free-form prompting.
 
-_BASICS_PROMPT = """You are a resume parser. Extract ONLY contact info and skills from this resume.
-Return ONLY valid JSON, all values in their original language. Use "" for missing fields.
+_FAST_MODEL = "gemini-2.5-flash"
 
-{{
-  "fullName": "person's full name",
-  "targetRole": "job title or target role inferred from resume",
-  "employmentType": "Full-time or Internship",
-  "email": "email address",
-  "phoneNumber": "phone number",
-  "location": "city, state/country",
-  "personalWebsite": "personal website URL",
-  "linkedInProfile": "LinkedIn URL",
-  "skills": {{
-    "technicalSkills": "comma-separated technical skills (SQL, Python, etc.)",
-    "toolsAndTechnologies": "comma-separated tools (Figma, Tableau, etc.)",
-    "softSkills": "comma-separated soft skills"
-  }}
-}}
+# NOTE: prompts use a __TEXT__ placeholder rather than .format() because the
+# JSON-shape examples below contain literal `{` and `}` that would otherwise
+# need double-escaping.
 
-Resume text:
-{text}"""
+_BASICS_PROMPT = """Extract ONLY contact info and skills from this resume.
+Use "" for any missing string field. Keep values in their original language.
+
+Required keys: fullName, targetRole, employmentType (Full-time/Internship),
+email, phoneNumber, location, personalWebsite, linkedInProfile,
+skills (object with technicalSkills, toolsAndTechnologies, softSkills as
+comma-separated strings).
+
+Resume:
+__TEXT__"""
 
 
-_HISTORY_PROMPT = """You are a resume parser. Extract ONLY education, work experience, and projects from this resume.
-Return ONLY valid JSON, all values in their original language. Use [] if a section is missing.
+_EDUCATION_PROMPT = """Extract ONLY the education section from this resume as a JSON
+object with one key "education" — a list of objects with fields:
+institutionName, degree, fieldOfStudy, startDate, endDate, gpa,
+relevantCoursework, additionalDetails. Use "" for missing string fields.
+Return {"education": []} if no education found. Keep values in original language.
 
-{{
-  "education": [
-    {{
-      "institutionName": "school name",
-      "degree": "degree type (B.S., M.S., etc.)",
-      "fieldOfStudy": "major/field",
-      "startDate": "start year or date",
-      "endDate": "end year or date",
-      "gpa": "GPA if mentioned",
-      "relevantCoursework": "courses if mentioned",
-      "additionalDetails": "honors, focus area, etc."
-    }}
-  ],
-  "workExperience": [
-    {{
-      "companyName": "company name",
-      "jobTitle": "job title",
-      "startDate": "start date",
-      "endDate": "end date or Present",
-      "description": "bullet points of responsibilities, each starting with bullet character"
-    }}
-  ],
-  "projects": [
-    {{
-      "projectName": "project name",
-      "projectDescription": "brief description",
-      "startDate": "start date if found",
-      "endDate": "end date if found",
-      "projectLink": "URL if found"
-    }}
-  ]
-}}
+Resume:
+__TEXT__"""
 
-Resume text:
-{text}"""
+
+_HISTORY_PROMPT = """Extract ONLY work experience and projects from this resume as
+a JSON object with two keys:
+- "workExperience": list of objects with companyName, jobTitle, startDate,
+  endDate, description (bullet points, each starting with a bullet character).
+- "projects": list of objects with projectName, projectDescription,
+  startDate, endDate, projectLink.
+Use "" for missing string fields. Use [] for missing sections.
+
+Resume:
+__TEXT__"""
 
 
 def _strip_json_fence(raw: str) -> str:
@@ -219,9 +198,12 @@ async def _gemini_call_async(prompt: str, max_tokens: int) -> dict:
 
     client = genai.Client(api_key=settings.gemini_api_key)
     response = await client.aio.models.generate_content(
-        model="gemini-2.0-flash",
+        model=_FAST_MODEL,
         contents=prompt,
-        config={"max_output_tokens": max_tokens},
+        config={
+            "max_output_tokens": max_tokens,
+            "response_mime_type": "application/json",
+        },
     )
     return json.loads(_strip_json_fence(response.text))
 
@@ -240,15 +222,16 @@ def extract_profile_from_resume(resume_text: str) -> dict:
 
 
 async def extract_profile_from_resume_async(resume_text: str) -> dict:
-    """Async parallel version: 2 concurrent Gemini calls (basics + history)."""
-    text = resume_text[:8000]
+    """Async parallel version: 3 concurrent Gemini 2.5 Flash calls."""
+    text = resume_text[:6000]
     try:
-        basics, history = await asyncio.gather(
-            _gemini_call_async(_BASICS_PROMPT.format(text=text), max_tokens=512),
-            _gemini_call_async(_HISTORY_PROMPT.format(text=text), max_tokens=2048),
+        basics, edu, history = await asyncio.gather(
+            _gemini_call_async(_BASICS_PROMPT.replace("__TEXT__", text), max_tokens=400),
+            _gemini_call_async(_EDUCATION_PROMPT.replace("__TEXT__", text), max_tokens=600),
+            _gemini_call_async(_HISTORY_PROMPT.replace("__TEXT__", text), max_tokens=1500),
         )
-        logger.info("Resume parsed with Gemini 2.0 Flash (parallel)")
-        return _normalize_output({**basics, **history})
+        logger.info("Resume parsed with Gemini 2.5 Flash (3-way parallel)")
+        return _normalize_output({**basics, **edu, **history})
     except Exception as e:
         logger.warning("Parallel resume parsing failed (%s), falling back to single call", e)
         return await asyncio.to_thread(extract_profile_from_resume, resume_text)

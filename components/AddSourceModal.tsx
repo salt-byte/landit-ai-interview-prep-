@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { UploadedFile, RoleSource, UserProfile } from '../types';
 import { uploadAndParseDocument, uploadDocument, uploadRoleSource, addLinkSource } from '../api';
+import { extractPdfText, isPdfFile } from '../lib/pdfExtract';
 
 interface AddSourceModalProps {
   isOpen: boolean;
@@ -131,7 +132,15 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
       if (!isGuest && !roleId) {
         preUploadTypeRef.current = detectedType;
         if (detectedType === 'Resume') {
-          preUploadPromiseRef.current = uploadAndParseDocument(file);
+          // For resumes, extract PDF text in-browser (parallel with the upload).
+          // Sending pre-extracted text lets the backend skip its own pypdf parse.
+          // Falls back to backend parsing if extraction fails or it's not a PDF.
+          const textPromise = isPdfFile(file)
+            ? extractPdfText(file).catch(() => '')
+            : Promise.resolve('');
+          preUploadPromiseRef.current = textPromise.then(text =>
+            uploadAndParseDocument(file, text || undefined),
+          );
         } else {
           preUploadPromiseRef.current = uploadDocument(file);
         }
@@ -182,7 +191,10 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         preUploadPromiseRef.current = null;
         if (selectedFileType === 'Resume') {
           setUploadStatus('PARSING');
-          const result = await uploadAndParseDocument(pendingFileObj);
+          const text = isPdfFile(pendingFileObj)
+            ? await extractPdfText(pendingFileObj).catch(() => '')
+            : '';
+          const result = await uploadAndParseDocument(pendingFileObj, text || undefined);
           setUploadStatus('SUCCESS');
           onAddSource(result.document);
           if (result.extracted && onProfileExtracted) {
