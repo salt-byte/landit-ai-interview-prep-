@@ -302,11 +302,12 @@ IMPORTANT RULES:
 1. SEPARATE content into the right fields: team introductions go in "teamOverview", NOT in "jd". Company descriptions go in "companyOverview", NOT in "jd".
 2. DEDUPLICATE: if the same paragraph appears multiple times, include it only once.
 3. FORMAT the "jd" field cleanly — use line breaks between sections (Responsibilities, Requirements, etc.).
-4. If the page content is minimal (JS-rendered site), use the URL to infer details. For "jd", write a realistic description and note it is inferred.
+4. DO NOT FABRICATE. If a section (responsibilities, qualifications, company overview, etc.) is not clearly present in the content below, return an empty string "" for that field. NEVER write placeholder text like "Section incomplete in original posting", "to be completed", or "inferred from job title". An empty string is the correct answer when content is missing.
+5. If the entire page content is clearly empty or just navigation/SEO meta (typical of JS-rendered SPA pages), return all fields as empty strings except whatever you can derive from the URL itself (title, company).
 
 URL: {url}
 Content:
-{page_content[:6000]}"""
+{page_content[:12000]}"""
 
     raw = await _generate(prompt, max_tokens=3000)
     return _parse_json(raw)

@@ -228,8 +228,27 @@ async def add_link_source(
     )
     db.add(source)
 
-    if extracted.get("company_background"):
-        role.company_overview = (role.company_overview or "") + f"\n\n[AI Extracted from {data.url}]:\n{extracted.get('jd', '')[:500]}"
+    # Backfill role context fields from the extracted link content. Only fill
+    # empty fields — never overwrite user-edited content. The LLM returns
+    # camelCase keys (companyOverview, teamOverview, keyResponsibilities,
+    # qualifications, additionalInfo) per the parse_jd_from_url_content schema.
+    field_map = [
+        ("companyOverview", "company_overview"),
+        ("teamOverview", "team_overview"),
+        ("keyResponsibilities", "key_responsibilities"),
+        ("qualifications", "qualifications"),
+        ("additionalInfo", "additional_info"),
+    ]
+    role_was_updated = False
+    for src_key, role_attr in field_map:
+        new_val = (extracted.get(src_key) or "").strip()
+        if not new_val:
+            continue
+        existing = (getattr(role, role_attr) or "").strip()
+        if not existing:
+            setattr(role, role_attr, new_val)
+            role_was_updated = True
+    if role_was_updated:
         role.updated_at = datetime.utcnow()
 
     await db.commit()
@@ -241,6 +260,7 @@ async def add_link_source(
         "type": source.type,
         "date": source.created_at.strftime("%Y-%m-%d"),
         "extracted_preview": extracted.get("jd", "")[:300],
+        "role_updated": role_was_updated,
     }
 
 
