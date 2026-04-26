@@ -13,6 +13,20 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
+// Many resumes draw bullet points using private-use codepoints from custom
+// fonts (Wingdings, Symbol, etc.). pdf.js can't resolve these to standard
+// Unicode, so we normalize them to a plain bullet here. Anything in the
+// Private Use Area (U+E000-U+F8FF) gets replaced.
+const PRIVATE_USE_AREA = /[-]/g;
+
+function cleanText(raw: string): string {
+  return raw
+    .replace(PRIVATE_USE_AREA, '•')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+}
+
 export async function extractPdfText(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: buf }).promise;
@@ -25,7 +39,7 @@ export async function extractPdfText(file: File): Promise<string> {
       .join(' ');
     pages.push(pageText);
   }
-  return pages.join('\n').trim();
+  return cleanText(pages.join('\n'));
 }
 
 export function isPdfFile(file: File): boolean {

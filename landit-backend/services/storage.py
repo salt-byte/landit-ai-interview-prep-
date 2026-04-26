@@ -58,11 +58,25 @@ async def read_text_file(file_path: str) -> str:
         return await f.read()
 
 
+import re as _re
+
+# PDFs that draw bullets with custom-font glyphs (Wingdings/Symbol) leak
+# Unicode Private Use Area codepoints (U+E000–U+F8FF) through pypdf. They
+# show up as garbage like "" in the LLM output, so we normalize them
+# to a plain bullet before passing the text downstream.
+_PUA_CHARS = _re.compile(r"[-]")
+
+
+def _clean_pdf_text(raw: str) -> str:
+    return _PUA_CHARS.sub("•", raw)
+
+
 def _read_pdf_text(path: Path) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
-    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    return _clean_pdf_text(text)
 
 
 def _read_docx_text(path: Path) -> str:
