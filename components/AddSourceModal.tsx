@@ -101,6 +101,10 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   // Pre-upload: start uploading as soon as file is selected
   const preUploadPromiseRef = useRef<Promise<any> | null>(null);
   const preUploadTypeRef = useRef<string>('');
+  // Aborts the in-flight pre-upload if the user closes the modal before
+  // committing to it. Without this, abandoned modals leave stray Document
+  // records on the server (we saw 6 duplicates accumulate during testing).
+  const preUploadAbortRef = useRef<AbortController | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +135,11 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
       // Don't change uploadStatus — keep UI showing file preview until user clicks Upload
       if (!isGuest && !roleId) {
         preUploadTypeRef.current = detectedType;
+        // Abort any previous in-flight pre-upload before starting a new one
+        // (e.g. user picked a file, then picked a different one).
+        if (preUploadAbortRef.current) preUploadAbortRef.current.abort();
+        const controller = new AbortController();
+        preUploadAbortRef.current = controller;
         if (detectedType === 'Resume') {
           // For resumes, extract PDF text in-browser (parallel with the upload).
           // Sending pre-extracted text lets the backend skip its own pypdf parse.
@@ -139,7 +148,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
             ? extractPdfText(file).catch(() => '')
             : Promise.resolve('');
           preUploadPromiseRef.current = textPromise.then(text =>
-            uploadAndParseDocument(file, text || undefined),
+            uploadAndParseDocument(file, text || undefined, controller.signal),
           );
         } else {
           preUploadPromiseRef.current = uploadDocument(file);
@@ -250,6 +259,13 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   };
 
   const handleClose = () => {
+    // Abort any in-flight pre-upload if the user is closing without committing.
+    // Once the user clicked Upload, status moves out of IDLE and we let the
+    // request finish — they intentionally asked for it.
+    if (uploadStatus === 'IDLE' && preUploadAbortRef.current) {
+      preUploadAbortRef.current.abort();
+    }
+    preUploadAbortRef.current = null;
     setStep('SELECT');
     setPendingFile(null);
     setPendingFileObj(null);

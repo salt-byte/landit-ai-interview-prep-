@@ -33,9 +33,18 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
-  const res = await fetch(url, { ...options, headers, signal: controller.signal }).finally(() => clearTimeout(timeout));
+  // If the caller passed their own AbortSignal (e.g. for cancel-on-modal-close),
+  // honor it instead of creating an internal timeout-only controller.
+  let signal = options.signal;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  if (!signal) {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+    signal = controller.signal;
+  }
+  const res = await fetch(url, { ...options, headers, signal }).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 
   if (res.status === 401) {
     await supabase.auth.signOut();
@@ -77,7 +86,11 @@ export async function uploadDocument(file: File, typeOverride?: string) {
   });
 }
 
-export async function uploadAndParseDocument(file: File, extractedText?: string) {
+export async function uploadAndParseDocument(
+  file: File,
+  extractedText?: string,
+  signal?: AbortSignal,
+) {
   const formData = new FormData();
   formData.append('file', file);
   if (extractedText) formData.append('extracted_text', extractedText);
@@ -85,6 +98,7 @@ export async function uploadAndParseDocument(file: File, extractedText?: string)
   return request<any>('/api/profile/documents/upload-and-parse', {
     method: 'POST',
     body: formData,
+    signal,
   });
 }
 

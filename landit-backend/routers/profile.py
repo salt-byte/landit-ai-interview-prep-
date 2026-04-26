@@ -1,7 +1,7 @@
 """
 Profile router — CRUD for user profile, education, work experience, projects, documents.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy import select
@@ -275,6 +275,36 @@ async def upload_and_parse_resume(
     user_key: str = Depends(get_current_user_key),
 ):
     profile = await get_or_create_profile(db, user_key)
+
+    # Dedupe: if the same filename was uploaded by this profile in the last 60s,
+    # treat as a duplicate (e.g. accidental double-click, abandoned-but-still-
+    # in-flight pre-upload from a closed modal). Skip both file save and parse.
+    recent_cutoff = datetime.utcnow() - timedelta(seconds=60)
+    recent_dup = await db.execute(
+        select(Document)
+        .where(
+            Document.profile_id == profile.id,
+            Document.name == (file.filename or "resume"),
+            Document.created_at >= recent_cutoff,
+        )
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    )
+    dup_doc = recent_dup.scalar_one_or_none()
+    if dup_doc:
+        return {
+            "extracted": {},
+            "document_id": dup_doc.id,
+            "document": {
+                "id": str(dup_doc.id),
+                "name": dup_doc.name,
+                "type": dup_doc.type,
+                "date": dup_doc.created_at.strftime("%Y-%m-%d"),
+                "file_size": dup_doc.file_size,
+            },
+            "parse_error": None,
+            "deduplicated": True,
+        }
 
     file_path, file_size = await upload_file(file, subfolder="profile")
     # If the client pre-extracted text (e.g. via pdf.js), skip backend PDF parsing.

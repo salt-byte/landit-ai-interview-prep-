@@ -3,6 +3,7 @@ File storage service. Uses local filesystem by default.
 Can be swapped to S3 by replacing upload_file/get_file_path.
 """
 import asyncio
+import re
 import uuid
 import aiofiles
 from pathlib import Path
@@ -58,17 +59,35 @@ async def read_text_file(file_path: str) -> str:
         return await f.read()
 
 
-import re as _re
-
-# PDFs that draw bullets with custom-font glyphs (Wingdings/Symbol) leak
-# Unicode Private Use Area codepoints (U+E000–U+F8FF) through pypdf. They
-# show up as garbage like "" in the LLM output, so we normalize them
-# to a plain bullet before passing the text downstream.
-_PUA_CHARS = _re.compile(r"[-]")
+# Resumes use various decorative characters as bullet points. pypdf extracts
+# them as raw codepoints which then leak into the LLM output as garbage.
+# We strip them entirely — the LLM will add its own bullets when emitting
+# the description field.
+#
+# Covers:
+#   Math Operators        U+2200–U+22FF  (∀ … ⋿, includes ≡)
+#   Geometric Shapes      U+25A0–U+25FF  (■ ● ◆ ▪ ▶)
+#   Misc Symbols/Dingbats U+2600–U+27BF  (★ ➤ ✓)
+#   I Ching trigrams      U+2630–U+2637  (☰)
+#   Private Use Area      U+E000–U+F8FF  (Wingdings/Symbol custom glyphs)
+_DECORATIVE_CHARS = re.compile(
+    "["
+    "∀-⋿"
+    "■-◿"
+    "☀-➿"
+    "☰-☷"
+    "-"
+    "]"
+)
 
 
 def _clean_pdf_text(raw: str) -> str:
-    return _PUA_CHARS.sub("•", raw)
+    cleaned = _DECORATIVE_CHARS.sub("", raw)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\s+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n\s+", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def _read_pdf_text(path: Path) -> str:

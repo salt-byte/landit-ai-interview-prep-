@@ -13,17 +13,26 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
-// Many resumes draw bullet points using private-use codepoints from custom
-// fonts (Wingdings, Symbol, etc.). pdf.js can't resolve these to standard
-// Unicode, so we normalize them to a plain bullet here. Anything in the
-// Private Use Area (U+E000-U+F8FF) gets replaced.
-const PRIVATE_USE_AREA = /[-]/g;
+// Resumes use various decorative characters as bullet points. pdf.js extracts
+// them as raw codepoints which then leak into the LLM output as garbage.
+// We strip them entirely — the LLM will add its own bullets when emitting
+// the description field.
+//
+// Covers:
+// - Private Use Area (U+E000-U+F8FF): custom-font glyphs (Wingdings, Symbol)
+// - Geometric Shapes (U+25A0-U+25FF): ● ○ ■ □ ◆ ◇ ▪ ▫ ▶ ▸
+// - Math Operators (U+2200-U+22FF): ≡ ≢ ∎
+// - Misc Symbols / Dingbats (U+2600-U+27BF): ★ ✦ ✓ ➤
+// - I Ching trigrams (U+2630): ☰
+const DECORATIVE_CHARS = /[-≡-]/g;
 
 function cleanText(raw: string): string {
   return raw
-    .replace(PRIVATE_USE_AREA, '•')
-    .replace(/\s+\n/g, '\n')
-    .replace(/\n\s+/g, '\n')
+    .replace(DECORATIVE_CHARS, '')
+    .replace(/[ \t]+/g, ' ')   // collapse runs of spaces/tabs
+    .replace(/\s+\n/g, '\n')   // strip whitespace before newlines
+    .replace(/\n\s+/g, '\n')   // strip whitespace after newlines
+    .replace(/\n{3,}/g, '\n\n') // collapse 3+ newlines
     .trim();
 }
 
