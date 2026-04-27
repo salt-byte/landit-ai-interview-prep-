@@ -307,7 +307,7 @@ IMPORTANT RULES:
 
 URL: {url}
 Content:
-{page_content[:12000]}"""
+{page_content[:16000]}"""
 
     raw = await _generate(prompt, max_tokens=3000)
     return _parse_json(raw)

@@ -57,17 +57,61 @@ def _extract_json_ld(html: str) -> str:
     return ""
 
 
+# Markdown headers / inline labels that signal "the actual JD content starts here".
+# Used to skip past the page-chrome bloat (nav menus, cookie banners, footer links)
+# that JS-rendered job pages pile in front of the meaningful content.
+_JD_SECTION_MARKERS = (
+    "## Description",
+    "## Job Description",
+    "## About this role",
+    "## About the role",
+    "## About the job",
+    "## Role",
+    "## Responsibilities",
+    "## Key Responsibilities",
+    "## Qualifications",
+    "## Requirements",
+    "## What you'll do",
+    "## What you will do",
+    "Description:",
+    "Some responsibilities",
+)
+
+
+def _trim_to_jd_section(content: str, max_chars: int = 16000) -> str:
+    """Skip nav/header bloat by jumping to the first JD-content marker."""
+    lower = content.lower()
+    earliest = None
+    for marker in _JD_SECTION_MARKERS:
+        idx = lower.find(marker.lower())
+        if idx < 0:
+            continue
+        if earliest is None or idx < earliest:
+            earliest = idx
+    # Only skip ahead if there's a meaningful amount of bloat to skip;
+    # otherwise just take from the top.
+    if earliest is not None and earliest > 1000:
+        return content[earliest : earliest + max_chars]
+    return content[:max_chars]
+
+
 async def scrape_with_tavily(url: str) -> str:
-    """Use Tavily Extract API to get clean page content. Bypasses most anti-bot."""
+    """Use Tavily Extract API to get clean page content. Bypasses most anti-bot.
+
+    Uses extract_depth=advanced so JS-rendered SPAs (Apple Careers, LinkedIn,
+    Workday) actually return real content. Costs 2 credits per call vs 1 for
+    basic, but our test runs show basic mode only returns the footer for SPAs.
+    """
     if not settings.tavily_api_key:
         raise ValueError("TAVILY_API_KEY not set")
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             "https://api.tavily.com/extract",
             json={
                 "api_key": settings.tavily_api_key,
                 "urls": [url],
+                "extract_depth": "advanced",
             },
         )
         resp.raise_for_status()
@@ -75,9 +119,9 @@ async def scrape_with_tavily(url: str) -> str:
 
         results = data.get("results", [])
         if results and results[0].get("raw_content"):
-            return results[0]["raw_content"][:8000]
+            return _trim_to_jd_section(results[0]["raw_content"])
         if results and results[0].get("text"):
-            return results[0]["text"][:8000]
+            return _trim_to_jd_section(results[0]["text"])
 
     raise ValueError("Tavily returned no content")
 
