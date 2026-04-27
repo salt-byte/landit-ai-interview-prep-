@@ -2,13 +2,25 @@
 LLM service — all Gemini API calls go through here.
 Keeps API logic in one place, easy to swap models.
 """
+import asyncio
 import json
+import logging
 import re
 from google import genai
+from google.genai import errors as genai_errors
 from config import settings, DIMENSIONS, DIMENSION_LABELS
+
+logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.gemini_api_key)
 MODEL = "gemini-2.5-flash"
+
+# Gemini routinely returns 429 (quota / capacity) or 503 (model overload) on
+# busy days. Both are documented as transient — retry with exponential backoff
+# instead of surfacing a 500 to the user.
+_RETRYABLE_STATUS = {429, 503}
+_MAX_RETRIES = 4
+_BASE_BACKOFF_SECONDS = 1.0
 
 
 async def _generate(
@@ -29,12 +41,40 @@ async def _generate(
     if json_mode:
         config["response_mime_type"] = "application/json"
 
-    response = await client.aio.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config=config,
-    )
-    return response.text.strip()
+    last_err: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            response = await client.aio.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=config,
+            )
+            return response.text.strip()
+        except genai_errors.ClientError as exc:
+            last_err = exc
+            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            if status not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES - 1:
+                raise
+            delay = _BASE_BACKOFF_SECONDS * (2 ** attempt)
+            logger.warning(
+                "Gemini %s on attempt %d/%d, retrying in %.1fs",
+                status, attempt + 1, _MAX_RETRIES, delay,
+            )
+            await asyncio.sleep(delay)
+        except genai_errors.ServerError as exc:
+            # 5xx from the API gateway. Treat the same as a 503 — retry.
+            last_err = exc
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            delay = _BASE_BACKOFF_SECONDS * (2 ** attempt)
+            logger.warning(
+                "Gemini server error on attempt %d/%d, retrying in %.1fs",
+                attempt + 1, _MAX_RETRIES, delay,
+            )
+            await asyncio.sleep(delay)
+
+    assert last_err is not None
+    raise last_err
 
 
 def _parse_json(raw: str) -> dict | list:
