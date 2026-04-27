@@ -1,6 +1,7 @@
 """
 Target Roles router — workspace CRUD, source management, JD parsing.
 """
+import logging
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -13,6 +14,8 @@ from services.llm import extract_jd_dimension_model
 from services.computation import normalize_weights
 from deps import get_current_user_key
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -206,8 +209,27 @@ async def delete_role(
 
 @router.post("/parse-link")
 async def parse_link(data: ParseLinkRequest):
-    result = await extract_jd_from_url(data.url)
-    return result
+    try:
+        return await extract_jd_from_url(data.url)
+    except Exception as exc:
+        # SPA pages with heavy inline scripts (TikTok careers, etc.) often cause
+        # the LLM to emit malformed JSON. Don't 500 — surface a marker the
+        # frontend already knows how to handle (RoleList.tsx checks for this
+        # token and switches to the Manual paste tab).
+        logger.warning("parse-link failed for %s: %s", data.url[:120], exc)
+        return {
+            "title": "",
+            "company": "",
+            "jd": f"ACCESS_BLOCKED: Could not parse this page automatically. Please copy the job description and paste it manually. URL: {data.url}",
+            "team_info": "",
+            "location": "",
+            "employmentType": "",
+            "keyResponsibilities": "",
+            "qualifications": "",
+            "companyOverview": "",
+            "teamOverview": "",
+            "additionalInfo": "",
+        }
 
 
 @router.post("/{role_id}/sources/upload")
