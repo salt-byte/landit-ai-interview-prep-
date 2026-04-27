@@ -265,8 +265,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
     return sessions.filter(s => String(s.roleId) === String(roleId));
   };
 
-  // Sessions not linked to any role
-  const unlinkedSessions = useMockData ? [] : sessions.filter(s => !s.roleId || !roles.some(r => String(r.id) === String(s.roleId)));
+  const allReportSessions = useMockData ? MOCK_SESSIONS : sessions;
 
   const handleRoleClick = (role: TargetRole) => {
     setSelectedRole(role);
@@ -276,7 +275,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
   const handleSessionClick = async (session: InterviewSession) => {
     if (!useMockData) {
       try {
-        const detail = await getSessionDetail(parseInt(session.id));
+        const detail = await getSessionDetail(session.id);
         setSelectedSession(detail);
       } catch {
         setSelectedSession(session);
@@ -294,7 +293,7 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
 
   const handleBackToSessions = () => {
     setSelectedSession(null);
-    setViewState('SESSION_LIST');
+    setViewState(selectedRole ? 'SESSION_LIST' : 'ROLE_LIST');
   };
 
   const handleGoPractice = () => {
@@ -353,12 +352,12 @@ const InterviewReports: React.FC<InterviewReportsProps> = ({ roles, onNavigate, 
           })}
         </div>
 
-        {/* Show sessions not linked to any role */}
-        {unlinkedSessions.length > 0 && (
+        {/* Show every saved report so sessions are discoverable even if role matching fails. */}
+        {allReportSessions.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-lg font-bold text-[#1F1F1F] mb-4">Recent Sessions</h2>
+            <h2 className="text-lg font-bold text-[#1F1F1F] mb-4">All Interview Reports</h2>
             <div className="space-y-4">
-              {unlinkedSessions.map((session) => (
+              {allReportSessions.map((session) => (
                 <div
                   key={session.id}
                   onClick={() => { setSelectedSession(null); handleSessionClick(session); }}

@@ -1467,7 +1467,7 @@ export const InterviewPrepBuilder: React.FC<{
         }
         setChatHistory(prev => [...prev, { sender: 'AI', text: "Done! I've updated the answer." }]);
       } else {
-        setChatHistory(prev => [...prev, { sender: 'AI', text: improved || "I couldn't process that request." }]);
+        setChatHistory(prev => [...prev, { sender: 'AI', text: qResponse.text || "I couldn't process that request." }]);
       }
     } catch (error) {
       console.error("Quick prompt error:", error);
@@ -2149,4 +2149,3 @@ export const InterviewPrepBuilder: React.FC<{
     </div>
   );
 };
-

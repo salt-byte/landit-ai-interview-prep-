@@ -48,6 +48,7 @@ export interface TargetRole {
   companyBackground?: string;
   teamBackground?: string;
   additionalNotes?: string;
+  sources?: RoleSource[];
 }
 
 export interface NavigationSource {

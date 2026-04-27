@@ -42,7 +42,7 @@ import {
   User,
   MoreHorizontal
 } from 'lucide-react';
-import { TargetRole, InterviewFeedback, UserProfile } from '../types';
+import { TargetRole, InterviewFeedback, UserProfile, AppView } from '../types';
 import { createInterviewSession, createInterviewWS, getInterviewFeedback, finishSession } from '../api';
 import { GoogleGenAI, Modality } from "@google/genai";
 import { buildActiveQuestions, QuestionTypeId } from '../lib/questions';
@@ -52,7 +52,7 @@ interface MockInterviewProps {
   roles: TargetRole[];
   onSelectRole: (role: TargetRole | null) => void;
   onSaveSession?: (questions: any[]) => void;
-  onNavigate?: (view: 'DASHBOARD' | 'WORKSPACE' | 'MOCK_INTERVIEW') => void;
+  onNavigate?: (view: AppView) => void;
   userProfile?: UserProfile;
 }
 
@@ -265,6 +265,8 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
 
   // Backend WebSocket State (kept for local mode fallback)
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const sessionIdRef = useRef<number | null>(null);
+  const sessionCreatePromiseRef = useRef<Promise<number | null> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [useLocalMode, setUseLocalMode] = useState(false);
   const [realFeedback, setRealFeedback] = useState<InterviewFeedback | null>(null);
@@ -352,6 +354,30 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       company: company,
       intro: `Hi, I'm ${interviewer.name.split(' ')[0]}, a ${interviewer.title} at ${company}. I'll be leading today's interview.`
     };
+  };
+
+  const ensureBackendSession = async (): Promise<number | null> => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    if (sessionCreatePromiseRef.current) return sessionCreatePromiseRef.current;
+
+    const promise = createInterviewSession(workspace?.id, matchedInterviewer?.id || 'alex')
+      .then(session => {
+        const id = Number(session.id);
+        sessionIdRef.current = id;
+        setSessionId(id);
+        console.log('[LandIt] Backend session created:', id);
+        return id;
+      })
+      .catch(err => {
+        console.warn('[LandIt] Could not create backend session (data will not persist)', err);
+        return null;
+      })
+      .finally(() => {
+        sessionCreatePromiseRef.current = null;
+      });
+
+    sessionCreatePromiseRef.current = promise;
+    return promise;
   };
 
   useEffect(() => {
@@ -839,7 +865,7 @@ ${questionList}
     }
   };
 
-  const handleGeminiInterviewEnd = () => {
+  const handleGeminiInterviewEnd = async () => {
     // If user has already clicked "Confirm Exit", do not override their navigation
     if (isExitingRef.current) return;
 
@@ -898,10 +924,12 @@ ${questionList}
     setSessionResults(qaPairs);
 
     // Send transcript to backend for feedback generation
-    if (sessionId) {
+    const backendSessionId = await ensureBackendSession();
+    if (isExitingRef.current) return;
+    if (backendSessionId) {
       setFeedbackError(null);
-      finishSession(sessionId, transcript, matchedInterviewer?.id)
-        .then(() => getInterviewFeedback(String(sessionId)))
+      finishSession(backendSessionId, transcript, matchedInterviewer?.id)
+        .then(() => getInterviewFeedback(String(backendSessionId)))
         .then(fb => {
           if (isExitingRef.current) return; // user exited while request was in-flight
           setRealFeedback(fb);
@@ -920,11 +948,10 @@ ${questionList}
           setStep('FEEDBACK');
         });
     } else {
-      setTimeout(() => {
-        if (isExitingRef.current) return;
-        setIsFinishing(false);
-        setStep('FEEDBACK');
-      }, 2000);
+      if (isExitingRef.current) return;
+      setFeedbackError('Could not create a backend interview session');
+      setIsFinishing(false);
+      setStep('FEEDBACK');
     }
 
     if (onSaveSession && workspace) {
@@ -952,6 +979,9 @@ ${questionList}
     setOpeningStep(0);
     setCurrentQuestionIndex(0);
     setDisplayedQuestion('');
+    setSessionId(null);
+    sessionIdRef.current = null;
+    sessionCreatePromiseRef.current = null;
 
     setTimeout(() => {
       if (videoRef.current && streamRef.current) {
@@ -980,13 +1010,8 @@ ${questionList}
       isExitingRef.current = false;        // clear any previous exit state
       manualAdvanceRef.current = false;    // clear any stale manual-advance flag
 
-      // Create backend session for storage (non-blocking — don't delay mic start)
-      createInterviewSession(workspace?.id, matchedInterviewer?.id || 'alex')
-        .then(session => {
-          setSessionId(session.id);
-          console.log('[LandIt] Backend session created:', session.id);
-        })
-        .catch(() => console.warn('[LandIt] Could not create backend session (data will not persist)'));
+      // Create backend session for storage without blocking mic start.
+      ensureBackendSession();
 
       startMicStreaming(geminiSessionRef.current);
 
@@ -1006,14 +1031,11 @@ ${questionList}
     setUseLocalMode(true);
 
     try {
-      const session = await createInterviewSession(
-        workspace?.id,
-        matchedInterviewer?.id || 'alex',
-      );
-      setSessionId(session.id);
+      const sid = await ensureBackendSession();
+      if (!sid) throw new Error('Could not create backend session');
       setWsStartSent(false);
 
-      const ws = await createInterviewWS(session.id);
+      const ws = await createInterviewWS(String(sid));
       wsRef.current = ws;
 
       ws.onmessage = (event) => {
@@ -1025,7 +1047,7 @@ ${questionList}
         } else if (msg.type === 'feedback_ready') {
           setIsRecording(false);
           setIsFinishing(true);
-          loadRealFeedback(session.id);
+          loadRealFeedback(sid);
         }
       };
 
@@ -1080,7 +1102,7 @@ ${questionList}
   const loadRealFeedback = async (sid: number) => {
     setIsLoadingFeedback(true);
     try {
-      const fb = await getInterviewFeedback(sid);
+      const fb = await getInterviewFeedback(String(sid));
       setRealFeedback(fb);
       setFeedbackError(null);
     } catch (err) {
@@ -1095,11 +1117,12 @@ ${questionList}
   // Retry-fetch the feedback row for the current session. Used by the
   // "Retry" button on the FEEDBACK page when the initial fetch failed.
   const retryFetchFeedback = async () => {
-    if (!sessionId) return;
+    const sid = sessionIdRef.current || sessionId;
+    if (!sid) return;
     setIsLoadingFeedback(true);
     setFeedbackError(null);
     try {
-      const fb = await getInterviewFeedback(String(sessionId));
+      const fb = await getInterviewFeedback(String(sid));
       setRealFeedback(fb);
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Unknown error';
@@ -1477,6 +1500,8 @@ ${questionList}
     setTranscript('');
     setCurrentQuestionIndex(0);
     setSessionId(null);
+    sessionIdRef.current = null;
+    sessionCreatePromiseRef.current = null;
     setUseLocalMode(false);
     setFollowUpCount(0);
     setAudioLevel(0);
@@ -2053,13 +2078,25 @@ ${questionList}
       }, 2000);
     };
 
-    const handleSaveAndExit = () => {
+    const resetFeedbackState = () => {
       setStep('SETTINGS');
       setTimer(0);
       setSessionResults([]);
       setIsRecording(false);
       setMatchedInterviewer(null);
       setIsFinishing(false);
+      setSessionId(null);
+      sessionIdRef.current = null;
+      sessionCreatePromiseRef.current = null;
+    };
+
+    const handlePracticeAgain = () => {
+      resetFeedbackState();
+    };
+
+    const handleSaveAndExit = () => {
+      resetFeedbackState();
+      if (onNavigate) onNavigate('DOCS_REPORTS');
     };
 
     const isFeedbackEmpty = !realFeedback || (
@@ -2101,7 +2138,7 @@ ${questionList}
           {/* Top Actions */}
           <div className="flex items-center justify-between">
             <button
-              onClick={handleSaveAndExit}
+              onClick={handlePracticeAgain}
               className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#E3E3E3] text-[#444746] rounded-full text-sm font-bold hover:bg-[#F8F9FA] transition-colors shadow-sm"
             >
               <RefreshCw className="w-4 h-4" /> Practice Again

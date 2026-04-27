@@ -119,8 +119,13 @@ CREATE TABLE IF NOT EXISTS interview_sessions (
     user_key            VARCHAR(64) NOT NULL DEFAULT 'default',
     role_id             INTEGER     REFERENCES target_roles(id) ON DELETE SET NULL,
     interviewer_id      VARCHAR(32) NOT NULL DEFAULT 'alex',
+    interviewer_name    VARCHAR(128) NOT NULL DEFAULT '',
+    interviewer_avatar  VARCHAR(512) NOT NULL DEFAULT '',
     status              VARCHAR(32) NOT NULL DEFAULT 'pending',
     transcript_consent  BOOLEAN     NOT NULL DEFAULT TRUE,
+    duration            INTEGER     NOT NULL DEFAULT 0,
+    overall_rating      VARCHAR(32) NOT NULL DEFAULT '',
+    summary             TEXT        NOT NULL DEFAULT '',
     started_at          TIMESTAMPTZ,
     ended_at            TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -145,9 +150,23 @@ CREATE TABLE IF NOT EXISTS interview_feedbacks (
     improvements        JSONB       NOT NULL DEFAULT '[]',
     recommended_actions JSONB       NOT NULL DEFAULT '[]',
     transcript          TEXT        NOT NULL DEFAULT '',
+    transcript_items    JSONB       NOT NULL DEFAULT '[]',
     dimension_scores    JSONB       NOT NULL DEFAULT '{}',
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Existing Supabase projects may have been created before report metadata
+-- columns were added to the SQLAlchemy models. create_all will not add columns
+-- to existing tables, so keep this migration block idempotent.
+ALTER TABLE interview_sessions
+    ADD COLUMN IF NOT EXISTS interviewer_name VARCHAR(128) NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS interviewer_avatar VARCHAR(512) NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS duration INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS overall_rating VARCHAR(32) NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE interview_feedbacks
+    ADD COLUMN IF NOT EXISTS transcript_items JSONB NOT NULL DEFAULT '[]';
 
 -- ─── 长期记忆 ─────────────────────────────────────────────────
 

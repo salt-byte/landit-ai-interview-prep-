@@ -5,6 +5,7 @@ from urllib.parse import urlparse, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,16 @@ class Base(DeclarativeBase):
     pass
 
 
+REPORT_SCHEMA_MIGRATIONS = [
+    "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS interviewer_name VARCHAR(128) NOT NULL DEFAULT ''",
+    "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS interviewer_avatar VARCHAR(512) NOT NULL DEFAULT ''",
+    "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS duration INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS overall_rating VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE interview_feedbacks ADD COLUMN IF NOT EXISTS transcript_items JSONB NOT NULL DEFAULT '[]'",
+]
+
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:
@@ -48,6 +59,9 @@ async def init_db():
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                if conn.dialect.name == "postgresql":
+                    for statement in REPORT_SCHEMA_MIGRATIONS:
+                        await conn.execute(text(statement))
             logger.info("Database initialized successfully")
             return
         except (OSError, asyncio.TimeoutError, SQLAlchemyError) as exc:
