@@ -808,7 +808,7 @@ export const InterviewPrepBuilder: React.FC<{
   };
   
   // State: Chat (Moved up)
-  const [chatHistory, setChatHistory] = useState<{sender: 'AI'|'USER', text: string, quote?: string}[]>([]);
+  const [chatHistory, setChatHistory] = useState<{sender: 'AI'|'USER', text: string, quote?: string, action?: 'regenerate-questions' | 'regenerate-answer'}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -1274,7 +1274,8 @@ export const InterviewPrepBuilder: React.FC<{
       setEditorState('SETTINGS');
       setChatHistory(prev => [...prev, {
         sender: 'AI',
-        text: `Sorry — I couldn't generate questions just now (${detail}). This is usually a rate-limit or network blip. Just click "Generate Questions" again.`,
+        text: `Sorry — I couldn't generate questions just now (${detail}). This is usually a rate-limit or network blip.`,
+        action: 'regenerate-questions',
       }]);
     }
   };
@@ -1316,7 +1317,8 @@ export const InterviewPrepBuilder: React.FC<{
         error instanceof Error ? error.message : "Unknown error";
       setChatHistory(prev => [...prev, {
         sender: 'AI',
-        text: `Sorry — I couldn't generate an answer just now (${detail}). This is usually a rate-limit or transient network issue. Try the same question again in a moment.`,
+        text: `Sorry — I couldn't generate an answer just now (${detail}). This is usually a rate-limit or transient network issue.`,
+        action: 'regenerate-answer',
       }]);
     } finally {
       setIsGeneratingAnswer(false);
@@ -2040,6 +2042,22 @@ export const InterviewPrepBuilder: React.FC<{
                       <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm whitespace-pre-wrap ${msg.sender === 'USER' ? 'bg-[#F2F2F2] border-[#E3E3E3] text-[#1F1F1F] rounded-tr-none' : 'bg-white border-[#D3E3FD] text-[#1F1F1F] rounded-tl-none'}`}>
                         {msg.text}
                       </div>
+                      {(msg as any).action === 'regenerate-questions' && (
+                        <button
+                          onClick={generateQuestions}
+                          className="self-start mt-1 inline-flex items-center gap-1.5 text-xs font-bold bg-[#0B57D0] hover:bg-[#0A4DBA] text-white px-3 py-1.5 rounded-full transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                        </button>
+                      )}
+                      {(msg as any).action === 'regenerate-answer' && selectedQuestionIndex !== null && (
+                        <button
+                          onClick={() => handleGenerateAnswer(selectedQuestionIndex)}
+                          className="self-start mt-1 inline-flex items-center gap-1.5 text-xs font-bold bg-[#0B57D0] hover:bg-[#0A4DBA] text-white px-3 py-1.5 rounded-full transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Regenerate Answer
+                        </button>
+                      )}
                       {((idx === 0 && msg.sender === 'AI') || msg.text.includes("I've transcribed your recording")) && (
                         <div className="flex flex-col gap-1 mt-1">
                           {["Make it concise", "Add STAR format", "Sound more confident"].map(s => (
