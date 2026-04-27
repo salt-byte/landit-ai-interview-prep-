@@ -1265,16 +1265,17 @@ export const InterviewPrepBuilder: React.FC<{
       }]);
     } catch (error) {
       // Don't fabricate fallback questions — that's how we got the "3 identical
-      // placeholder questions" bug. Surface the failure honestly so the user can
-      // retry via Regenerate.
+      // placeholder questions" bug. Surface the failure honestly and bounce
+      // back to SETTINGS so the user can hit "Generate Questions" again
+      // (the GENERATING state has no retry button).
       console.error("Error generating questions:", error);
       const detail =
         error instanceof Error ? error.message : "Unknown error";
+      setEditorState('SETTINGS');
       setChatHistory(prev => [...prev, {
         sender: 'AI',
-        text: `Sorry — I couldn't generate questions just now (${detail}). This is usually transient (rate limit or network blip). Click **Regenerate** to try again.`,
+        text: `Sorry — I couldn't generate questions just now (${detail}). This is usually a rate-limit or network blip. Just click "Generate Questions" again.`,
       }]);
-      // Stay on the current step so the Regenerate button stays accessible.
     }
   };
 
