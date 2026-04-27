@@ -1264,17 +1264,17 @@ export const InterviewPrepBuilder: React.FC<{
         text: "I've generated " + questions.length + " targeted questions" + (gapContext ? " based on your gap analysis" : "") + ". Select a question to generate a sample answer."
       }]);
     } catch (error) {
+      // Don't fabricate fallback questions — that's how we got the "3 identical
+      // placeholder questions" bug. Surface the failure honestly so the user can
+      // retry via Regenerate.
       console.error("Error generating questions:", error);
-      const mockQuestions = Array.from({ length: settings.qty }).map(() => ({
-        q: "How would you handle a situation where you need to prioritize multiple conflicting tasks for a " + (role?.title || "product") + " role?",
-        a: undefined
-      }));
-      setGeneratedQuestions(mockQuestions);
-      setEditorState('EDITING');
+      const detail =
+        error instanceof Error ? error.message : "Unknown error";
       setChatHistory(prev => [...prev, {
         sender: 'AI',
-        text: "I've generated practice questions for you. Select a question to generate a sample answer."
+        text: `Sorry — I couldn't generate questions just now (${detail}). This is usually transient (rate limit or network blip). Click **Regenerate** to try again.`,
       }]);
+      // Stay on the current step so the Regenerate button stays accessible.
     }
   };
 
@@ -1308,13 +1308,15 @@ export const InterviewPrepBuilder: React.FC<{
         text: "I've generated a suggested answer. Would you like me to refine or improve it?"
       }]);
     } catch (error) {
+      // Don't substitute a generic STAR template — surface the failure so the
+      // user can retry instead of thinking the AI produced that filler.
       console.error("Error generating answer:", error);
-      const updatedQuestions = [...generatedQuestions];
-      updatedQuestions[index] = {
-        ...updatedQuestions[index],
-        a: "This is a sample answer generated based on the STAR framework. Situation: Describe the context. Task: Explain your responsibility. Action: Detail the steps you took. Result: Share the positive outcome."
-      };
-      setGeneratedQuestions(updatedQuestions);
+      const detail =
+        error instanceof Error ? error.message : "Unknown error";
+      setChatHistory(prev => [...prev, {
+        sender: 'AI',
+        text: `Sorry — I couldn't generate an answer just now (${detail}). This is usually a rate-limit or transient network issue. Try the same question again in a moment.`,
+      }]);
     } finally {
       setIsGeneratingAnswer(false);
     }
