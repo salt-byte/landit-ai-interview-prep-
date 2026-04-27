@@ -46,7 +46,10 @@ async function request<T>(
     if (timeout) clearTimeout(timeout);
   });
 
-  if (res.status === 401) {
+  // Only sign out on 401 if we actually had a token — otherwise we'd kick
+  // guest-mode users back to the login screen as soon as any component
+  // (Profile, RoleList, etc.) makes its first backend call.
+  if (res.status === 401 && token) {
     await supabase.auth.signOut();
   }
 
