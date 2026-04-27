@@ -18,6 +18,36 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 
 
 def role_to_dict(role: TargetRole, sources=None) -> dict:
+    src_list = sources or []
+
+    # The Workspace UI groups Context into 4 buckets that don't directly map to
+    # backend columns:
+    #   • companyTeamOverview     ← companyOverview + teamOverview (from JD parse)
+    #                                + extracted_content of any "Company & Team
+    #                                  Overview" sources
+    #   • productOverview         ← extracted_content of "Product Overview" sources
+    #   • industryInsights        ← extracted_content of "Industry Insights" sources
+    #   • interviewExperiences    ← extracted_content of "Interview Experiences" sources
+    #
+    # Derive these so the frontend has something to render right after a URL
+    # parse or a successful Add Source.
+
+    def _aggregate_sources_by_type(*types: str) -> str:
+        chunks = [
+            s.extracted_content
+            for s in src_list
+            if s.type in types and getattr(s, "extracted_content", None)
+        ]
+        return "\n\n".join(c.strip() for c in chunks if c.strip())
+
+    base_company_team = "\n\n".join(
+        s for s in (role.company_overview, role.team_overview) if s and s.strip()
+    )
+    src_company_team = _aggregate_sources_by_type("Company & Team Overview")
+    company_team_overview = "\n\n".join(
+        s for s in (base_company_team, src_company_team) if s
+    )
+
     return {
         "id": str(role.id),
         "title": role.title,
@@ -36,6 +66,11 @@ def role_to_dict(role: TargetRole, sources=None) -> dict:
         "generalNotes": role.general_notes,
         "preparationNotes": role.preparation_notes,
         "insights": role.insights,
+        # Derived Context fields used by Workspace.tsx
+        "companyTeamOverview": company_team_overview,
+        "productOverview": _aggregate_sources_by_type("Product Overview"),
+        "industryInsights": _aggregate_sources_by_type("Industry Insights"),
+        "interviewExperiences": _aggregate_sources_by_type("Interview Experiences"),
         # Legacy
         "companyBackground": role.company_background,
         "teamBackground": role.team_background,
@@ -48,7 +83,7 @@ def role_to_dict(role: TargetRole, sources=None) -> dict:
                 "type": s.type,
                 "date": s.created_at.strftime("%Y-%m-%d"),
             }
-            for s in (sources or [])
+            for s in src_list
         ],
     }
 
