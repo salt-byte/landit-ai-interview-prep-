@@ -40,6 +40,11 @@ async def _generate(
         config["system_instruction"] = system
     if json_mode:
         config["response_mime_type"] = "application/json"
+        # gemini-2.5-flash spends thinking tokens out of max_output_tokens by
+        # default, which truncates structured JSON mid-string. Structured
+        # extraction doesn't benefit from extended reasoning anyway, so opt
+        # out for json_mode calls.
+        config["thinking_config"] = {"thinking_budget": 0}
 
     last_err: Exception | None = None
     for attempt in range(_MAX_RETRIES):
