@@ -183,13 +183,13 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
             <User className="w-4 h-4 group-hover:scale-110 transition-transform" />
             Continue as Guest
             <span className="text-[10px] font-bold text-[#C4C7C5] bg-[#F0F4F9] group-hover:bg-white px-1.5 py-0.5 rounded ml-1 transition-colors">
-              DEMO DATA
+              ONE-TIME
             </span>
           </button>
 
           <p className="text-center text-[10px] text-[#C4C7C5] mt-6 leading-relaxed">
-            Guest mode loads sample profile data so you can explore all features.<br />
-            No account required.
+            Full functionality, no signup required.<br />
+            Your data stays only in this browser session.
           </p>
         </div>
       </div>

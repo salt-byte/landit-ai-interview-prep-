@@ -170,11 +170,29 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleGuest = () => {
-    setUserProfile(INITIAL_PROFILE);
-    setRoles(INITIAL_ROLES);
-    setSavedQuestions(INITIAL_SAVED_QUESTIONS);
-    setAuthMode('GUEST');
+  const handleGuest = async () => {
+    // Prefer Supabase anonymous auth: gives the visitor a real (but ephemeral)
+    // JWT, so every backend route works exactly like a real login. The
+    // anonymous user vanishes when they clear cookies / close the browser.
+    //
+    // If the Supabase project hasn't enabled anonymous sign-ins, we fall back
+    // to the legacy local-only guest mode that just preloads sample data.
+    try {
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      // onAuthStateChange will fire with a session and set authMode='USER'.
+      // Start from a clean slate so it feels like a fresh real account
+      // (the user can upload their own resume, parse a real JD, etc.).
+      setUserProfile(EMPTY_PROFILE);
+      setRoles([]);
+      setSavedQuestions([]);
+    } catch (err) {
+      console.warn('[guest] Anonymous Supabase sign-in unavailable, using local sample-data mode:', err);
+      setUserProfile(INITIAL_PROFILE);
+      setRoles(INITIAL_ROLES);
+      setSavedQuestions(INITIAL_SAVED_QUESTIONS);
+      setAuthMode('GUEST');
+    }
   };
 
   const handleSignIn = async (email: string, password: string, tab: 'signin' | 'signup') => {
