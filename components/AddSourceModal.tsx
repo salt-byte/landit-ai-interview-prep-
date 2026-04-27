@@ -98,13 +98,15 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     }
   }, [uploadStatus]);
 
-  // Pre-upload: start uploading as soon as file is selected
+  // Upload request tracking. We intentionally do not upload on file select:
+  // selecting and then closing the modal must not create a document record.
   const preUploadPromiseRef = useRef<Promise<any> | null>(null);
   const preUploadTypeRef = useRef<string>('');
-  // Aborts the in-flight pre-upload if the user closes the modal before
-  // committing to it. Without this, abandoned modals leave stray Document
-  // records on the server (we saw 6 duplicates accumulate during testing).
+  // Kept for compatibility with the upload flow, but profile uploads now start
+  // only after the user clicks Upload so selecting a file cannot create stray
+  // documents.
   const preUploadAbortRef = useRef<AbortController | null>(null);
+  const uploadInFlightRef = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,42 +126,22 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         else if (lowerName.includes('industry') || lowerName.includes('market')) detectedType = 'Industry Insights';
         else if (lowerName.includes('interview') || lowerName.includes('glassdoor')) detectedType = 'Interview Experiences';
       } else {
-        if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('简历')) detectedType = 'Resume';
+        if (lowerName.includes('resume') || lowerName.includes('cv') || lowerName.includes('curriculum') || lowerName.includes('简历')) detectedType = 'Resume';
         else if (lowerName.includes('portfolio')) detectedType = 'Portfolio';
         else if (lowerName.includes('sample')) detectedType = 'Work Sample';
         else if (lowerName.includes('cover')) detectedType = 'Cover Letter';
       }
       setSelectedFileType(detectedType);
-
-      // Start uploading silently in the background (non-guest, non-role)
-      // Don't change uploadStatus — keep UI showing file preview until user clicks Upload
-      if (!isGuest && !roleId) {
-        preUploadTypeRef.current = detectedType;
-        // Abort any previous in-flight pre-upload before starting a new one
-        // (e.g. user picked a file, then picked a different one).
-        if (preUploadAbortRef.current) preUploadAbortRef.current.abort();
-        const controller = new AbortController();
-        preUploadAbortRef.current = controller;
-        if (detectedType === 'Resume') {
-          // For resumes, extract PDF text in-browser (parallel with the upload).
-          // Sending pre-extracted text lets the backend skip its own pypdf parse.
-          // Falls back to backend parsing if extraction fails or it's not a PDF.
-          const textPromise = isPdfFile(file)
-            ? extractPdfText(file).catch(() => '')
-            : Promise.resolve('');
-          preUploadPromiseRef.current = textPromise.then(text =>
-            uploadAndParseDocument(file, text || undefined, controller.signal),
-          );
-        } else {
-          preUploadPromiseRef.current = uploadDocument(file);
-        }
-      }
+      preUploadPromiseRef.current = null;
+      preUploadTypeRef.current = '';
     }
   };
 
   // Flow A: Upload File — awaits pre-started upload or starts new one
   const handleUploadFile = async () => {
     if (!pendingFile || !pendingFileObj) return;
+    if (uploadInFlightRef.current) return;
+    uploadInFlightRef.current = true;
     try {
       if (isGuest) {
         setUploadStatus('UPLOADING');
@@ -219,6 +201,8 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
       setTimeout(handleClose, 800);
     } catch {
       setUploadStatus('ERROR');
+    } finally {
+      uploadInFlightRef.current = false;
     }
   };
 
@@ -259,9 +243,6 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
   };
 
   const handleClose = () => {
-    // Abort any in-flight pre-upload if the user is closing without committing.
-    // Once the user clicked Upload, status moves out of IDLE and we let the
-    // request finish — they intentionally asked for it.
     if (uploadStatus === 'IDLE' && preUploadAbortRef.current) {
       preUploadAbortRef.current.abort();
     }
@@ -274,6 +255,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     setUploadStatus('IDLE');
     preUploadPromiseRef.current = null;
     preUploadTypeRef.current = '';
+    uploadInFlightRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
     onClose();
   };

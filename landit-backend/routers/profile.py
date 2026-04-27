@@ -18,6 +18,54 @@ from deps import get_current_user_key
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 
+def document_to_response(doc: Document) -> dict:
+    return {
+        "id": str(doc.id),
+        "name": doc.name,
+        "type": doc.type,
+        "date": doc.created_at.strftime("%Y-%m-%d"),
+        "file_size": doc.file_size,
+    }
+
+
+def document_key(doc: Document) -> tuple[str, str]:
+    return ((doc.name or "").strip().lower(), (doc.type or "").strip().lower())
+
+
+def dedupe_documents(docs: list[Document]) -> list[Document]:
+    seen = set()
+    deduped = []
+    for doc in docs:
+        key = document_key(doc)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(doc)
+    return deduped
+
+
+async def find_recent_document(
+    db: AsyncSession,
+    profile_id: int,
+    name: str,
+    doc_type: str,
+    within_seconds: int = 300,
+) -> Document | None:
+    recent_cutoff = datetime.utcnow() - timedelta(seconds=within_seconds)
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.profile_id == profile_id,
+            Document.name == name,
+            Document.type == doc_type,
+            Document.created_at >= recent_cutoff,
+        )
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_or_create_profile(db: AsyncSession, user_key: str) -> UserProfile:
     result = await db.execute(
         select(UserProfile).where(UserProfile.user_key == user_key)
@@ -220,17 +268,8 @@ async def list_documents(
     result = await db.execute(
         select(Document).where(Document.profile_id == profile.id).order_by(Document.created_at.desc())
     )
-    docs = result.scalars().all()
-    return [
-        {
-            "id": str(d.id),
-            "name": d.name,
-            "type": d.type,
-            "date": d.created_at.strftime("%Y-%m-%d"),
-            "file_size": d.file_size,
-        }
-        for d in docs
-    ]
+    docs = dedupe_documents(result.scalars().all())
+    return [document_to_response(d) for d in docs]
 
 
 @router.post("/documents/upload")
@@ -241,13 +280,21 @@ async def upload_document(
     user_key: str = Depends(get_current_user_key),
 ):
     profile = await get_or_create_profile(db, user_key)
+    detected_type = type_override or detect_file_type(file.filename or "")
+    doc_name = file.filename or "upload"
+
+    duplicate = await find_recent_document(db, profile.id, doc_name, detected_type)
+    if duplicate:
+        response = document_to_response(duplicate)
+        response["detected_type"] = detected_type
+        response["deduplicated"] = True
+        return response
 
     file_path, file_size = await upload_file(file, subfolder="profile")
-    detected_type = type_override or detect_file_type(file.filename or "")
 
     doc = Document(
         profile_id=profile.id,
-        name=file.filename or "upload",
+        name=doc_name,
         type=detected_type,
         file_path=file_path,
         file_size=file_size,
@@ -257,14 +304,9 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    return {
-        "id": str(doc.id),
-        "name": doc.name,
-        "type": doc.type,
-        "date": doc.created_at.strftime("%Y-%m-%d"),
-        "file_size": doc.file_size,
-        "detected_type": detected_type,
-    }
+    response = document_to_response(doc)
+    response["detected_type"] = detected_type
+    return response
 
 
 @router.post("/documents/upload-and-parse")
@@ -276,32 +318,16 @@ async def upload_and_parse_resume(
 ):
     profile = await get_or_create_profile(db, user_key)
 
-    # Dedupe: if the same filename was uploaded by this profile in the last 60s,
+    # Dedupe: if the same filename was uploaded by this profile recently,
     # treat as a duplicate (e.g. accidental double-click, abandoned-but-still-
     # in-flight pre-upload from a closed modal). Skip both file save and parse.
-    recent_cutoff = datetime.utcnow() - timedelta(seconds=60)
-    recent_dup = await db.execute(
-        select(Document)
-        .where(
-            Document.profile_id == profile.id,
-            Document.name == (file.filename or "resume"),
-            Document.created_at >= recent_cutoff,
-        )
-        .order_by(Document.created_at.desc())
-        .limit(1)
-    )
-    dup_doc = recent_dup.scalar_one_or_none()
+    doc_name = file.filename or "resume"
+    dup_doc = await find_recent_document(db, profile.id, doc_name, "Resume")
     if dup_doc:
         return {
             "extracted": {},
             "document_id": dup_doc.id,
-            "document": {
-                "id": str(dup_doc.id),
-                "name": dup_doc.name,
-                "type": dup_doc.type,
-                "date": dup_doc.created_at.strftime("%Y-%m-%d"),
-                "file_size": dup_doc.file_size,
-            },
+            "document": document_to_response(dup_doc),
             "parse_error": None,
             "deduplicated": True,
         }
@@ -324,7 +350,7 @@ async def upload_and_parse_resume(
 
     doc = Document(
         profile_id=profile.id,
-        name=file.filename or "resume",
+        name=doc_name,
         type="Resume",
         file_path=file_path,
         file_size=file_size,
@@ -337,13 +363,7 @@ async def upload_and_parse_resume(
     return {
         "extracted": extracted,
         "document_id": doc.id,
-        "document": {
-            "id": str(doc.id),
-            "name": doc.name,
-            "type": doc.type,
-            "date": doc.created_at.strftime("%Y-%m-%d"),
-            "file_size": doc.file_size,
-        },
+        "document": document_to_response(doc),
         "parse_error": parse_error,
     }
 

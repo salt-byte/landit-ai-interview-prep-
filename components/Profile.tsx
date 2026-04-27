@@ -35,6 +35,19 @@ const PROFILE_TABS: TabItem<ProfileTab>[] = [
   { id: 'SKILLS', label: 'Skills' },
 ];
 
+const normalizeFileKey = (file: Pick<UploadedFile, 'name' | 'type'>) =>
+  `${file.name.trim().toLowerCase()}::${file.type.trim().toLowerCase()}`;
+
+const dedupeFiles = (files: UploadedFile[]) => {
+  const seen = new Set<string>();
+  return files.filter(file => {
+    const key = normalizeFileKey(file);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 interface ProfileProps {
   profile: UserProfile;
   onUpdateProfile: React.Dispatch<React.SetStateAction<UserProfile>>;
@@ -51,7 +64,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
     const loadDocs = (retries = 2) => {
       getDocuments().then((docs: any[]) => {
         if (docs && docs.length > 0) {
-          setFiles(docs.map((d: any) => ({ id: String(d.id), name: d.name, type: d.type, date: d.date })));
+          setFiles(dedupeFiles(docs.map((d: any) => ({ id: String(d.id), name: d.name, type: d.type, date: d.date }))));
         }
       }).catch(() => {
         if (retries > 0) setTimeout(() => loadDocs(retries - 1), 3000);
@@ -105,7 +118,7 @@ const Profile: React.FC<ProfileProps> = ({ profile: globalProfile, onUpdateProfi
   // --- Handlers ---
 
   const handleAddSource = (newFile: UploadedFile) => {
-    setFiles(prev => [newFile, ...prev]);
+    setFiles(prev => dedupeFiles([newFile, ...prev]));
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
     setShowAddSourceModal(false);
