@@ -11,11 +11,23 @@ client = genai.Client(api_key=settings.gemini_api_key)
 MODEL = "gemini-2.5-flash"
 
 
-async def _generate(prompt: str, max_tokens: int = 4096, system: str = "") -> str:
-    """Unified async wrapper for Gemini generateContent."""
+async def _generate(
+    prompt: str,
+    max_tokens: int = 4096,
+    system: str = "",
+    json_mode: bool = False,
+) -> str:
+    """Unified async wrapper for Gemini generateContent.
+
+    json_mode=True asks Gemini to emit application/json directly. This avoids
+    the markdown-fenced output and most "unterminated string" failures we
+    used to see when the model wrapped JSON in prose.
+    """
     config = {"max_output_tokens": max_tokens}
     if system:
         config["system_instruction"] = system
+    if json_mode:
+        config["response_mime_type"] = "application/json"
 
     response = await client.aio.models.generate_content(
         model=MODEL,
@@ -26,9 +38,55 @@ async def _generate(prompt: str, max_tokens: int = 4096, system: str = "") -> st
 
 
 def _parse_json(raw: str) -> dict | list:
-    """Strip markdown fences and parse JSON."""
-    raw = re.sub(r"^```(?:json)?\n?", "", raw).rstrip("```").strip()
-    return json.loads(raw)
+    """Parse JSON from an LLM response, defensively.
+
+    Handles markdown fences, leading/trailing prose, and truncated outputs by
+    extracting the largest balanced ``{...}`` or ``[...]`` block before
+    delegating to ``json.loads``.
+    """
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back: scan for the first balanced JSON object/array. Useful when
+    # the model prepends explanatory prose or appends a trailing comment.
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        if start == -1:
+            continue
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+            else:
+                if ch == '"':
+                    in_string = True
+                elif ch == opener:
+                    depth += 1
+                elif ch == closer:
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(text[start : i + 1])
+                        except json.JSONDecodeError:
+                            break
+
+    # Last resort: re-raise the original error so callers can decide what to do.
+    return json.loads(text)
 
 
 async def extract_profile_from_resume(resume_text: str) -> dict:
@@ -83,7 +141,7 @@ async def extract_profile_from_resume(resume_text: str) -> dict:
 Resume:
 {resume_text}"""
 
-    raw = await _generate(prompt, max_tokens=4096)
+    raw = await _generate(prompt, max_tokens=4096, json_mode=True)
     return _parse_json(raw)
 
 
@@ -117,7 +175,7 @@ Return ONLY valid JSON:
 Candidate profile:
 {profile_text}"""
 
-    raw = await _generate(prompt, max_tokens=2048)
+    raw = await _generate(prompt, max_tokens=2048, json_mode=True)
     return _parse_json(raw)
 
 
@@ -149,7 +207,7 @@ All 10 dimensions must be present. Set weight=0 for irrelevant dimensions.
 Job Description:
 {jd_text}"""
 
-    raw = await _generate(prompt, max_tokens=1024)
+    raw = await _generate(prompt, max_tokens=1024, json_mode=True)
     return _parse_json(raw)
 
 
@@ -309,7 +367,7 @@ URL: {url}
 Content:
 {page_content[:16000]}"""
 
-    raw = await _generate(prompt, max_tokens=3000)
+    raw = await _generate(prompt, max_tokens=3000, json_mode=True)
     return _parse_json(raw)
 
 
@@ -362,7 +420,7 @@ Provide structured feedback. Return ONLY valid JSON:
 For overall_rating: use "Excellent" if overall_score >= 85, "Good" if >= 60, "Needs Improvement" otherwise.
 Extract each distinct Q&A exchange from the transcript into transcript_items."""
 
-    raw = await _generate(prompt, max_tokens=2048)
+    raw = await _generate(prompt, max_tokens=2048, json_mode=True)
     return _parse_json(raw)
 
 
