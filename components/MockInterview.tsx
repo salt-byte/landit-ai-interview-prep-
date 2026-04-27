@@ -269,6 +269,7 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
   const [useLocalMode, setUseLocalMode] = useState(false);
   const [realFeedback, setRealFeedback] = useState<InterviewFeedback | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [wsStartSent, setWsStartSent] = useState(false);
 
   // Interviewer State
@@ -898,6 +899,7 @@ ${questionList}
 
     // Send transcript to backend for feedback generation
     if (sessionId) {
+      setFeedbackError(null);
       finishSession(sessionId, transcript, matchedInterviewer?.id)
         .then(() => getInterviewFeedback(String(sessionId)))
         .then(fb => {
@@ -906,8 +908,14 @@ ${questionList}
           setIsFinishing(false);
           setStep('FEEDBACK');
         })
-        .catch(() => {
+        .catch(err => {
           if (isExitingRef.current) return;
+          // Don't silently land on an empty FEEDBACK page — surface the
+          // error so the user can retry instead of staring at "No data
+          // available yet" with no idea what went wrong.
+          console.error('[MockInterview] Feedback generation failed:', err);
+          const detail = err instanceof Error ? err.message : 'Unknown error';
+          setFeedbackError(detail);
           setIsFinishing(false);
           setStep('FEEDBACK');
         });
@@ -1074,12 +1082,31 @@ ${questionList}
     try {
       const fb = await getInterviewFeedback(sid);
       setRealFeedback(fb);
-    } catch {
-      // Fall back to mock feedback
+      setFeedbackError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Unknown error';
+      setFeedbackError(detail);
     }
     setIsLoadingFeedback(false);
     setIsFinishing(false);
     setStep('FEEDBACK');
+  };
+
+  // Retry-fetch the feedback row for the current session. Used by the
+  // "Retry" button on the FEEDBACK page when the initial fetch failed.
+  const retryFetchFeedback = async () => {
+    if (!sessionId) return;
+    setIsLoadingFeedback(true);
+    setFeedbackError(null);
+    try {
+      const fb = await getInterviewFeedback(String(sessionId));
+      setRealFeedback(fb);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Unknown error';
+      setFeedbackError(detail);
+    } finally {
+      setIsLoadingFeedback(false);
+    }
   };
 
   useEffect(() => {
@@ -2035,9 +2062,41 @@ ${questionList}
       setIsFinishing(false);
     };
 
+    const isFeedbackEmpty = !realFeedback || (
+      (!realFeedback.strengths || realFeedback.strengths.length === 0) &&
+      (!realFeedback.improvements || realFeedback.improvements.length === 0)
+    );
+
     return (
       <div className="h-full overflow-y-auto bg-[#F0F4F9] p-4 md:p-8 animate-in fade-in duration-500">
         <div className="max-w-4xl mx-auto space-y-6 pb-12">
+
+          {/* Failure / empty-feedback banner with retry. Shown when the
+              backend either failed to generate feedback or returned blank
+              strengths + improvements (which usually means the LLM call
+              returned but emitted empty arrays). */}
+          {(feedbackError || isFeedbackEmpty) && (
+            <div className="rounded-xl border border-[#FBE3DA] bg-[#FFF5F2] p-4 flex items-start gap-3">
+              <div className="flex-1">
+                <div className="text-sm font-bold text-[#B3261E] mb-1">
+                  {feedbackError ? 'Feedback generation failed' : 'Feedback came back empty'}
+                </div>
+                <div className="text-sm text-[#5D2A1F]">
+                  {feedbackError
+                    ? `${feedbackError}. The interview was saved, but the AI evaluation didn't return.`
+                    : 'The AI evaluation returned no strengths or improvements — usually a transient model issue.'}
+                </div>
+              </div>
+              <button
+                onClick={retryFetchFeedback}
+                disabled={isLoadingFeedback}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#B3261E] hover:bg-[#8C1D17] disabled:opacity-50 text-white rounded-full text-xs font-bold transition-colors flex-shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFeedback ? 'animate-spin' : ''}`} />
+                {isLoadingFeedback ? 'Retrying…' : 'Retry'}
+              </button>
+            </div>
+          )}
 
           {/* Top Actions */}
           <div className="flex items-center justify-between">
