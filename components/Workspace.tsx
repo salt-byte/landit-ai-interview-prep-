@@ -75,6 +75,9 @@ const GEMINI_MODEL_SMART = "gemini-2.5-flash";
 const GEMINI_MODEL_FAST = "gemini-2.5-flash-lite";
 // Back-compat alias — most generation paths default to SMART.
 const GEMINI_MODEL = GEMINI_MODEL_SMART;
+// gemini-2.5-flash adds 5–15s of latency when its built-in "thinking" is on.
+// None of the Mock Prep prompts need extended reasoning, so opt out.
+const NO_THINKING = { thinkingConfig: { thinkingBudget: 0 } };
 import MockInterview from './MockInterview';
 import AddSourceModal from './AddSourceModal';
 import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
@@ -1249,6 +1252,7 @@ export const InterviewPrepBuilder: React.FC<{
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
         contents: [{ parts: [{ text: prompt }] }],
+        config: NO_THINKING,
       });
 
       const text = response.text || "";
@@ -1295,6 +1299,7 @@ export const InterviewPrepBuilder: React.FC<{
       const response = await gemini.models.generateContent({
         model: GEMINI_MODEL,
         contents: [{ parts: [{ text: prompt }] }],
+        config: NO_THINKING,
       });
 
       // Strip any preamble the AI might still add
@@ -1370,6 +1375,7 @@ export const InterviewPrepBuilder: React.FC<{
         const editResponse = await gemini.models.generateContent({
           model: GEMINI_MODEL_FAST,
           contents: [{ parts: [{ text: editPrompt }] }],
+          config: NO_THINKING,
         });
 
         const revisedText = editResponse.text || "";
@@ -1419,6 +1425,7 @@ export const InterviewPrepBuilder: React.FC<{
         const chatResponse = await gemini.models.generateContent({
           model: GEMINI_MODEL_FAST,
           contents: [{ parts: [{ text: chatPrompt }] }],
+          config: NO_THINKING,
         });
 
         const aiReply = chatResponse.text || "I can help you refine your answer. Could you be more specific?";
@@ -1457,6 +1464,7 @@ export const InterviewPrepBuilder: React.FC<{
       const qResponse = await gemini.models.generateContent({
         model: GEMINI_MODEL_FAST,
         contents: [{ parts: [{ text: qPrompt }] }],
+        config: NO_THINKING,
       });
 
       const improvedHtml = markdownToHtml(qResponse.text || "");

@@ -40,16 +40,18 @@ async def _generate(
     the markdown-fenced output and most "unterminated string" failures we
     used to see when the model wrapped JSON in prose.
     """
-    config = {"max_output_tokens": max_tokens}
+    # Disable thinking by default — gemini-2.5-flash adds 5–15s of latency
+    # when thinking is on, and the prompts here (extraction, generation,
+    # short rewrites) don't benefit. json_mode calls also need this to avoid
+    # mid-string truncation.
+    config = {
+        "max_output_tokens": max_tokens,
+        "thinking_config": {"thinking_budget": 0},
+    }
     if system:
         config["system_instruction"] = system
     if json_mode:
         config["response_mime_type"] = "application/json"
-        # gemini-2.5-flash spends thinking tokens out of max_output_tokens by
-        # default, which truncates structured JSON mid-string. Structured
-        # extraction doesn't benefit from extended reasoning anyway, so opt
-        # out for json_mode calls.
-        config["thinking_config"] = {"thinking_budget": 0}
 
     last_err: Exception | None = None
     for attempt in range(_MAX_RETRIES):
