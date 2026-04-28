@@ -1450,15 +1450,52 @@ ${questionList}
   };
 
   // Handle ending the interview (for both modes)
+  // True when the user has spoken at least one substantive answer. Used to
+  // decide whether Exit should still surface a partial Interview Report or
+  // discard the session silently.
+  const hasGeminiAnswers = () =>
+    !useLocalMode &&
+    geminiTranscriptRef.current.some(
+      (entry) => entry.role === 'user' && entry.text.trim().length > 0
+    );
+
   const handleExitInterview = () => {
-    // Block any pending async callbacks (finishSession Promise, end-detection timer)
+    setShowExitConfirm(false);
+
+    // If the user already answered something in Gemini Live mode, reuse the
+    // natural end-of-interview path so they get a partial report instead of
+    // losing the session. Crucially, do NOT set isExitingRef here —
+    // handleGeminiInterviewEnd short-circuits when that flag is true.
+    if (hasGeminiAnswers()) {
+      if (geminiEndTimerRef.current) {
+        clearTimeout(geminiEndTimerRef.current);
+        geminiEndTimerRef.current = null;
+      }
+      stopMicStreaming();
+      if (geminiSessionRef.current) {
+        try { geminiSessionRef.current.close(); } catch {}
+        geminiSessionRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        try { audioContextRef.current.close(); } catch {}
+        audioContextRef.current = null;
+      }
+      nextPlayTimeRef.current = 0;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      handleGeminiInterviewEnd();
+      return;
+    }
+
+    // No usable transcript yet — original behavior: tear everything down and
+    // bounce back to the settings screen.
     isExitingRef.current = true;
     if (geminiEndTimerRef.current) {
       clearTimeout(geminiEndTimerRef.current);
       geminiEndTimerRef.current = null;
     }
-
-    setShowExitConfirm(false);
 
     if (useLocalMode) {
       stopListeningLocal();
@@ -2001,9 +2038,21 @@ ${questionList}
             <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
               <h3 className="text-xl font-bold text-[#1F1F1F] mb-4">Exit Interview?</h3>
               <p className="text-[#444746] mb-8 leading-relaxed">
-                You have not completed this interview. <br/>
-                If you exit now, no final Interview Report will be generated. <br/>
-                Are you sure you want to leave?
+                {hasGeminiAnswers() ? (
+                  <>
+                    You haven't completed all questions. <br/>
+                    We'll generate a partial Interview Report from the answers
+                    you've given so far. <br/>
+                    Continue?
+                  </>
+                ) : (
+                  <>
+                    You haven't answered any questions yet. <br/>
+                    Exiting now will discard this session without generating a
+                    report. <br/>
+                    Are you sure you want to leave?
+                  </>
+                )}
               </p>
               <div className="flex items-center justify-end gap-3">
                 <button
@@ -2014,9 +2063,13 @@ ${questionList}
                 </button>
                 <button
                   onClick={handleExitInterview}
-                  className="px-5 py-2.5 bg-[#B3261E] text-white font-bold rounded-full hover:bg-[#8C1D18] transition-colors shadow-sm"
+                  className={`px-5 py-2.5 text-white font-bold rounded-full transition-colors shadow-sm ${
+                    hasGeminiAnswers()
+                      ? 'bg-[#0B57D0] hover:bg-[#0B67EF]'
+                      : 'bg-[#B3261E] hover:bg-[#8C1D18]'
+                  }`}
                 >
-                  Confirm Exit
+                  {hasGeminiAnswers() ? 'Exit & Generate Report' : 'Confirm Exit'}
                 </button>
               </div>
             </div>
