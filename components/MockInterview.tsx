@@ -2032,6 +2032,30 @@ ${questionList}
            </div>
         </div>
 
+        {/* Finishing overlay — shown while the backend is generating the report. */}
+        {isFinishing && (
+          <div className="absolute inset-0 z-[60] bg-[#0B1020]/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+            <div className="flex flex-col items-center gap-6 text-center max-w-md">
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-[#0B57D0]/30 animate-ping"></span>
+                <span className="absolute inset-2 rounded-full bg-[#0B57D0]/50 animate-pulse"></span>
+                <Sparkles className="relative w-9 h-9 text-white animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-white mb-2">Generating your Interview Report</h3>
+                <p className="text-white/70 text-sm leading-relaxed">
+                  Analyzing your answers, scoring across 10 PM dimensions, and writing personalized feedback. This usually takes 10–20 seconds.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 mt-2">
+                <span className="w-2 h-2 rounded-full bg-white/80 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Exit Confirmation Modal */}
         {showExitConfirm && (
           <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
