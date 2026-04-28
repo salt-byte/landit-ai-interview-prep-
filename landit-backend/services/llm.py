@@ -13,7 +13,11 @@ from config import settings, DIMENSIONS, DIMENSION_LABELS
 logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.gemini_api_key)
-MODEL = "gemini-2.5-flash"
+# Two tiers: SMART for evaluation/generation where quality matters,
+# FAST for structured extraction and short rewrites.
+MODEL_SMART = "gemini-2.5-flash"
+MODEL_FAST = "gemini-2.5-flash-lite"
+MODEL = MODEL_SMART  # default for callers that don't specify
 
 # Gemini routinely returns 429 (quota / capacity) or 503 (model overload) on
 # busy days. Both are documented as transient — retry with exponential backoff
@@ -28,6 +32,7 @@ async def _generate(
     max_tokens: int = 4096,
     system: str = "",
     json_mode: bool = False,
+    model: str = MODEL_SMART,
 ) -> str:
     """Unified async wrapper for Gemini generateContent.
 
@@ -50,7 +55,7 @@ async def _generate(
     for attempt in range(_MAX_RETRIES):
         try:
             response = await client.aio.models.generate_content(
-                model=MODEL,
+                model=model,
                 contents=prompt,
                 config=config,
             )
@@ -186,7 +191,7 @@ async def extract_profile_from_resume(resume_text: str) -> dict:
 Resume:
 {resume_text}"""
 
-    raw = await _generate(prompt, max_tokens=4096, json_mode=True)
+    raw = await _generate(prompt, max_tokens=4096, json_mode=True, model=MODEL_FAST)
     return _parse_json(raw)
 
 
@@ -381,7 +386,7 @@ User request: {user_message}
 Apply the requested changes and return the COMPLETE updated document in Markdown format.
 Keep existing good content, only modify what was requested."""
 
-    return await _generate(prompt, max_tokens=4096)
+    return await _generate(prompt, max_tokens=4096, model=MODEL_FAST)
 
 
 async def parse_jd_from_url_content(url: str, page_content: str) -> dict:
@@ -412,7 +417,7 @@ URL: {url}
 Content:
 {page_content[:16000]}"""
 
-    raw = await _generate(prompt, max_tokens=3000, json_mode=True)
+    raw = await _generate(prompt, max_tokens=3000, json_mode=True, model=MODEL_FAST)
     return _parse_json(raw)
 
 

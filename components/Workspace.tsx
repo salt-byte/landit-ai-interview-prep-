@@ -71,7 +71,10 @@ const ROLE_CONTEXT_TABS: TabItem<RoleContextTab>[] = [
 import { deleteRoleSource, getGapMatrix, getWeaknessVector } from '../api';
 
 const gemini = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL_SMART = "gemini-2.5-flash";
+const GEMINI_MODEL_FAST = "gemini-2.5-flash-lite";
+// Back-compat alias — most generation paths default to SMART.
+const GEMINI_MODEL = GEMINI_MODEL_SMART;
 import MockInterview from './MockInterview';
 import AddSourceModal from './AddSourceModal';
 import RichTextEditor, { RichTextEditorHandle } from './RichTextEditor';
@@ -1365,7 +1368,7 @@ export const InterviewPrepBuilder: React.FC<{
         const editPrompt = "You are an expert editor. Revise the following text based on the user's instruction.\n\nOriginal Text:\n" + quotedText + "\n\nUser Instruction: " + userMsg + "\n\nRequirements:\n1. Return ONLY the revised text.\n2. Maintain the original tone unless instructed otherwise.\n3. Do not include any explanations.\n4. Preserve the original formatting structure.";
 
         const editResponse = await gemini.models.generateContent({
-          model: GEMINI_MODEL,
+          model: GEMINI_MODEL_FAST,
           contents: [{ parts: [{ text: editPrompt }] }],
         });
 
@@ -1414,7 +1417,7 @@ export const InterviewPrepBuilder: React.FC<{
         const chatPrompt = "You are an interview prep AI assistant. The user is working on interview preparation for a " + (role?.title || "Product Manager") + " role at " + (role?.company || "a company") + ".\n\n" + chatContext + "\n\nUser message: " + userMsg + "\n\nRespond helpfully. If they ask to modify the answer, return the improved answer text directly. If they ask a question, answer it concisely. Keep responses under 200 words.";
 
         const chatResponse = await gemini.models.generateContent({
-          model: GEMINI_MODEL,
+          model: GEMINI_MODEL_FAST,
           contents: [{ parts: [{ text: chatPrompt }] }],
         });
 
@@ -1452,7 +1455,7 @@ export const InterviewPrepBuilder: React.FC<{
       const qPrompt = "You are an interview prep AI. The user clicked a quick action: \"" + prompt + "\".\n\nCurrent question: " + (currentQ?.q || "") + "\nCurrent answer: " + (currentQ?.a || "(none)") + "\n\nRole: " + (role?.title || "") + " at " + (role?.company || "") + "\n\nApply the requested change to the answer and return the improved answer directly. No explanations, just the improved answer text.";
 
       const qResponse = await gemini.models.generateContent({
-        model: GEMINI_MODEL,
+        model: GEMINI_MODEL_FAST,
         contents: [{ parts: [{ text: qPrompt }] }],
       });
 

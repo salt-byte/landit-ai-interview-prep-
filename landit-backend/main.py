@@ -10,7 +10,7 @@ from pathlib import Path
 
 from database import init_db
 from config import settings
-from routers import profile, roles, compute, prep, interview, dashboard
+from routers import profile, roles, compute, prep, interview, dashboard, ai
 
 
 @asynccontextmanager
@@ -53,6 +53,7 @@ app.include_router(compute.router, prefix="/api")
 app.include_router(prep.router, prefix="/api")
 app.include_router(interview.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 
 # Serve uploaded files statically (dev only — use CDN/S3 in prod)
 upload_dir = Path(settings.upload_dir)

@@ -14,7 +14,9 @@ from services.computation import (
     aggregate_user_scores,
     compute_weakness_vector,
     build_gap_summary,
+    normalize_weights,
 )
+from services.llm import extract_jd_dimension_model
 from services.memory_manager import get_or_create_weakness_vector
 from config import DIMENSIONS, DIMENSION_LABELS
 from deps import get_current_user_key
@@ -38,7 +40,24 @@ async def get_gap_matrix(
     )
     dim_model = dim_model_result.scalar_one_or_none()
     if not dim_model:
-        raise HTTPException(404, "Run /roles/{id}/analyze-jd first to generate dimension model")
+        # Lazy-generate the dimension model on first gap-matrix request so the
+        # frontend doesn't have to make a separate analyze-jd call after creating
+        # a role.
+        role_result = await db.execute(
+            select(TargetRole).where(TargetRole.id == role_id)
+        )
+        role = role_result.scalar_one_or_none()
+        if not role:
+            raise HTTPException(404, "Role not found")
+        if not role.jd or role.jd.startswith("ACCESS_BLOCKED:"):
+            raise HTTPException(400, "Role has no usable JD — paste the job description first")
+
+        raw_dims = await extract_jd_dimension_model(role.jd, role.title, role.company)
+        normalized = normalize_weights(raw_dims)
+        dim_model = RoleDimensionModel(role_id=role_id, dimensions=normalized, version=1)
+        db.add(dim_model)
+        await db.commit()
+        await db.refresh(dim_model)
 
     uds_result = await db.execute(
         select(UserDimensionScore).where(UserDimensionScore.user_key == user_key)
