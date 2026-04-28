@@ -71,6 +71,11 @@ class InterviewFeedback(Base):
 
     # Dimension-level scores from this session (3 key dims assessed live)
     dimension_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    # One sentence of evidence per dimension explaining the score. Stored
+    # separately from dimension_scores so existing Layer-2 consumers
+    # (compute_weakness_vector, aggregate_user_scores, dashboard) keep working
+    # against the plain {dim_key: float} shape.
+    dimension_evidence: Mapped[dict] = mapped_column(JSON, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

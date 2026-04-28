@@ -430,7 +430,14 @@ Known skill gaps for this candidate:
 {gap_summary}
 
 Transcript:
-{transcript[:4000]}
+{transcript[:6000]}
+
+SCORING ANCHORS — apply the same 1.0–5.0 scale consistently for every dimension:
+1.0 = No evidence demonstrated in this interview at all
+2.0 = Touched on the topic but stayed surface level; no examples or data
+3.0 = Competent — gave a structured answer with reasonable depth
+4.0 = Strong — included a specific example, metric, or trade-off
+5.0 = Exceptional — multi-angle answer with quantified impact AND reflection
 
 Provide structured feedback. Return ONLY valid JSON:
 {{
@@ -441,16 +448,16 @@ Provide structured feedback. Return ONLY valid JSON:
   "improvements": ["point 1", "point 2", "point 3"],
   "recommended_actions": ["specific action 1", "specific action 2"],
   "dimension_scores": {{
-    "product_intuition": <float 1-5>,
-    "user_empathy": <float 1-5>,
-    "metrics_driven_thinking": <float 1-5>,
-    "structured_problem_solving": <float 1-5>,
-    "prioritization_tradeoffs": <float 1-5>,
-    "execution_delivery": <float 1-5>,
-    "strategic_thinking": <float 1-5>,
-    "cross_functional_leadership": <float 1-5>,
-    "stakeholder_communication": <float 1-5>,
-    "technical_fluency": <float 1-5>
+    "product_intuition":           {{"score": <float 1-5>, "evidence": "one sentence quoting or paraphrasing what the candidate actually said that earned this score; or 'No evidence demonstrated in this interview' if the dimension was not exercised"}},
+    "user_empathy":                {{"score": <float 1-5>, "evidence": "..."}},
+    "metrics_driven_thinking":     {{"score": <float 1-5>, "evidence": "..."}},
+    "structured_problem_solving":  {{"score": <float 1-5>, "evidence": "..."}},
+    "prioritization_tradeoffs":    {{"score": <float 1-5>, "evidence": "..."}},
+    "execution_delivery":          {{"score": <float 1-5>, "evidence": "..."}},
+    "strategic_thinking":          {{"score": <float 1-5>, "evidence": "..."}},
+    "cross_functional_leadership": {{"score": <float 1-5>, "evidence": "..."}},
+    "stakeholder_communication":   {{"score": <float 1-5>, "evidence": "..."}},
+    "technical_fluency":           {{"score": <float 1-5>, "evidence": "..."}}
   }},
   "transcript_items": [
     {{
@@ -463,9 +470,10 @@ Provide structured feedback. Return ONLY valid JSON:
 }}
 
 For overall_rating: use "Excellent" if overall_score >= 85, "Good" if >= 60, "Needs Improvement" otherwise.
+Evidence MUST be grounded in the transcript — do not invent. Be honest: a low score with "No evidence demonstrated" is more useful than a fabricated 3.0.
 Extract each distinct Q&A exchange from the transcript into transcript_items."""
 
-    raw = await _generate(prompt, max_tokens=2048, json_mode=True)
+    raw = await _generate(prompt, max_tokens=4096, json_mode=True)
     return _parse_json(raw)
 
 

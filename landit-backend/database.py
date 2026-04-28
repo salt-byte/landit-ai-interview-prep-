@@ -43,6 +43,7 @@ REPORT_SCHEMA_MIGRATIONS = [
     "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS overall_rating VARCHAR(32) NOT NULL DEFAULT ''",
     "ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE interview_feedbacks ADD COLUMN IF NOT EXISTS transcript_items JSONB NOT NULL DEFAULT '[]'",
+    "ALTER TABLE interview_feedbacks ADD COLUMN IF NOT EXISTS dimension_evidence JSONB NOT NULL DEFAULT '{}'",
 ]
 
 

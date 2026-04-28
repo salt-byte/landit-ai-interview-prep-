@@ -2369,23 +2369,30 @@ ${questionList}
                 user can see WHICH abilities the rating came from. */}
             {(() => {
               const dimScores: Record<string, number> = (fb?.dimension_scores as any) || {};
+              const dimEvidence: Record<string, string> = (fb?.dimension_evidence as any) || {};
               const hasAny = DIMENSION_META.some(d => typeof dimScores[d.key] === 'number');
               if (!hasAny) return null;
               const colorFor = (s: number) =>
                 s >= 4 ? 'bg-[#2ECC71]' : s >= 3 ? 'bg-[#0B57D0]' : s >= 2 ? 'bg-[#F1C40F]' : 'bg-[#E74C3C]';
+              const dotFor = (s: number) =>
+                s >= 4 ? 'text-[#2ECC71]' : s >= 3 ? 'text-[#0B57D0]' : s >= 2 ? 'text-[#F1C40F]' : 'text-[#E74C3C]';
               return (
                 <div className="p-8 border-b border-[#E3E3E3]">
                   <div className="flex items-center gap-2 mb-2">
                     <Briefcase className="w-5 h-5 text-[#0B57D0]" />
                     <h2 className="text-xl font-bold text-[#1F1F1F]">PM Competency Breakdown</h2>
                   </div>
-                  <p className="text-sm text-[#444746] mb-6">
+                  <p className="text-sm text-[#444746] mb-1">
                     Scored 1–5 on the 10 dimensions used by Google / Meta / Amazon PM rubrics. Higher is stronger evidence in your answers for that competency.
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
+                  <p className="text-xs text-[#9AA0A6] mb-6">
+                    <span className="font-bold">Anchors</span> — 1: no evidence · 2: surface level · 3: structured · 4: specific example or metric · 5: multi-angle with quantified impact.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
                     {DIMENSION_META.map(d => {
                       const score = typeof dimScores[d.key] === 'number' ? dimScores[d.key] : 0;
                       const pct = Math.max(0, Math.min(100, (score / 5) * 100));
+                      const evidence = (dimEvidence[d.key] || '').trim();
                       return (
                         <div key={d.key}>
                           <div className="flex items-baseline justify-between mb-1.5">
@@ -2403,6 +2410,12 @@ ${questionList}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
+                          {evidence && (
+                            <div className="mt-2 flex gap-2 text-xs leading-relaxed text-[#444746]">
+                              <span className={`flex-shrink-0 mt-0.5 ${dotFor(score)}`}>•</span>
+                              <span><span className="font-bold text-[#1F1F1F]">Why this score:</span> {evidence}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2421,11 +2434,18 @@ ${questionList}
               </div>
 
               <div className="space-y-10">
-                {/* Use backend transcript_items if available, fall back to frontend sessionResults */}
-                {(fbTranscriptItems.length > 0 ? fbTranscriptItems.map((item: any) => ({
-                  question: item.question || '',
-                  answer: item.answer || '',
-                })) : sessionResults).map((res: any, idx: number) => {
+                {/* Prefer the raw Gemini Live ASR transcript (sessionResults).
+                    The LLM-generated transcript_items often summarize / drop /
+                    reorder Q&A and lose verbatim detail. Fall back to backend
+                    items only when the frontend transcript is empty (e.g.
+                    re-opening an old report from Reports view). */}
+                {(sessionResults.length > 0
+                  ? sessionResults
+                  : fbTranscriptItems.map((item: any) => ({
+                      question: item.question || '',
+                      answer: item.answer || '',
+                    }))
+                ).map((res: any, idx: number) => {
                   const evalData = getMockEval(res.answer, idx);
                   const transcriptText = editedTranscripts[idx] !== undefined ? editedTranscripts[idx] : res.answer;
                   const note = questionNotes[idx] || '';

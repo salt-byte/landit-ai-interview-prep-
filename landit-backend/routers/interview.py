@@ -201,14 +201,38 @@ def _normalize_feedback_data(feedback_data, conversation_history: list[dict]) ->
             "Add one metric and one trade-off to each practice answer",
         ]
 
-    dimension_scores = feedback_data.get("dimension_scores")
-    if not isinstance(dimension_scores, dict):
-        dimension_scores = {}
-    normalized_dimensions = DEFAULT_DIMENSION_SCORES | {
-        key: max(1.0, min(5.0, float(value)))
-        for key, value in dimension_scores.items()
-        if key in DEFAULT_DIMENSION_SCORES and isinstance(value, (int, float))
-    }
+    # dimension_scores accepts both shapes:
+    #   legacy: {dim_key: float}
+    #   rich:   {dim_key: {"score": float, "evidence": str}}
+    # We always emit a plain {dim_key: float} for dimension_scores so existing
+    # Layer-2 consumers (compute_weakness_vector, memory_manager, dashboard)
+    # keep working, plus a parallel {dim_key: str} for evidence.
+    dimension_scores_raw = feedback_data.get("dimension_scores")
+    if not isinstance(dimension_scores_raw, dict):
+        dimension_scores_raw = {}
+    parsed_scores: dict = {}
+    parsed_evidence: dict = {}
+    for key, value in dimension_scores_raw.items():
+        if key not in DEFAULT_DIMENSION_SCORES:
+            continue
+        if isinstance(value, dict):
+            score_val = value.get("score")
+            evidence_val = value.get("evidence")
+            if isinstance(score_val, (int, float)):
+                parsed_scores[key] = max(1.0, min(5.0, float(score_val)))
+            if isinstance(evidence_val, str) and evidence_val.strip():
+                parsed_evidence[key] = evidence_val.strip()
+        elif isinstance(value, (int, float)):
+            parsed_scores[key] = max(1.0, min(5.0, float(value)))
+    # Also accept evidence delivered as a sibling field (defensive — older or
+    # alternative prompt shapes).
+    sibling_evidence = feedback_data.get("dimension_evidence")
+    if isinstance(sibling_evidence, dict):
+        for key, value in sibling_evidence.items():
+            if key in DEFAULT_DIMENSION_SCORES and isinstance(value, str) and value.strip():
+                parsed_evidence.setdefault(key, value.strip())
+    normalized_dimensions = DEFAULT_DIMENSION_SCORES | parsed_scores
+    normalized_evidence = parsed_evidence
 
     summary = str(feedback_data.get("summary") or "").strip()
     if not summary:
@@ -228,6 +252,7 @@ def _normalize_feedback_data(feedback_data, conversation_history: list[dict]) ->
         "improvements": improvements,
         "recommended_actions": recommended_actions,
         "dimension_scores": normalized_dimensions,
+        "dimension_evidence": normalized_evidence,
         "transcript_items": transcript_items,
     }
 
@@ -243,6 +268,7 @@ def _feedback_response_data(fb: InterviewFeedback | None) -> dict:
             "recommended_actions": [],
             "transcript_items": [],
             "dimension_scores": {},
+            "dimension_evidence": {},
         }
 
     return _normalize_feedback_data({
@@ -251,6 +277,7 @@ def _feedback_response_data(fb: InterviewFeedback | None) -> dict:
         "improvements": fb.improvements,
         "recommended_actions": fb.recommended_actions,
         "dimension_scores": fb.dimension_scores,
+        "dimension_evidence": getattr(fb, "dimension_evidence", {}) or {},
         "transcript_items": fb.transcript_items,
     }, [])
 
@@ -477,6 +504,7 @@ async def get_session_feedback(
         "transcript": fb.transcript,
         "transcript_items": fb_data["transcript_items"],
         "dimension_scores": fb_data["dimension_scores"],
+        "dimension_evidence": fb_data.get("dimension_evidence", {}),
         "created_at": fb.created_at.isoformat(),
     }
 
@@ -793,6 +821,7 @@ async def _end_session(
     fb.recommended_actions = feedback_data["recommended_actions"]
     fb.transcript = transcript if session.transcript_consent else ""
     fb.dimension_scores = feedback_data["dimension_scores"]
+    fb.dimension_evidence = feedback_data.get("dimension_evidence", {})
     fb.transcript_items = feedback_data["transcript_items"]
 
     await db.commit()
