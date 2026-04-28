@@ -242,6 +242,21 @@ const INTERVIEWER_STYLE_MAP: Record<string, string> = {
   sophia: 'Empathetic, behavioral-focused, and insightful. You assess emotional intelligence and cultural fit.',
 };
 
+// Mirror of backend DIMENSION_LABELS (config.py) so the report can render
+// each competency with a human label and a one-line definition.
+const DIMENSION_META: { key: string; label: string; description: string }[] = [
+  { key: 'product_intuition',           label: 'Product Intuition',           description: 'Product sense — designing the right product for the right user' },
+  { key: 'user_empathy',                label: 'User Empathy',                description: 'Depth of user understanding and motivation behind needs' },
+  { key: 'metrics_driven_thinking',     label: 'Metrics & Data Thinking',     description: 'Defining success metrics and reasoning from data' },
+  { key: 'structured_problem_solving',  label: 'Structured Problem Solving',  description: 'Breaking down ambiguous problems systematically' },
+  { key: 'prioritization_tradeoffs',    label: 'Prioritization & Trade-offs', description: 'Ruthless prioritization and articulating trade-offs' },
+  { key: 'execution_delivery',          label: 'Execution & Delivery',        description: 'Scoping, planning, unblocking, shipping' },
+  { key: 'strategic_thinking',          label: 'Strategic Thinking',          description: 'Long-term vision, positioning, growth strategy' },
+  { key: 'cross_functional_leadership', label: 'Cross-functional Leadership', description: 'Leading without authority across eng / design / data' },
+  { key: 'stakeholder_communication',   label: 'Stakeholder Communication',   description: 'Clear written and verbal communication, storytelling' },
+  { key: 'technical_fluency',           label: 'Technical Fluency',           description: 'Going deep enough with engineers; tech literacy' },
+];
+
 const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelectRole, onSaveSession, onNavigate, userProfile }) => {
   const [step, setStep] = useState<'SETTINGS' | 'INTERVIEWER_INTRO' | 'DEVICE_CHECK' | 'INTERVIEW' | 'FEEDBACK'>('SETTINGS');
   const [settings, setSettings] = useState({
@@ -739,7 +754,19 @@ ${questionList}
           },
           outputAudioTranscription: {},
           inputAudioTranscription: {},
-        },
+          // Default VAD cuts the candidate off when they pause to think.
+          // Use less-sensitive end-of-speech detection and require ~1.5s of
+          // silence before the model takes its turn — closer to how a real
+          // interviewer waits for someone to finish a thought.
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+              startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+              silenceDurationMs: 1500,
+              prefixPaddingMs: 300,
+            },
+          },
+        } as any,
         callbacks: {
           onopen: () => {
             console.log('[LandIt] Gemini Live session opened');
@@ -2337,6 +2364,52 @@ ${questionList}
                 </div>
               </div>
             </div>
+
+            {/* Section 2.5: Competency Breakdown — per-dimension scores so the
+                user can see WHICH abilities the rating came from. */}
+            {(() => {
+              const dimScores: Record<string, number> = (fb?.dimension_scores as any) || {};
+              const hasAny = DIMENSION_META.some(d => typeof dimScores[d.key] === 'number');
+              if (!hasAny) return null;
+              const colorFor = (s: number) =>
+                s >= 4 ? 'bg-[#2ECC71]' : s >= 3 ? 'bg-[#0B57D0]' : s >= 2 ? 'bg-[#F1C40F]' : 'bg-[#E74C3C]';
+              return (
+                <div className="p-8 border-b border-[#E3E3E3]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Briefcase className="w-5 h-5 text-[#0B57D0]" />
+                    <h2 className="text-xl font-bold text-[#1F1F1F]">PM Competency Breakdown</h2>
+                  </div>
+                  <p className="text-sm text-[#444746] mb-6">
+                    Scored 1–5 on the 10 dimensions used by Google / Meta / Amazon PM rubrics. Higher is stronger evidence in your answers for that competency.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
+                    {DIMENSION_META.map(d => {
+                      const score = typeof dimScores[d.key] === 'number' ? dimScores[d.key] : 0;
+                      const pct = Math.max(0, Math.min(100, (score / 5) * 100));
+                      return (
+                        <div key={d.key}>
+                          <div className="flex items-baseline justify-between mb-1.5">
+                            <div>
+                              <div className="text-sm font-bold text-[#1F1F1F]">{d.label}</div>
+                              <div className="text-xs text-[#444746] leading-snug">{d.description}</div>
+                            </div>
+                            <div className="text-sm font-bold text-[#1F1F1F] tabular-nums flex-shrink-0 ml-3">
+                              {score.toFixed(1)} <span className="text-[#9AA0A6] font-medium">/ 5</span>
+                            </div>
+                          </div>
+                          <div className="h-2 bg-[#F0F4F9] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${colorFor(score)} transition-all duration-700`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Section 3: Transcript and Analysis */}
             <div className="p-8">
