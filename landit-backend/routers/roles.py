@@ -381,7 +381,7 @@ async def get_dimension_model(role_id: int, db: AsyncSession = Depends(get_db)):
     )
     model = result.scalar_one_or_none()
     if not model:
-        raise HTTPException(404, "No dimension model yet — run /analyze-jd first")
+        raise HTTPException(404, "No dimension model yet — call /analyze-jd or /compute/gap-matrix/{role_id} to generate one")
     return {
         "role_id": role_id,
         "version": model.version,

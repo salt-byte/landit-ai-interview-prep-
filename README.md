@@ -67,6 +67,19 @@ These dimensions are the **shared language** connecting every layer: resume extr
 - **PM Competency Radar** — Dashboard radar chart of your dimension scores
 - **Continuous Improvement** — Weakness vector updates after each session; next interview auto-focuses on weak areas
 
+## Walkthrough
+
+A typical first-time session:
+
+1. **Sign in** — Email/password via Supabase. A user record is created on first login.
+2. **Upload résumé** (Profile) — Drop a PDF or DOCX. The backend runs Gemini extraction and fills in education, work, projects, and skills. Anything the extractor missed is editable inline.
+3. **Add a target role** (Role List) — Paste a job-posting URL or the JD text. The scraper tries Tavily → direct HTTP + JSON-LD → URL slug hints; if all three fail you're prompted to paste manually.
+4. **Open Workspace** — On first open, the gap matrix lazy-generates the role's 10-dimension model and shows where you're weakest against the role.
+5. **Generate prep** — One click produces tailored Q&A focused on weak dimensions. Chat alongside the prep to refine answers.
+6. **Run a Mock Interview** — Pick one of five interviewer personas. The Gemini Live WebSocket opens during the mic/camera device check, so the first turn lands instantly when you click Start.
+7. **Read the Report** — Per-question scoring with dimension-level feedback. The weakness vector updates with a 70/30 blend so the next session auto-focuses on whatever is weakest now.
+8. **Track progress** (Dashboard) — Competency radar + ability curve over time.
+
 ## Project Structure
 
 ```
@@ -76,19 +89,23 @@ These dimensions are the **shared language** connecting every layer: resume extr
 ├── types.ts                         # TypeScript type definitions
 ├── vite.config.ts                   # Vite configuration
 ├── vercel.json                      # Vercel deployment config
+├── docs/                            # Course project artifacts
 ├── lib/
-│   └── supabase.ts                  # Supabase client
+│   ├── supabase.ts                  # Supabase client
+│   └── pdfExtract.ts                # Client-side PDF text extraction
 ├── components/
 │   ├── Dashboard.tsx                # Dashboard with radar chart
 │   ├── Profile.tsx                  # User profile management
 │   ├── Login.tsx                    # Authentication
-│   ├── RoleList.tsx                 # Target role management
+│   ├── RoleList.tsx                 # Target role list & creation
 │   ├── Workspace.tsx                # Role context & prep workspace
 │   ├── MockInterview.tsx            # Live interview (Gemini Live API)
 │   ├── InterviewReports.tsx         # Interview history & reports
 │   ├── QuestionBank.tsx             # Saved prep questions
 │   ├── AddSourceModal.tsx           # File/link upload modal
-│   └── RichTextEditor.tsx           # TipTap rich text editor
+│   ├── RichTextEditor.tsx           # TipTap rich text editor
+│   ├── SelectionTooltip.tsx         # In-editor "Quote / AI edit" popover
+│   └── TabBar.tsx                   # Reusable tab strip (Profile, Workspace)
 │
 └── landit-backend/
     ├── main.py                      # FastAPI app entry
@@ -96,6 +113,7 @@ These dimensions are the **shared language** connecting every layer: resume extr
     ├── database.py                  # Async SQLAlchemy engine
     ├── deps.py                      # Auth (Supabase JWT / JWKS)
     ├── routers/
+    │   ├── ai.py                    # Generic Gemini text-generation proxy
     │   ├── profile.py               # Profile CRUD + resume upload
     │   ├── roles.py                 # Role management + JD parsing
     │   ├── compute.py               # Gap matrix, dimensions, ability curve
@@ -103,9 +121,9 @@ These dimensions are the **shared language** connecting every layer: resume extr
     │   ├── interview.py             # Mock interview sessions + feedback
     │   └── dashboard.py             # Analytics stats
     ├── services/
-    │   ├── llm.py                   # Gemini API (extraction + generation)
-    │   ├── resume_parser.py         # PDF resume parsing
-    │   ├── web_scraper.py           # JD scraping (Tavily + httpx + inference)
+    │   ├── llm.py                   # Gemini API (tiered models, retries)
+    │   ├── resume_parser.py         # PDF / DOCX resume parsing
+    │   ├── web_scraper.py           # JD scraping (Tavily → httpx + JSON-LD → URL hints)
     │   ├── computation.py           # Pure Python gap analysis & scoring
     │   ├── memory_manager.py        # 2-layer memory system
     │   └── storage.py               # File upload handling
@@ -131,12 +149,12 @@ These dimensions are the **shared language** connecting every layer: resume extr
 |--------|----------|-------------|
 | GET/POST | `/api/roles` | List / create target roles |
 | POST | `/api/roles/parse-link` | Parse JD from URL |
-| POST | `/api/roles/{id}/analyze-jd` | Analyze JD → dimension model |
+| POST | `/api/roles/{id}/analyze-jd` | Analyze JD → dimension model (optional — `gap-matrix` lazy-generates on first request) |
 
 ### Compute (Layer 4 — No LLM)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/compute/gap-matrix/{role_id}` | Gap analysis for role |
+| GET | `/api/compute/gap-matrix/{role_id}` | Gap analysis for role (auto-builds the role dimension model if missing) |
 | GET | `/api/compute/user-dimensions` | User dimension scores |
 | GET | `/api/compute/weakness-vector` | Current weakness vector |
 | GET | `/api/compute/ability-curve` | Score trend over time |
@@ -148,6 +166,11 @@ These dimensions are the **shared language** connecting every layer: resume extr
 | POST | `/api/interview/sessions/{id}/finish` | Finish + generate feedback |
 | GET | `/api/interview/sessions/{id}/feedback` | Get feedback |
 | GET | `/api/interview/sessions` | List all sessions |
+
+### AI Proxy
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/ai/generate` | Generic Gemini text-generation proxy with `tier: "smart" \| "fast"` so the frontend can avoid holding the Gemini key |
 
 ### Dashboard
 | Method | Endpoint | Description |

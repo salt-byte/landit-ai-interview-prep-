@@ -81,7 +81,7 @@ The 10 PM dimensions are defined in `config.py` and used consistently across pro
 - `PUT /api/roles/{id}` — Update a target role
 - `DELETE /api/roles/{id}` — Delete a target role
 - `POST /api/roles/parse-link` — Extract JD content from a URL
-- `POST /api/roles/{id}/analyze-jd` — Build the 10-dimension role model
+- `POST /api/roles/{id}/analyze-jd` — Build the 10-dimension role model (optional — `gap-matrix` lazy-generates it on first request)
 - `GET /api/roles/{id}/dimension-model` — Read the role dimension model
 
 ### Computation
@@ -102,6 +102,10 @@ The 10 PM dimensions are defined in `config.py` and used consistently across pro
 - `WS /api/interview/sessions/{id}/stream` — WebSocket interview fallback mode
 - `POST /api/interview/sessions/{id}/finish` — Finish a Gemini Live session and generate feedback
 - `GET /api/interview/sessions/{id}/feedback` — Read structured feedback
+
+### AI Proxy
+
+- `POST /api/ai/generate` — Generic Gemini text-generation endpoint with `tier: "smart" | "fast"` so the frontend can stop holding the Gemini API key. `smart` routes to `gemini-2.5-flash`, `fast` routes to `gemini-2.5-flash-lite`. The model mapping lives server-side so models can be swapped without rebuilding the frontend.
 
 ## Validation
 
