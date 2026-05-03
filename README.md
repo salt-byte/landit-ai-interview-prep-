@@ -4,7 +4,11 @@ A full-stack interview preparation system that analyzes your profile, identifies
 
 **Live Demo:** [landit-ai-interview-prep.vercel.app](https://landit-ai-interview-prep.vercel.app)
 
-## Architecture
+## Project Overview
+
+LandIt is a full-stack web app that turns a candidate's résumé and a target job description into a personalized PM interview prep loop. It scores the candidate on a fixed 10-dimension PM competency model, identifies gaps against the target role, generates tailored prep questions, runs live voice mock interviews with AI personas, and updates a long-term weakness vector after every session so the next interview auto-focuses on what is now weakest.
+
+### Architecture
 
 LandIt uses a **5-layer architecture** that separates LLM intelligence from deterministic computation:
 
@@ -23,7 +27,7 @@ Layer 5: LLM Generation
 
 **Key design decision:** Layer 4 is intentionally LLM-free. Gap calculations, match scores, and score aggregation are pure math — reproducible, instant, and debuggable.
 
-## Tech Stack
+### Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -37,7 +41,18 @@ Layer 5: LLM Generation
 | Real-time | WebSocket + Gemini Live API |
 | Rich Text | TipTap Editor |
 
-## 10-Dimension PM Competency System
+### Features
+
+- **Resume Parsing** — Upload PDF, AI extracts structured profile (English + Chinese)
+- **Role Analysis** — Paste JD URL, with scraping fallback (Tavily → httpx + JSON-LD → URL hints/manual paste)
+- **Gap Analysis** — Pure Python computation across 10 PM dimensions
+- **Mock Prep** — AI-generated Q&A tailored to weak dimensions, with chat refinement
+- **Live Interview** — Real-time voice with 5 AI interviewer personas via Gemini Live API
+- **Interview Reports** — Per-question scoring, dimension-level feedback
+- **PM Competency Radar** — Dashboard radar chart of your dimension scores
+- **Continuous Improvement** — Weakness vector updates after each session; next interview auto-focuses on weak areas
+
+### 10-Dimension PM Competency System
 
 Derived from Google/Meta/Amazon PM interview rubrics and the internal research notes in `PM_Interview_Evaluation_Research.md`:
 
@@ -56,18 +71,71 @@ Derived from Google/Meta/Amazon PM interview rubrics and the internal research n
 
 These dimensions are the **shared language** connecting every layer: resume extraction → gap computation → interview focus → feedback scoring → weakness vector update (70/30 exponential blend).
 
-## Features
+## Setup Instructions
 
-- **Resume Parsing** — Upload PDF, AI extracts structured profile (English + Chinese)
-- **Role Analysis** — Paste JD URL, with scraping fallback (Tavily → httpx + JSON-LD → URL hints/manual paste)
-- **Gap Analysis** — Pure Python computation across 10 PM dimensions
-- **Mock Prep** — AI-generated Q&A tailored to weak dimensions, with chat refinement
-- **Live Interview** — Real-time voice with 5 AI interviewer personas via Gemini Live API
-- **Interview Reports** — Per-question scoring, dimension-level feedback
-- **PM Competency Radar** — Dashboard radar chart of your dimension scores
-- **Continuous Improvement** — Weakness vector updates after each session; next interview auto-focuses on weak areas
+### Prerequisites
+- Node.js 20+
+- Python 3.11+
+- [Supabase](https://supabase.com) project (auth + database)
+- [Google AI](https://ai.google.dev) API key (Gemini)
 
-## Walkthrough
+### Frontend
+```bash
+npm install
+```
+
+Create `.env`:
+```env
+VITE_API_URL=http://localhost:8000
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_GEMINI_API_KEY=your-gemini-api-key
+```
+
+### Backend
+```bash
+cd landit-backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Create `landit-backend/.env`:
+```env
+GEMINI_API_KEY=your-gemini-api-key
+TAVILY_API_KEY=your-tavily-api-key
+DATABASE_URL=sqlite+aiosqlite:///./landit.db
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=your-jwt-secret
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+### Run
+```bash
+# Backend
+cd landit-backend && uvicorn main:app --reload --port 8000
+
+# Frontend (separate terminal)
+npm run dev
+```
+
+Open http://localhost:3000
+
+## Dependencies
+
+All dependencies are pinned for reproducibility.
+
+| Layer | File | Manager |
+|---|---|---|
+| Frontend | [`package.json`](./package.json) + [`package-lock.json`](./package-lock.json) | npm — version-locked via lockfile |
+| Backend | [`landit-backend/requirements.txt`](./landit-backend/requirements.txt) | pip — every package pinned to an exact version |
+
+**Key runtime libraries**
+
+- **Frontend:** React 19, TypeScript, Vite 6, TipTap editor, `@google/genai` (Gemini client SDK), `lucide-react` (icons), `pdfjs-dist` (client-side PDF text extraction), `recharts` (radar / curve charts), `@supabase/supabase-js` (auth)
+- **Backend:** FastAPI 0.115, Uvicorn, SQLAlchemy 2.0 (async), `asyncpg` / `aiosqlite`, `google-genai`, `pypdf`, `python-docx`, `httpx`, `python-jose` (JWT), `pydantic` 2
+
+## Usage Examples
 
 A typical first-time session:
 
@@ -98,8 +166,8 @@ A typical first-time session:
 │   ├── Profile.tsx                  # User profile management
 │   ├── Login.tsx                    # Authentication
 │   ├── RoleList.tsx                 # Target role list & creation
-│   ├── Workspace.tsx                # Role context & prep workspace
-│   ├── MockInterview.tsx            # Live interview (Gemini Live API)
+│   ├── Workspace.tsx                # Per-role workspace (gap matrix, prep generation, source management, chat refinement)
+│   ├── MockInterview.tsx            # Live interview screen (device check, Gemini Live WS, transcription, persona selection)
 │   ├── InterviewReports.tsx         # Interview history & reports
 │   ├── QuestionBank.tsx             # Saved prep questions
 │   ├── AddSourceModal.tsx           # File/link upload modal
@@ -176,56 +244,6 @@ A typical first-time session:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/dashboard/stats` | Aggregated user stats |
-
-## Getting Started
-
-### Prerequisites
-- Node.js 20+
-- Python 3.11+
-- [Supabase](https://supabase.com) project (auth + database)
-- [Google AI](https://ai.google.dev) API key (Gemini)
-
-### Frontend
-```bash
-npm install
-```
-
-Create `.env`:
-```env
-VITE_API_URL=http://localhost:8000
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_GEMINI_API_KEY=your-gemini-api-key
-```
-
-### Backend
-```bash
-cd landit-backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-Create `landit-backend/.env`:
-```env
-GEMINI_API_KEY=your-gemini-api-key
-TAVILY_API_KEY=your-tavily-api-key
-DATABASE_URL=sqlite+aiosqlite:///./landit.db
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_JWT_SECRET=your-jwt-secret
-ALLOWED_ORIGINS=http://localhost:3000
-```
-
-### Run
-```bash
-# Backend
-cd landit-backend && uvicorn main:app --reload --port 8000
-
-# Frontend (separate terminal)
-npm run dev
-```
-
-Open http://localhost:3000
 
 ## Deployment
 
