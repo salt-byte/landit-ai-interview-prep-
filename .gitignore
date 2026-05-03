@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Editor directories and files
 .vscode/*
@@ -26,7 +27,13 @@ dist-ssr
 # Python backend
 landit-backend/.env
 landit-backend/venv/
+landit-backend/.venv/
 landit-backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
 landit-backend/*.db
+landit-backend/*.db-*
 landit-backend/uploads/
 .vercel

@@ -1,5 +1,6 @@
 """
-Resume parser: Gemini 2.0 Flash (primary) -> heuristic fallback.
+Resume parser: Gemini 2.5 Flash parallel extraction with a Gemini 2.0
+single-call fallback.
 """
 from __future__ import annotations
 

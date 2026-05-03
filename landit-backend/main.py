@@ -28,19 +28,20 @@ app = FastAPI(
 
     **Architecture:**
     - Layer 1: User Input & Raw Storage
-    - Layer 2-3: LLM Extraction + Dimension Mapping (15 dims)
+    - Layer 2-3: Gemini Extraction + 10-Dimension PM Mapping
     - Memory: Short-term (session) + Long-term (persistent)
     - Layer 4: Pure Python Computation (Gap Matrix, Match Score)
-    - Layer 5: LLM Generation (Interview Prep, Feedback)
+    - Layer 5: Gemini Generation (Interview Prep, Feedback)
     """,
     version="2.0.0",
     lifespan=lifespan,
 )
 
-# CORS — allow all origins
+# CORS is environment-driven. Local development can keep ALLOWED_ORIGINS="*";
+# production should set it to the deployed frontend domain.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.origins_list,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

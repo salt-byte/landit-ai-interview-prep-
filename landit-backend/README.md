@@ -1,88 +1,120 @@
-# LandIt Backend — AI Career Engine v2
+# LandIt Backend — AI Career Engine
 
-FastAPI 后端，对应前端 `landit---ai-interview-prep`。
+FastAPI backend for the LandIt PM interview preparation platform. It stores candidate profiles and target roles, extracts structured resume/JD data with Gemini, computes deterministic PM competency gaps, and generates interview prep and feedback.
 
-## 快速启动
+## Prerequisites
+
+- Python 3.11+
+- Gemini API key
+- Supabase project for production auth/database, or SQLite for local development
+- Optional Tavily API key for stronger job-posting URL extraction
+
+## Quick Start
 
 ```bash
-cd /Users/dengyudie/Downloads/landit-backend
+cd landit-backend
 
-# 1. 创建虚拟环境
+# 1. Create and activate a virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
-# 2. 安装依赖
+# 2. Install reproducible backend dependencies
 pip install -r requirements.txt
 
-# 3. 配置 API Key
+# 3. Configure environment variables
 cp .env.example .env
-# 编辑 .env，填入 ANTHROPIC_API_KEY
+# Edit .env and set GEMINI_API_KEY at minimum.
 
-# 4. 启动
+# 4. Run the API server
 uvicorn main:app --reload --port 8000
 ```
 
-访问 `http://localhost:8000/docs` 查看 API 文档。
+Open `http://localhost:8000/docs` for generated OpenAPI documentation.
 
----
+## Required Environment Variables
 
-## 架构层级
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+DATABASE_URL=sqlite+aiosqlite:///./landit.db
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=
+ALLOWED_ORIGINS=http://localhost:3000
+```
 
-| 层 | 功能 | 技术 |
+Optional:
+
+```env
+TAVILY_API_KEY=your_tavily_api_key_here
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE_MB=20
+```
+
+For production PostgreSQL, set `DATABASE_URL` to a `postgresql+asyncpg://...` connection string. The app also normalizes `postgres://` and `postgresql://` URLs for async SQLAlchemy.
+
+## Backend Layers
+
+| Layer | Responsibility | Implementation |
 |---|---|---|
-| Layer 1 | 用户输入 & 文件存储 | SQLite + 本地文件 (可换 PostgreSQL + S3) |
-| Layer 2-3 | LLM 提取：简历→结构化字段，JD→15维度模型 | Claude API (Function Calling) |
-| Memory | 短期记忆 (Session) + 长期记忆 (跨 Session) | DB + WeaknessVector |
-| Layer 4 | 纯后端计算：Ability聚合、Gap矩阵、Match分数 | Pure Python |
-| Layer 5 | LLM 生成：面试题库、实时反馈 | Claude API |
+| Layer 1 | User input, file upload, raw storage | FastAPI, SQLAlchemy, local upload directory |
+| Layer 2 | Resume/JD extraction | Gemini JSON prompts, `pypdf`, `python-docx`, Tavily, `httpx` |
+| Layer 3 | 10-dimension PM mapping | Gemini role/profile scoring prompts |
+| Memory | Short-term session state and long-term weakness tracking | PostgreSQL/SQLite records + weakness vector |
+| Layer 4 | Gap matrix, match score, ability curve | Pure Python computation, no LLM |
+| Layer 5 | Interview prep, live questions, feedback | Gemini generation and structured feedback |
 
----
+The 10 PM dimensions are defined in `config.py` and used consistently across profile scoring, JD role models, gap computation, interview focus, and feedback.
 
-## API 端点
+## Main API Endpoints
 
-### 个人档案
-- `GET /api/profile` — 获取档案
-- `PUT /api/profile` — 更新档案
-- `POST /api/profile/documents/upload` — 上传文件
-- `POST /api/profile/documents/upload-and-parse` — 上传简历并 AI 解析
-- `GET /api/profile/documents` — 文件列表
-- `DELETE /api/profile/documents/{id}` — 删除文件
+### Profile
 
-### 目标职位
-- `GET /api/roles` — 职位列表
-- `POST /api/roles` — 创建职位
-- `PUT /api/roles/{id}` — 更新职位
-- `DELETE /api/roles/{id}` — 删除职位
-- `POST /api/roles/parse-link` — URL 解析 JD
-- `POST /api/roles/{id}/analyze-jd` — LLM 分析 JD → 15维度模型
-- `GET /api/roles/{id}/dimension-model` — 获取维度模型
+- `GET /api/profile` — Get the current user's profile
+- `PUT /api/profile` — Update profile, education, work experience, and projects
+- `POST /api/profile/documents/upload` — Upload a supporting document
+- `POST /api/profile/documents/upload-and-parse` — Upload and parse a resume
+- `GET /api/profile/documents` — List uploaded profile documents
 
-### 计算引擎 (Layer 4)
-- `GET /api/compute/gap-matrix/{role_id}` — Gap 矩阵 + Match 分数
-- `GET /api/compute/user-dimensions` — 用户15维度分数
-- `POST /api/compute/extract-user-dimensions` — LLM 从档案提取维度分数
-- `GET /api/compute/weakness-vector` — 弱点向量 (长期记忆)
-- `GET /api/compute/ability-curve` — 能力曲线历史
+### Target Roles
 
-### 面试题库 (Layer 5)
-- `POST /api/prep/{role_id}/generate` — AI 生成题库
-- `GET /api/prep/{role_id}` — 获取已保存内容
-- `PUT /api/prep/{role_id}` — 保存用户编辑版本
-- `POST /api/prep/{role_id}/chat` — 对话式优化内容
+- `GET /api/roles` — List target roles
+- `POST /api/roles` — Create a target role
+- `PUT /api/roles/{id}` — Update a target role
+- `DELETE /api/roles/{id}` — Delete a target role
+- `POST /api/roles/parse-link` — Extract JD content from a URL
+- `POST /api/roles/{id}/analyze-jd` — Build the 10-dimension role model
+- `GET /api/roles/{id}/dimension-model` — Read the role dimension model
 
-### Mock 面试
-- `POST /api/interview/sessions` — 创建面试 Session
-- `GET /api/interview/sessions` — Session 列表
-- `WS /api/interview/sessions/{id}/stream` — WebSocket 实时面试
-- `GET /api/interview/sessions/{id}/feedback` — 获取反馈
+### Computation
 
----
+- `GET /api/compute/gap-matrix/{role_id}` — Compute match score and dimension gaps
+- `GET /api/compute/user-dimensions` — Read candidate competency scores
+- `POST /api/compute/extract-user-dimensions` — Extract competency scores from profile data
+- `GET /api/compute/weakness-vector` — Read long-term weakness memory
+- `GET /api/compute/ability-curve` — Read interview performance trend
 
-## 前端对接
+### Interview Prep and Feedback
 
-在前端 `.env` 或 config 中设置：
+- `POST /api/prep/{role_id}/generate` — Generate role-specific prep content
+- `GET /api/prep/{role_id}` — Read saved prep content
+- `PUT /api/prep/{role_id}` — Save user-edited prep content
+- `POST /api/prep/{role_id}/chat` — Refine prep content through chat
+- `POST /api/interview/sessions` — Create a mock interview session
+- `WS /api/interview/sessions/{id}/stream` — WebSocket interview fallback mode
+- `POST /api/interview/sessions/{id}/finish` — Finish a Gemini Live session and generate feedback
+- `GET /api/interview/sessions/{id}/feedback` — Read structured feedback
+
+## Validation
+
+From the repository root:
+
+```bash
+npm run lint
 ```
-VITE_API_BASE_URL=http://localhost:8000/api
+
+From `landit-backend/`:
+
+```bash
+python -m compileall .
 ```
 
-将前端中的 mock `setTimeout` 替换为真实 `fetch` 调用即可。
+These checks validate TypeScript types and Python syntax/import structure. Runtime LLM and Supabase flows require valid environment variables.

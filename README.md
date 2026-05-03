@@ -11,7 +11,7 @@ LandIt uses a **5-layer architecture** that separates LLM intelligence from dete
 ```
 Layer 1: User Input & Raw Storage
     ↓  Resume PDF, Job Description URL/text
-Layer 2: LLM Extraction (Gemini 2.0 Flash)
+Layer 2: LLM Extraction (Gemini 2.5 Flash / Flash Lite)
     ↓  Structured JSON extraction
 Layer 3: Dimension Mapping
     ↓  10-dimension PM competency scoring
@@ -31,7 +31,7 @@ Layer 5: LLM Generation
 | Backend | Python FastAPI (async) + Uvicorn |
 | Database | PostgreSQL (Supabase) / SQLite (dev) |
 | ORM | SQLAlchemy 2.0 (async) |
-| LLM (text) | Gemini 2.0 Flash |
+| LLM (text) | Gemini 2.5 Flash + Gemini 2.5 Flash Lite |
 | LLM (voice) | Gemini 2.5 Flash Native Audio |
 | Auth | Supabase Auth + JWT |
 | Real-time | WebSocket + Gemini Live API |
@@ -39,7 +39,7 @@ Layer 5: LLM Generation
 
 ## 10-Dimension PM Competency System
 
-Derived from Google/Meta/Amazon PM interview rubrics + a 46-skill PM taxonomy from 91 product leaders:
+Derived from Google/Meta/Amazon PM interview rubrics and the internal research notes in `PM_Interview_Evaluation_Research.md`:
 
 | # | Dimension | Interview Round |
 |---|-----------|----------------|
@@ -59,7 +59,7 @@ These dimensions are the **shared language** connecting every layer: resume extr
 ## Features
 
 - **Resume Parsing** — Upload PDF, AI extracts structured profile (English + Chinese)
-- **Role Analysis** — Paste JD URL, 3-tier scraping fallback (Tavily → httpx → Gemini inference)
+- **Role Analysis** — Paste JD URL, with scraping fallback (Tavily → httpx + JSON-LD → URL hints/manual paste)
 - **Gap Analysis** — Pure Python computation across 10 PM dimensions
 - **Mock Prep** — AI-generated Q&A tailored to weak dimensions, with chat refinement
 - **Live Interview** — Real-time voice with 5 AI interviewer personas via Gemini Live API
@@ -186,9 +186,11 @@ pip install -r requirements.txt
 Create `landit-backend/.env`:
 ```env
 GEMINI_API_KEY=your-gemini-api-key
+TAVILY_API_KEY=your-tavily-api-key
 DATABASE_URL=sqlite+aiosqlite:///./landit.db
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_JWT_SECRET=your-jwt-secret
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### Run
@@ -214,17 +216,31 @@ vercel --prod
 - Build: `pip install -r requirements.txt`
 - Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
+Required backend environment variables:
+```env
+GEMINI_API_KEY=your-gemini-api-key
+DATABASE_URL=postgresql+asyncpg://...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=your-jwt-secret
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
+```
+
+Optional backend environment variable:
+```env
+TAVILY_API_KEY=your-tavily-api-key
+```
+
 ## Key Engineering Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| Gemini 2.0 Flash | Fastest + cheapest for extraction/generation |
-| Gemini 2.5 Flash Native Audio | Only model with built-in bidirectional voice |
+| Gemini 2.5 Flash / Flash Lite tiers | Balance quality for generation with lower latency for extraction/refinement |
+| Gemini 2.5 Flash Native Audio | Built-in bidirectional voice for live interviews |
 | Layer 4 Pure Python | Deterministic gap calculations, no LLM variance |
 | 10 PM dimensions | From real Google/Meta/Amazon interview rubrics |
 | 70/30 weakness blend | Recency bias while stabilizing against noise |
 | Pre-connection pattern | API connects during device check, not on Start |
-| 3-tier JD scraping | Tavily → httpx + JSON-LD → URL parsing + inference |
+| JD scraping fallback | Tavily first, then direct HTTP/JSON-LD, then URL hints or manual paste |
 
 ## License
 
