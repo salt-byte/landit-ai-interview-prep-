@@ -1,10 +1,14 @@
 
 import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight, Sparkles, User } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Sparkles, User, MailCheck } from 'lucide-react';
 
 interface LoginProps {
   onGuest: () => void;
-  onSignIn: (email: string, password: string, tab: 'signin' | 'signup') => void;
+  onSignIn: (
+    email: string,
+    password: string,
+    tab: 'signin' | 'signup',
+  ) => Promise<{ needsConfirmation?: boolean } | void>;
 }
 
 const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
@@ -14,6 +18,7 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'signin' | 'signup'>('signin');
+  const [confirmSent, setConfirmSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,13 +29,25 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
     }
     setLoading(true);
     try {
-      await onSignIn(email, password, tab);
+      const res = await onSignIn(email, password, tab);
+      // Signup with email confirmation enabled: no session yet — show a
+      // "check your email" screen instead of leaving the user staring at the form.
+      if (res && res.needsConfirmation) {
+        setConfirmSent(true);
+        return;
+      }
     } catch (err: any) {
       const msg = err?.message || '';
+      const name = err?.name || '';
       if (msg.includes('already registered') || msg.includes('already been registered')) setError('Email already registered.');
       else if (msg.includes('Invalid login credentials')) setError('Invalid email or password.');
       else if (msg.includes('Password should be at least')) setError('Password must be at least 6 characters.');
       else if (msg.includes('Unable to validate email')) setError('Please enter a valid email address.');
+      // Supabase unreachable (e.g. wrong/paused project, network down) surfaces as a
+      // fetch failure. Show a clear message instead of a raw "Failed to fetch".
+      else if (name === 'AuthRetryableFetchError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
+        setError("Can't reach the authentication server right now. Please try again in a moment.");
+      }
       else setError(msg || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -89,6 +106,30 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
             <span className="text-lg font-bold text-[#1F1F1F]">LandIt</span>
           </div>
 
+          {confirmSent ? (
+            <div className="text-center py-4">
+              <div className="w-14 h-14 bg-[#E6F4EA] rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <MailCheck className="w-7 h-7 text-[#137333]" />
+              </div>
+              <h2 className="text-2xl font-bold text-[#1F1F1F] mb-2">Check your email</h2>
+              <p className="text-sm text-[#444746] leading-relaxed mb-1">
+                We've sent a confirmation link to
+              </p>
+              <p className="text-sm font-bold text-[#1F1F1F] mb-6 break-all">{email}</p>
+              <p className="text-xs text-[#444746] leading-relaxed mb-8">
+                Click the link in that email to activate your account, then come back and sign in.
+                Didn't get it? Check your spam folder.
+              </p>
+              <button
+                onClick={() => { setConfirmSent(false); setTab('signin'); setPassword(''); setError(''); }}
+                className="w-full py-3 bg-[#0B57D0] text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#0842A0] transition-all shadow-sm active:scale-[0.98]"
+              >
+                Back to Sign In
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+          <>
           <h2 className="text-2xl font-bold text-[#1F1F1F] mb-1">
             {tab === 'signin' ? 'Welcome back' : 'Create account'}
           </h2>
@@ -191,6 +232,8 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
             Full functionality, no signup required.<br />
             Your data stays only in this browser session.
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

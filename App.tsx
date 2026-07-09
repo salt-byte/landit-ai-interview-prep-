@@ -195,15 +195,30 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSignIn = async (email: string, password: string, tab: 'signin' | 'signup') => {
+  const handleSignIn = async (
+    email: string,
+    password: string,
+    tab: 'signin' | 'signup',
+  ): Promise<{ needsConfirmation?: boolean } | void> => {
     if (tab === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
+      // Supabase returns a user with empty identities when the email already exists
+      // (obfuscated to prevent account enumeration) — treat it as "already registered".
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        throw new Error('User already registered');
+      }
+      // "Confirm email" is enabled: signUp succeeds with no session until the user
+      // clicks the emailed link. Tell the caller to show a "check your email" screen
+      // instead of silently doing nothing.
+      if (!data.session) {
+        return { needsConfirmation: true };
+      }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     }
-    // onAuthStateChange will fire and set authMode to 'USER'
+    // We have a session (or onAuthStateChange will fire and set authMode to 'USER')
     setUserProfile(EMPTY_PROFILE);
     setRoles([]);
     setSavedQuestions([]);
@@ -220,9 +235,19 @@ const App: React.FC = () => {
     }
   }, [authMode]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    // onAuthStateChange will handle setting authMode to 'LOGIN'
+  const handleLogout = () => {
+    // Reset the UI synchronously and FIRST. Fallback guests have no Supabase session,
+    // so onAuthStateChange never fires for them; and when Supabase is unreachable,
+    // supabase.auth.signOut() can hang on its internal auth lock (e.g. behind an
+    // in-flight signInAnonymously retry). Either way, logout must never depend on it.
+    setAuthMode('LOGIN');
+    setView('DASHBOARD');
+    setSelectedRole(null);
+    setUserProfile(EMPTY_PROFILE);
+    setRoles([]);
+    setSavedQuestions([]);
+    // Best-effort: clear any real Supabase session in the background. Don't await it.
+    supabase.auth.signOut().catch(() => {});
   };
 
   // ── App state ───────────────────────────────────────────────────────────────
