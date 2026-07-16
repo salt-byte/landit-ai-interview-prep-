@@ -754,15 +754,16 @@ ${questionList}
           },
           outputAudioTranscription: {},
           inputAudioTranscription: {},
-          // Default VAD cuts the candidate off when they pause to think.
-          // Use less-sensitive end-of-speech detection and require ~1.5s of
-          // silence before the model takes its turn — closer to how a real
-          // interviewer waits for someone to finish a thought.
+          // VAD tradeoff: too short and the model interrupts the candidate when
+          // they pause to think; too long and every answer has a laggy gap before
+          // the interviewer responds. 700ms tolerates a normal thinking pause while
+          // keeping the turn-around snappy. LOW end sensitivity is the safety net —
+          // it stays conservative about declaring speech finished mid-sentence.
           realtimeInputConfig: {
             automaticActivityDetection: {
               endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
               startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
-              silenceDurationMs: 1500,
+              silenceDurationMs: 700,
               prefixPaddingMs: 300,
             },
           },
