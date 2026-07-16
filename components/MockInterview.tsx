@@ -521,7 +521,19 @@ const MockInterview: React.FC<MockInterviewProps> = ({ workspace, roles, onSelec
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Media devices API not supported');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Explicit echo cancellation + noise suppression is critical: the mic streams
+      // continuously during the AI's turn, so without AEC the interviewer's own voice
+      // (from the speakers) feeds back and Gemini treats it as the user still talking.
+      // Without noise suppression the room floor never reads as true silence, so the
+      // 700ms end-of-speech window never trips and every answer lags by several seconds.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
