@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight, Sparkles, User, MailCheck } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Sparkles, User, MailCheck, AlertTriangle } from 'lucide-react';
+import { isSupabaseConfigured, supabaseConfigError } from '../lib/supabase';
 
 interface LoginProps {
   onGuest: () => void;
@@ -27,6 +28,13 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       setError('Please fill in all fields.');
       return;
     }
+    // Auth is misconfigured at build time — a request would fail as a generic
+    // fetch error and read as "the server is down", sending the user (and us)
+    // to debug the network instead of the missing env vars.
+    if (!isSupabaseConfigured) {
+      setError('Sign-in is unavailable: this build has no Supabase credentials. Use "Continue as Guest" for now.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await onSignIn(email, password, tab);
@@ -43,10 +51,13 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       else if (msg.includes('Invalid login credentials')) setError('Invalid email or password.');
       else if (msg.includes('Password should be at least')) setError('Password must be at least 6 characters.');
       else if (msg.includes('Unable to validate email')) setError('Please enter a valid email address.');
-      // Supabase unreachable (e.g. wrong/paused project, network down) surfaces as a
-      // fetch failure. Show a clear message instead of a raw "Failed to fetch".
+      // The credentials are well-formed but the request never landed. In practice
+      // this is almost always a paused Supabase project (the free tier suspends
+      // after ~7 days idle) or a URL pointing at a project that no longer exists —
+      // not a transient blip, so don't tell the user to just wait it out.
       else if (name === 'AuthRetryableFetchError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
-        setError("Can't reach the authentication server right now. Please try again in a moment.");
+        setError("Can't reach the authentication server. If this persists, the Supabase project may be paused or its URL may be wrong — check the Supabase dashboard.");
+        console.error('[auth] Request to Supabase failed. Verify the project is active and VITE_SUPABASE_URL is correct.', err);
       }
       else setError(msg || 'Something went wrong. Please try again.');
     } finally {
@@ -136,6 +147,20 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
           <p className="text-sm text-[#444746] mb-8">
             {tab === 'signin' ? 'Sign in to continue your interview prep.' : 'Start your PM interview journey.'}
           </p>
+
+          {/* Build-time config problem: surface it up front rather than letting
+              every sign-in attempt fail with a misleading network error. */}
+          {!isSupabaseConfigured && (
+            <div className="flex gap-2.5 mb-6 px-3 py-2.5 bg-[#FEF7E0] border border-[#F9AB00]/30 rounded-xl">
+              <AlertTriangle className="w-4 h-4 text-[#B06000] shrink-0 mt-0.5" />
+              <div className="text-xs text-[#B06000] leading-relaxed">
+                <span className="font-bold">Sign-in is unavailable.</span>{' '}
+                {supabaseConfigError}. Set <code className="font-mono">VITE_SUPABASE_URL</code> and{' '}
+                <code className="font-mono">VITE_SUPABASE_ANON_KEY</code>, then rebuild — Vite bakes
+                them in at build time. Guest mode still works.
+              </div>
+            </div>
+          )}
 
           {/* Tab switcher */}
           <div className="flex bg-[#F0F4F9] rounded-xl p-1 mb-6">

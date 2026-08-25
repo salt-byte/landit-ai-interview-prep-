@@ -92,6 +92,14 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_GEMINI_API_KEY=your-gemini-api-key
 ```
 
+> **`VITE_*` variables are read at build time, not runtime.** Vite inlines them into
+> the bundle, so adding or changing one requires restarting `npm run dev` (or
+> redeploying on Vercel) before it takes effect. If Supabase credentials are absent
+> the sign-in form says so directly and guest mode still works — a sign-in that
+> instead reports the auth server as unreachable usually means the Supabase project
+> is paused (the free tier suspends after ~7 days idle) or the URL points at a
+> project that no longer exists.
+
 ### Backend
 ```bash
 cd landit-backend
