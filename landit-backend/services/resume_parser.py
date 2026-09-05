@@ -19,6 +19,8 @@ def _normalize_output(data: dict) -> dict:
         skills = {"technicalSkills": ", ".join(str(s) for s in skills), "toolsAndTechnologies": "", "softSkills": ""}
 
     def clean_str(v) -> str:
+        if isinstance(v, list):
+            return "\n".join(clean_str(item) for item in v).strip()
         return str(v).strip() if v else ""
 
     def clean_list(v, default_keys) -> list[dict]:
