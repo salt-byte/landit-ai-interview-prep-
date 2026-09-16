@@ -6,7 +6,38 @@
 
 import { supabase } from './lib/supabase';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+
+/**
+ * Thrown when the backend could not be reached at all (wrong/missing
+ * VITE_API_URL, CORS rejection, mixed content, server asleep), as opposed to
+ * the backend answering with an HTTP error. The two look identical to a bare
+ * `.catch()`, which is why signed-in users saw an empty app with no clue why.
+ */
+export class ApiUnreachableError extends Error {
+  readonly baseUrl = API_BASE;
+  constructor(public readonly path: string, cause?: unknown) {
+    super(
+      `Cannot reach the LandIt backend at ${API_BASE}${path}. ` +
+      `Check that VITE_API_URL points at the running API and that the API ` +
+      `allows this origin (ALLOWED_ORIGINS).`,
+    );
+    this.name = 'ApiUnreachableError';
+    (this as any).cause = cause;
+  }
+}
+
+/** Thrown when the backend rejected our Supabase token. */
+export class ApiUnauthorizedError extends Error {
+  constructor(public readonly path: string, public readonly detail: string) {
+    super(
+      `The backend rejected your session (401) on ${path}. ` +
+      `Its SUPABASE_URL / SUPABASE_JWT_SECRET most likely don't match the ` +
+      `Supabase project this app signs in against.`,
+    );
+    this.name = 'ApiUnauthorizedError';
+  }
+}
 
 async function getToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
@@ -42,15 +73,25 @@ async function request<T>(
     timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
     signal = controller.signal;
   }
-  const res = await fetch(url, { ...options, headers, signal }).finally(() => {
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers, signal });
+  } catch (err) {
+    // fetch() only rejects for transport-level problems: DNS/connection
+    // refused, blocked mixed content, a CORS preflight the server didn't
+    // answer, or our own abort/timeout. None of those mean "no data".
+    throw new ApiUnreachableError(path, err);
+  } finally {
     if (timeout) clearTimeout(timeout);
-  });
+  }
 
   // Only sign out on 401 if we actually had a token — otherwise we'd kick
   // guest-mode users back to the login screen as soon as any component
   // (Profile, RoleList, etc.) makes its first backend call.
   if (res.status === 401 && token) {
+    const detail = await res.text().catch(() => '');
     await supabase.auth.signOut();
+    throw new ApiUnauthorizedError(path, detail);
   }
 
   if (!res.ok) {

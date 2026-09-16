@@ -23,6 +23,8 @@ import InterviewReports from './components/InterviewReports';
 import Login from './components/Login';
 import { TargetRole, AppView, UserProfile, SavedQuestion, NavigationSource } from './types';
 import { getRoles, updateRole, getSavedQuestions, saveQuestion, deleteSavedQuestion, getProfile, updateProfile, createRole } from './api';
+import { API_BASE, ApiUnreachableError, ApiUnauthorizedError } from './api';
+import { AlertTriangle, X } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 // Moved from Profile.tsx to act as the single source of truth
@@ -147,9 +149,26 @@ const EMPTY_PROFILE: UserProfile = {
   skills: { technicalSkills: "", toolsAndTechnologies: "", softSkills: "" },
 };
 
+function describeLoadError(err: unknown): string {
+  if (err instanceof ApiUnreachableError) {
+    return `The backend at ${err.baseUrl} did not respond. If this is the ` +
+      `deployed app, VITE_API_URL was probably not set at build time (it ` +
+      `falls back to http://localhost:8000), the API's ALLOWED_ORIGINS ` +
+      `doesn't include this site, or the server is still waking up. Reload ` +
+      `once the API answers.`;
+  }
+  if (err instanceof ApiUnauthorizedError) {
+    return `The backend rejected your sign-in token. Its SUPABASE_URL / ` +
+      `SUPABASE_JWT_SECRET must match the Supabase project this app ` +
+      `authenticates against.`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 const App: React.FC = () => {
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [authMode, setAuthMode] = useState<'LOADING' | 'LOGIN' | 'GUEST' | 'USER'>('LOADING');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Initialize auth state from Supabase session
   useEffect(() => {
@@ -224,15 +243,39 @@ const App: React.FC = () => {
     setSavedQuestions([]);
   };
 
-  // Load all data from backend when USER logs in
+  // Load all data from backend when USER logs in.
+  //
+  // Every one of these calls used to end in `.catch(console.error)`, so a
+  // signed-in user whose backend was unreachable, misconfigured or rejecting
+  // their token saw exactly what a brand-new account sees: an empty app, with
+  // the reason buried in the devtools console. Capture the failure instead and
+  // render it, so "logged in but no data" always says which of the two it is.
   useEffect(() => {
-    if (authMode === 'USER') {
-      getProfile().then((p: any) => {
-        if (p && p.fullName) setUserProfile(p);
-      }).catch(console.error);
-      getRoles().then(setRoles).catch(console.error);
-      getSavedQuestions().then(setSavedQuestions).catch(console.error);
-    }
+    if (authMode !== 'USER') return;
+
+    let cancelled = false;
+    setLoadError(null);
+
+    const report = (err: unknown) => {
+      console.error('[landit] failed to load account data:', err);
+      if (cancelled) return;
+      setLoadError(prev => prev ?? describeLoadError(err));
+    };
+
+    // Load the profile whenever the backend returns one. Guarding on
+    // `p.fullName` meant a saved profile with every field filled in except the
+    // name was silently discarded and shown as empty.
+    getProfile()
+      .then((p: any) => { if (!cancelled && p && typeof p === 'object') setUserProfile(p); })
+      .catch(report);
+    getRoles()
+      .then(r => { if (!cancelled) setRoles(r); })
+      .catch(report);
+    getSavedQuestions()
+      .then(q => { if (!cancelled) setSavedQuestions(q); })
+      .catch(report);
+
+    return () => { cancelled = true; };
   }, [authMode]);
 
   const handleLogout = () => {
@@ -246,6 +289,7 @@ const App: React.FC = () => {
     setUserProfile(EMPTY_PROFILE);
     setRoles([]);
     setSavedQuestions([]);
+    setLoadError(null);
     // Best-effort: clear any real Supabase session in the background. Don't await it.
     supabase.auth.signOut().catch(() => {});
   };
@@ -677,6 +721,24 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto bg-[#F0F4F9] p-6">
+        {loadError && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-[#F9AB00]/40 bg-[#FEF7E0] px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-[#E8710A] flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#1F1F1F]">
+                Signed in, but your data couldn't be loaded
+              </p>
+              <p className="text-xs text-[#444746] mt-0.5 break-words">{loadError}</p>
+            </div>
+            <button
+              onClick={() => setLoadError(null)}
+              title="Dismiss"
+              className="p-1 text-[#444746] hover:text-[#1F1F1F] rounded-lg flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="h-full">
           {renderContent()}
         </div>
