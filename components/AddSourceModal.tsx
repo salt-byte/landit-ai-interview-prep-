@@ -13,6 +13,22 @@ import { UploadedFile, RoleSource, UserProfile } from '../types';
 import { uploadAndParseDocument, uploadDocument, uploadRoleSource, addLinkSource } from '../api';
 import { extractPdfText, isPdfFile } from '../lib/pdfExtract';
 
+/**
+ * Failures here used to surface as a spinner that never resolved, so the reason
+ * has to make it to the screen. An aborted request and an unreachable server are
+ * the two the user can actually do something about, so name them.
+ */
+function describeUploadError(err: any): string {
+  if (err?.name === 'AbortError') {
+    return 'The server took too long to answer. It may have been asleep — wait a few seconds and try again.';
+  }
+  const msg = String(err?.message || '');
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  return msg || 'Something went wrong. Please try again.';
+}
+
 interface AddSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -62,6 +78,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
 
   // Parsing/Upload State
   const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'PARSING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [errorMsg, setErrorMsg] = useState('');
   const [parsedContent, setParsedContent] = useState('');
 
   // Fake-but-believable progress: tracks elapsed seconds since we entered a working state,
@@ -137,11 +154,41 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     }
   };
 
+  /**
+   * Apply a resume upload-and-parse response.
+   *
+   * The backend answers 200 even when the parse failed — it reports that in
+   * `parse_error` and returns an empty `extracted`. Both were previously
+   * ignored, so a failed parse showed a green check and an unchanged profile.
+   * Returns false when the caller should stop and leave the error on screen.
+   */
+  const applyResumeResult = (result: any): boolean => {
+    if (result.document) onAddSource(result.document);
+
+    if (result.parse_error) {
+      setErrorMsg(`The file was saved, but reading it failed: ${result.parse_error}`);
+      setUploadStatus('ERROR');
+      return false;
+    }
+    // `{}` is truthy — check for actual content before reporting success.
+    const extracted = result.extracted;
+    if (!extracted || Object.keys(extracted).length === 0) {
+      setErrorMsg('The file was saved, but nothing could be read out of it. If it is a scanned PDF, try a text-based version.');
+      setUploadStatus('ERROR');
+      return false;
+    }
+
+    if (onProfileExtracted) onProfileExtracted(extracted);
+    setUploadStatus('SUCCESS');
+    return true;
+  };
+
   // Flow A: Upload File — awaits pre-started upload or starts new one
   const handleUploadFile = async () => {
     if (!pendingFile || !pendingFileObj) return;
     if (uploadInFlightRef.current) return;
     uploadInFlightRef.current = true;
+    setErrorMsg('');
     try {
       if (isGuest) {
         setUploadStatus('UPLOADING');
@@ -168,13 +215,10 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         setUploadStatus('PARSING');
         const result = await preUploadPromiseRef.current;
         preUploadPromiseRef.current = null;
-        setUploadStatus('SUCCESS');
         if (selectedFileType === 'Resume') {
-          onAddSource(result.document);
-          if (result.extracted && onProfileExtracted) {
-            onProfileExtracted(result.extracted);
-          }
+          if (!applyResumeResult(result)) return;
         } else {
+          setUploadStatus('SUCCESS');
           onAddSource({ id: String(result.id ?? Date.now()), name: result.name, type: result.type, date: result.date });
         }
       } else {
@@ -186,11 +230,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
             ? await extractPdfText(pendingFileObj).catch(() => '')
             : '';
           const result = await uploadAndParseDocument(pendingFileObj, text || undefined);
-          setUploadStatus('SUCCESS');
-          onAddSource(result.document);
-          if (result.extracted && onProfileExtracted) {
-            onProfileExtracted(result.extracted);
-          }
+          if (!applyResumeResult(result)) return;
         } else {
           setUploadStatus('UPLOADING');
           const result = await uploadDocument(pendingFileObj);
@@ -199,7 +239,9 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
         }
       }
       setTimeout(handleClose, 800);
-    } catch {
+    } catch (err) {
+      console.error('[AddSourceModal] upload failed', err);
+      setErrorMsg(describeUploadError(err));
       setUploadStatus('ERROR');
     } finally {
       uploadInFlightRef.current = false;
@@ -225,7 +267,9 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
           setParsedContent(`[Parsed from Link: ${linkUrl}]\n\nSummary:\nExperienced professional with a background in digital transformation.\n\nProjects:\n- E-commerce Optimization\n- Mobile App Launch`);
         }, 1500);
       }
-    } catch {
+    } catch (err) {
+      console.error('[AddSourceModal] link parse failed', err);
+      setErrorMsg(describeUploadError(err));
       setUploadStatus('ERROR');
     }
   };
@@ -253,6 +297,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
     setLinkUrl('');
     setParsedContent('');
     setUploadStatus('IDLE');
+    setErrorMsg('');
     preUploadPromiseRef.current = null;
     preUploadTypeRef.current = '';
     uploadInFlightRef.current = false;
@@ -335,6 +380,32 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ isOpen, onClose, onAddS
                     </select>
                   </div>
                 </>
+              ) : uploadStatus === 'ERROR' ? (
+                <div className="flex flex-col items-center justify-center py-10 px-2 space-y-5">
+                  <div className="w-16 h-16 bg-[#FFDAD6] rounded-full flex items-center justify-center text-[#B3261E]">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <div className="text-center">
+                    <h4 className="text-lg font-bold text-[#1F1F1F] mb-1">Upload failed</h4>
+                    <p className="text-sm text-[#444746] leading-relaxed">
+                      {errorMsg || 'Something went wrong. Please try again.'}
+                    </p>
+                  </div>
+                  <div className="flex gap-3 w-full max-w-xs">
+                    <button
+                      onClick={handleClose}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-[#444746] bg-[#F0F4F9] hover:bg-[#E3E3E3] transition-colors"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => { setErrorMsg(''); setUploadStatus('IDLE'); }}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-[#0B57D0] hover:bg-[#0842A0] transition-colors"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 px-2 space-y-5">
                   {uploadStatus === 'SUCCESS' ? (

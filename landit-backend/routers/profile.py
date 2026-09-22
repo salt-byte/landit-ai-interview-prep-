@@ -319,20 +319,22 @@ async def upload_and_parse_resume(
     profile = await get_or_create_profile(db, user_key)
 
     # Dedupe: if the same filename was uploaded by this profile recently,
-    # treat as a duplicate (e.g. accidental double-click, abandoned-but-still-
-    # in-flight pre-upload from a closed modal). Skip both file save and parse.
+    # reuse that row (e.g. accidental double-click, abandoned-but-still-in-flight
+    # pre-upload from a closed modal) instead of writing a second one.
+    #
+    # Dedupe the ROW ONLY — never the parse. A client whose request timed out
+    # leaves a saved document behind, so the user's retry lands here; returning
+    # an empty extraction then makes every retry a silent no-op for as long as
+    # the dedupe window lasts, which is exactly when the user most needs it to
+    # work. Parsing again is cheap next to that failure mode.
     doc_name = file.filename or "resume"
     dup_doc = await find_recent_document(db, profile.id, doc_name, "Resume")
-    if dup_doc:
-        return {
-            "extracted": {},
-            "document_id": dup_doc.id,
-            "document": document_to_response(dup_doc),
-            "parse_error": None,
-            "deduplicated": True,
-        }
 
-    file_path, file_size = await upload_file(file, subfolder="profile")
+    if dup_doc is None:
+        file_path, file_size = await upload_file(file, subfolder="profile")
+    else:
+        file_path, file_size = dup_doc.file_path, dup_doc.file_size
+
     # If the client pre-extracted text (e.g. via pdf.js), skip backend PDF parsing.
     if extracted_text and extracted_text.strip():
         text = extracted_text
@@ -347,6 +349,15 @@ async def upload_and_parse_resume(
         extracted = await extract_profile_from_resume_async(text)
     except Exception as exc:
         parse_error = str(exc) or "Resume parsing failed."
+
+    if dup_doc is not None:
+        return {
+            "extracted": extracted,
+            "document_id": dup_doc.id,
+            "document": document_to_response(dup_doc),
+            "parse_error": parse_error,
+            "deduplicated": True,
+        }
 
     doc = Document(
         profile_id=profile.id,

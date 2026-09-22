@@ -13,17 +13,37 @@ async function getToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+/** Default per-request budget. Enough for ordinary CRUD calls on a warm server. */
+const DEFAULT_TIMEOUT_MS = 60000;
+
+/**
+ * Budget for calls that boot a cold server and then run an LLM.
+ *
+ * The backend is deployed on a free tier that spins down when idle: the first
+ * request after a nap pays ~50s of cold start before any handler runs, and a
+ * resume parse adds another LLM round-trip on top. Under the 60s default that
+ * request is aborted client-side while the server keeps going and still writes
+ * its document row — which then makes the retry look like a silent no-op.
+ */
+const SLOW_TIMEOUT_MS = 180000;
+
+interface RequestOptions extends RequestInit {
+  /** Overrides DEFAULT_TIMEOUT_MS. Ignored when the caller supplies its own signal. */
+  timeoutMs?: number;
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {},
+  options: RequestOptions = {},
 ): Promise<T> {
+  const { timeoutMs, ...init } = options;
   const url = `${API_BASE}${path}`;
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> || {}),
   };
 
   // Don't set Content-Type for FormData (browser sets it with boundary)
-  if (!(options.body instanceof FormData)) {
+  if (!(init.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -35,14 +55,14 @@ async function request<T>(
 
   // If the caller passed their own AbortSignal (e.g. for cancel-on-modal-close),
   // honor it instead of creating an internal timeout-only controller.
-  let signal = options.signal;
+  let signal = init.signal;
   let timeout: ReturnType<typeof setTimeout> | null = null;
   if (!signal) {
     const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+    timeout = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
     signal = controller.signal;
   }
-  const res = await fetch(url, { ...options, headers, signal }).finally(() => {
+  const res = await fetch(url, { ...init, headers, signal }).finally(() => {
     if (timeout) clearTimeout(timeout);
   });
 
@@ -102,6 +122,7 @@ export async function uploadAndParseDocument(
     method: 'POST',
     body: formData,
     signal,
+    timeoutMs: SLOW_TIMEOUT_MS,
   });
 }
 
