@@ -24,7 +24,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 // - Math Operators (U+2200-U+22FF): ≡ ≢ ∎
 // - Misc Symbols / Dingbats (U+2600-U+27BF): ★ ✦ ✓ ➤
 // - I Ching trigrams (U+2630): ☰
-const DECORATIVE_CHARS = /[-≡-]/g;
+// Written as escapes on purpose: the literal glyphs do not survive every editor
+// and tool that touches this file, and a silently truncated class quietly strips
+// the wrong characters instead of failing loudly.
+const DECORATIVE_CHARS = /[\uE000-\uF8FF\u25A0-\u25FF\u2200-\u22FF\u2600-\u27BF\u2630]/g;
 
 function cleanText(raw: string): string {
   return raw
