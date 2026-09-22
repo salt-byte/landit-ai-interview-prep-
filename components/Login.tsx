@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Eye, EyeOff, ArrowRight, Sparkles, User, MailCheck } from 'lucide-react';
+import { isSupabaseConfigured, supabaseHost } from '../lib/supabase';
 
 interface LoginProps {
   onGuest: () => void;
@@ -27,6 +28,13 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       setError('Please fill in all fields.');
       return;
     }
+    // A build without Supabase credentials can never sign anyone in — its requests
+    // go to a placeholder host and fail as a network error. Say so up front instead
+    // of letting it masquerade as an outage.
+    if (!isSupabaseConfigured) {
+      setError('This build has no Supabase credentials (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Set them in the deployment environment and redeploy.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await onSignIn(email, password, tab);
@@ -46,7 +54,7 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
       // Supabase unreachable (e.g. wrong/paused project, network down) surfaces as a
       // fetch failure. Show a clear message instead of a raw "Failed to fetch".
       else if (name === 'AuthRetryableFetchError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
-        setError("Can't reach the authentication server right now. Please try again in a moment.");
+        setError(`Can't reach the authentication server (${supabaseHost}). Check that the project is running and the URL is correct, then try again.`);
       }
       else setError(msg || 'Something went wrong. Please try again.');
     } finally {
@@ -136,6 +144,15 @@ const Login: React.FC<LoginProps> = ({ onGuest, onSignIn }) => {
           <p className="text-sm text-[#444746] mb-8">
             {tab === 'signin' ? 'Sign in to continue your interview prep.' : 'Start your PM interview journey.'}
           </p>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-6 px-3 py-2.5 rounded-lg bg-[#FFDAD6] text-[#B3261E] text-xs leading-relaxed">
+              <span className="font-bold">Auth is not configured.</span> This build shipped without{' '}
+              <code className="font-mono">VITE_SUPABASE_URL</code> /{' '}
+              <code className="font-mono">VITE_SUPABASE_ANON_KEY</code>, so sign-in cannot work.
+              Set them in the deployment environment and redeploy. Guest mode still works.
+            </div>
+          )}
 
           {/* Tab switcher */}
           <div className="flex bg-[#F0F4F9] rounded-xl p-1 mb-6">
